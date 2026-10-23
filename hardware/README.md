@@ -1,8 +1,8 @@
 # PAO 模块接线图
 
-使用 [tscircuit](https://tscircuit.com/) 的 TSX 描述用户提供的[小智机器人接线方案](reference-wiring.jpg)。本版按图连接供电、ESP32-S3、四输入电机驱动小红板、INMP441、MAX98357、扬声器和 SSD1306 OLED，省略图中标注可选的三个外接按钮。
+使用 [tscircuit](https://tscircuit.com/) 的 TSX 描述用户提供的[小智机器人接线方案](reference-wiring.jpg)。本版按图连接供电、ESP32-S3、MX1508 电机驱动小红板、INMP441、MAX98357、扬声器和 SSD1306 OLED，省略图中标注可选的三个外接按钮。
 
-这是**模块之间的接线参考**，尚未实物验证。符号中的 `pin1` 等仅为逻辑索引；接线按 GPIO 名称和模块丝印确认。本目录未定义 PCB 封装或模块内部电路，不生成可生产的 PCB。
+这是**模块之间的接线参考**，尚未实物验证。符号中的 `pin1` 等仅为逻辑索引；接线按 GPIO 名称和模块丝印确认。本目录仅用于模块接线，未验证 PCB 封装、机械尺寸或模块内部电路，不生成可生产的 PCB。
 
 ![由 TSX 生成的原理图](schematic.svg)
 
@@ -11,16 +11,24 @@
 | 图中模块 | 本版描述 |
 | --- | --- |
 | 1S 锂电池 | 电池正负极接充电保护板 B+/B− |
-| 1S 充电保护板 | 自带 USB 充电口；负载使用 OUT+/OUT− |
+| 1S 充电保护板 | 采用已有 TP4056 保护板接口参考；自带 USB 充电口，负载使用 OUT+/OUT− |
 | 三脚开关 | COM 与 ON 串联在保护板 OUT+ 和升压输入之间，另一脚不接 |
-| 5V 升压板 | 输出 5V 给 ESP32-S3 的 5V 和电机驱动电源端 |
+| 5V 升压板 | 采用已有 MT3608 四端子接口参考；输出设为 5V，给主控与电机驱动供电 |
 | ESP32-S3 开发板 | 按原图的 44 针 DevKitC 排针名称描述，板载稳压输出 3V3 |
-| 四输入电机驱动小红板 | 原图标作 L298N；描述电源、IN1–IN4、左右两路电机输出 |
+| MX1508 电机驱动小红板 | 型号已确认；描述电源、IN1–IN4、左右两路电机输出 |
 | INMP441 麦克风 | 3V3，I2S 输入 |
 | MAX98357 功放及扬声器 | 按原图 VIN 接 3V3，I2S 输出至差分扬声器端子 |
 | SSD1306 I2C OLED | VCC 接 3V3；目标为图中标注的 128×64，尺寸与分辨率以实物为准 |
 
-小红板的具体驱动 IC 尚未确认，因此未套用 ST L298N 的电压、电流和 ENA/ENB 参数。更换成带散热片的大板时，应按实际板子的电源、使能端及引脚重新核对。[ST L298 资料](https://www.st.com/en/motor-drivers/l298.html)
+原图将小红板标作 L298N，实际型号已确认是 **MX1508**。IN1/IN2 控制右电机，IN3/IN4 控制左电机，电源接升压板的 5V 输出。充电板与升压板的实际芯片型号尚未确认，上述选型仅复用同类模块的接口定义。
+
+## 现成组件与来源
+
+- **电池与开关**：使用 tscircuit 内置的 [`<battery />`](https://docs.tscircuit.com/elements/battery) 和 [SPDT 开关](https://docs.tscircuit.com/elements/switch)，保留原图的正极开关及空置脚。`PowerSwitch` 仅处理 React 同名 SVG 标签的类型冲突，运行时仍使用库的内置开关。
+- **OLED**：直接从官方 [`@tscircuit/header-modules`](https://github.com/tscircuit/header-modules) 导入 `Generic096InSSD1306OLEDI2CModule`。该包尚未发布到 npm，依赖固定到 GitHub 提交；复用其引脚、属性和符号定义。
+- **充电保护与升压模块**：从已有 MIT 许可的 Fritzing/KiCad 板级定义适配为可直接导入的 `Tp4056Protection` 与 `Boost5VModule`。原始定义、许可和必要修正见 [vendor/README.md](vendor/README.md)。入口只负责把模块连接起来。
+
+其余模块当前保留按参考图核对过的接口符号。库中同名组件仍需核对引脚，不能仅凭名称替换；例如官方 header-modules 的同名 ESP32-S3 组件目前是 30 针映射，与本图 44 针开发板不符。
 
 ## 信号连接
 
@@ -34,10 +42,10 @@
 | MAX98357 | DIN，功放输入 | 7 | J1-7 |
 | MAX98357 | BCLK | 15 | J1-8 |
 | MAX98357 | LRC / LRCLK | 16 | J1-9 |
-| 电机驱动 | IN1，右轮 | 11 | J1-17 |
-| 电机驱动 | IN2，右轮 | 12 | J1-18 |
-| 电机驱动 | IN3，左轮 | 13 | J1-19 |
-| 电机驱动 | IN4，左轮 | 14 | J1-20 |
+| MX1508 | IN1，右轮 | 11 | J1-17 |
+| MX1508 | IN2，右轮 | 12 | J1-18 |
+| MX1508 | IN3，左轮 | 13 | J1-19 |
+| MX1508 | IN4，左轮 | 14 | J1-20 |
 | OLED | SDA | 41 | J3-7 |
 | OLED | SCL | 42 | J3-6 |
 

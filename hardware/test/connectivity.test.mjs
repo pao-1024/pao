@@ -58,12 +58,20 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
       "AMP",
       "SPEAKER",
       "OLED",
-      "MOTOR_DRIVER",
+      "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
     ].sort(),
   )
   assert.equal(portsByName.size, ports.length, "模块引脚名称不能重复")
+  assert.equal(
+    components.find((item) => item.name === "BATTERY").ftype,
+    "simple_power_source",
+  )
+  assert.equal(
+    components.find((item) => item.name === "POWER_SWITCH").ftype,
+    "simple_switch",
+  )
   assert.deepEqual(
     circuit.filter((item) => item.type.endsWith("_error")),
     [],
@@ -81,10 +89,10 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
     [16, "AMP.LRC"],
     [41, "OLED.SDA"],
     [42, "OLED.SCL"],
-    [11, "MOTOR_DRIVER.IN1"],
-    [12, "MOTOR_DRIVER.IN2"],
-    [13, "MOTOR_DRIVER.IN3"],
-    [14, "MOTOR_DRIVER.IN4"],
+    [11, "MX1508.IN1"],
+    [12, "MX1508.IN2"],
+    [13, "MX1508.IN3"],
+    [14, "MX1508.IN4"],
   ]
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
@@ -99,11 +107,7 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  const v5 = assertNetwork([
-    "BOOST_5V.VOUT_PLUS",
-    "ESP32_S3.V5",
-    "MOTOR_DRIVER.VCC",
-  ])
+  const v5 = assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.V5", "MX1508.VCC"])
   const v3v3 = assertNetwork([
     "ESP32_S3.V3V3",
     "MIC.VDD",
@@ -121,14 +125,14 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GND",
     "AMP.GAIN",
     "OLED.GND",
-    "MOTOR_DRIVER.GND",
+    "MX1508.GND",
   ])
   assert.equal(new Set([v5, v3v3, gnd]).size, 3, "电源及地不能短接")
 })
 
 test("电池通过充电保护板和开关供电，保护前负极不并入系统地", () => {
-  const batteryPlus = assertNetwork(["BATTERY.PLUS", "CHARGER_1S.B_PLUS"])
-  const batteryMinus = assertNetwork(["BATTERY.MINUS", "CHARGER_1S.B_MINUS"])
+  const batteryPlus = assertNetwork(["BATTERY.pin1", "CHARGER_1S.B_PLUS"])
+  const batteryMinus = assertNetwork(["BATTERY.pin2", "CHARGER_1S.B_MINUS"])
   const protectedPlus = assertNetwork([
     "CHARGER_1S.OUT_PLUS",
     "POWER_SWITCH.COM",
@@ -151,10 +155,10 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
   const outputs = [
     ["AMP.OUT_PLUS", "SPEAKER.PLUS"],
     ["AMP.OUT_MINUS", "SPEAKER.MINUS"],
-    ["MOTOR_DRIVER.RIGHT_PLUS", "MOTOR_RIGHT.PLUS"],
-    ["MOTOR_DRIVER.RIGHT_MINUS", "MOTOR_RIGHT.MINUS"],
-    ["MOTOR_DRIVER.LEFT_PLUS", "MOTOR_LEFT.PLUS"],
-    ["MOTOR_DRIVER.LEFT_MINUS", "MOTOR_LEFT.MINUS"],
+    ["MX1508.RIGHT_PLUS", "MOTOR_RIGHT.PLUS"],
+    ["MX1508.RIGHT_MINUS", "MOTOR_RIGHT.MINUS"],
+    ["MX1508.LEFT_PLUS", "MOTOR_LEFT.PLUS"],
+    ["MX1508.LEFT_MINUS", "MOTOR_LEFT.MINUS"],
   ]
   const keys = outputs.map(assertNetwork)
   assert.equal(new Set(keys).size, 6, "六条输出线不得互相短接")

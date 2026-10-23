@@ -1,4 +1,8 @@
 import type { ReactElement } from "react"
+import { Generic096InSSD1306OLEDI2CModule } from "@tscircuit/header-modules"
+import { Boost5VModule } from "./components/Boost5V"
+import { Tp4056Protection } from "./components/Tp4056"
+import { PowerSwitch } from "./components/PowerSwitch"
 
 // 只描述用户接线图中的模块外部接口；pin1 等是符号索引，不是实物排针编号。
 export default function PaoWiring(): ReactElement {
@@ -11,37 +15,21 @@ export default function PaoWiring(): ReactElement {
         fontSize={0.5}
       />
 
-      <chip
+      <battery
         doNotPlace
         name="BATTERY"
         schX={-10}
         schY={7}
-        schWidth={2.5}
-        pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
-        schPinArrangement={{
-          rightSide: { direction: "top-to-bottom", pins: ["PLUS", "MINUS"] },
-        }}
-        connections={{ PLUS: "net.BAT_POS", MINUS: "net.BAT_NEG" }}
+        voltage="3.7V"
+        schOrientation="pos_top"
+        connections={{ pos: "net.BAT_POS", neg: "net.BAT_NEG" }}
       />
-      <chip
+      <Tp4056Protection
         doNotPlace
         name="CHARGER_1S"
+        noConnect={["USB_PLUS", "USB_MINUS"]}
         schX={-5}
         schY={7}
-        schWidth={3.5}
-        pinLabels={{
-          pin1: "B_PLUS",
-          pin2: "B_MINUS",
-          pin3: "OUT_PLUS",
-          pin4: "OUT_MINUS",
-        }}
-        schPinArrangement={{
-          leftSide: { direction: "top-to-bottom", pins: ["B_PLUS", "B_MINUS"] },
-          rightSide: {
-            direction: "top-to-bottom",
-            pins: ["OUT_PLUS", "OUT_MINUS"],
-          },
-        }}
         connections={{
           B_PLUS: "net.BAT_POS",
           B_MINUS: "net.BAT_NEG",
@@ -49,42 +37,21 @@ export default function PaoWiring(): ReactElement {
           OUT_MINUS: "net.GND",
         }}
       />
-      <chip
+      <PowerSwitch
         doNotPlace
         name="POWER_SWITCH"
+        type="spdt"
         schX={0}
         schY={7}
-        schWidth={2.5}
         pinLabels={{ pin1: "COM", pin2: "ON", pin3: "OFF" }}
-        schPinArrangement={{
-          leftSide: { direction: "top-to-bottom", pins: ["COM"] },
-          rightSide: { direction: "top-to-bottom", pins: ["ON", "OFF"] },
-        }}
         noConnect={["OFF"]}
         connections={{ COM: "net.VBAT_PROTECTED", ON: "net.VBAT_SWITCHED" }}
       />
-      <chip
+      <Boost5VModule
         doNotPlace
         name="BOOST_5V"
         schX={5}
         schY={7}
-        schWidth={3.5}
-        pinLabels={{
-          pin1: "VIN_PLUS",
-          pin2: "VIN_MINUS",
-          pin3: "VOUT_PLUS",
-          pin4: "VOUT_MINUS",
-        }}
-        schPinArrangement={{
-          leftSide: {
-            direction: "top-to-bottom",
-            pins: ["VIN_PLUS", "VIN_MINUS"],
-          },
-          rightSide: {
-            direction: "top-to-bottom",
-            pins: ["VOUT_PLUS", "VOUT_MINUS"],
-          },
-        }}
         connections={{
           VIN_PLUS: "net.VBAT_SWITCHED",
           VIN_MINUS: "net.GND",
@@ -246,20 +213,11 @@ export default function PaoWiring(): ReactElement {
         connections={{ PLUS: "net.SPK_PLUS", MINUS: "net.SPK_MINUS" }}
       />
 
-      <chip
+      <Generic096InSSD1306OLEDI2CModule
         doNotPlace
         name="OLED"
-        manufacturerPartNumber="SSD1306 128x64"
         schX={6}
         schY={-1.5}
-        schWidth={2.5}
-        pinLabels={{ pin1: "SDA", pin2: "SCL", pin3: "VCC", pin4: "GND" }}
-        schPinArrangement={{
-          leftSide: {
-            direction: "top-to-bottom",
-            pins: ["SDA", "SCL", "VCC", "GND"],
-          },
-        }}
         connections={{
           SDA: "net.OLED_SDA",
           SCL: "net.OLED_SCL",
@@ -268,10 +226,10 @@ export default function PaoWiring(): ReactElement {
         }}
       />
 
-      {/* 原图标注 L298N 小红板；只建模该四输入模块，不假定具体驱动 IC。 */}
+      {/* MX1508 双路电机驱动模块，只描述外部端子。 */}
       <chip
         doNotPlace
-        name="MOTOR_DRIVER"
+        name="MX1508"
         schX={6}
         schY={-6}
         schWidth={3.5}
