@@ -105,7 +105,7 @@ pnpm dev
 | `task check` | 检查格式、代码、类型，并构建和检查电路                  |
 | `task test`  | 执行完整检查、7 项接线测试，并比较构建 SVG 与已提交图纸 |
 
-Task 调用 `package.json` 中的 pnpm 脚本，CI 使用同一套 `pnpm test`。Prettier 负责格式，ESLint 使用 JavaScript / TypeScript 推荐规则检查代码；两者跳过构建产物与 `vendor/`。预览和导出仍可使用 `pnpm dev`、`pnpm export`。
+Task 调用 `package.json` 中的 pnpm 脚本，CI 在 `hardware/` 中执行 `task setup` 和 `task test`；`test` 已包含 `check`，只构建一次电路。Prettier 负责格式，ESLint 使用 JavaScript / TypeScript 推荐规则检查代码；两者跳过构建产物与 `vendor/`。预览和导出仍可使用 `pnpm dev`、`pnpm export`。
 
 锁文件从原 npm 锁文件迁移，保留固定的直接依赖版本。`pnpm.overrides` 固定电路检查器的下载来源，并统一 `math-utils` 为 0.0.36，满足部分上游包未正确声明的运行时依赖。
 
