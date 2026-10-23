@@ -8,7 +8,7 @@
 当前板型为 `pao-minimal`：ESP32-S3、16 MB Flash、八线 PSRAM，只有
 I2S 麦克风、I2S 功放、BOOT 按键和状态灯，不需要屏幕。GPIO 暂沿用小智
 面包板配置，详见[板型与接线](boards/pao-minimal/README.md)。
-业务组件初始化仅输出日志；提供独立电机驱动类，板型尚未接入电机或发射控制。
+业务组件初始化仅输出日志；提供电机和两轮底盘驱动，板型尚未接入电机或发射控制。
 默认 OTA 网关指向灵矽，
 但未验证设备绑定及语音连接。
 
@@ -106,6 +106,34 @@ left.setSpeed(0.0f);
 真实 PWM 波形和带载效果仍需实机验证。
 MCPWM API 见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/mcpwm.html)。
 
+## 两轮底盘
+
+`components/pao/include/chassis.h` 提供开环差速底盘 `Chassis`，将前进、转向指令转换为
+两个 `Motor` 的输出。将上例中已创建的左右电机传入：
+
+```cpp
+#include "chassis.h"
+
+Chassis chassis(left, right);
+chassis.drive(0.5f, 0.0f);   // 前进
+chassis.drive(-0.5f, 0.0f);  // 后退
+chassis.drive(0.0f, 0.5f);   // 原地左转
+chassis.drive(0.5f, -0.2f);  // 前进并右转
+chassis.drive(0.0f, 0.0f);   // 滑行停止
+```
+
+`drive(float forward, float turn)` 的两个参数均为 `[-1, 1]` 的归一化控制量：
+`forward` 正负分别表示前进、后退，`turn` 正负分别表示向左、向右旋转。
+有限越界参数先限幅，混合后的两轮输出超限时一起按比例缩小；任一参数为 NaN 或无穷值时停止两轮。
+
+左右电机必须是不同实例，并且都以带动车体前进为正方向；通过 `Motor` 的 GPIO 顺序适配接线。
+电机生命周期必须覆盖底盘，同一对电机交由一个底盘统一控制，使用期间通过底盘下发运动指令。
+构造和析构时均停止两轮，调用 `drive(0, 0)` 滑行停止。
+指令保持到下一次 `drive()` 或析构；底盘命令串行执行，请从普通任务调用。
+
+该底盘面向无编码器电机，实际速度和行驶轨迹需上车调校，相同输出也可能跑偏。
+当前板型不会自动创建或启动底盘。
+
 ## CI
 
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
@@ -131,7 +159,7 @@ CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实�
 
 ## 接入位置
 
-- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机驱动，不依赖小智私有类。
+- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机和底盘驱动，不依赖小智私有类。
 - `firmware/boards/pao-minimal/`：独立板型、引脚、音频 Codec 和按键初始化，调用
   `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
