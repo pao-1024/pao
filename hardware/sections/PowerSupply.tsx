@@ -1,3 +1,4 @@
+import { nets } from "../nets"
 import { Boost5VModule } from "../components/Boost5V"
 import { PowerSwitch } from "../components/PowerSwitch"
 import { Tp4056Protection } from "../components/Tp4056"
@@ -5,7 +6,7 @@ import { Tp4056Protection } from "../components/Tp4056"
 export function PowerSupply() {
   return (
     <>
-      <schematicsection name="Power" displayName="01 供电 / 1S → 5V" />
+      <schematicsection name="Power" displayName="供电 / 1S → 5V" />
       <battery
         doNotPlace
         name="BATTERY"
@@ -25,11 +26,11 @@ export function PowerSupply() {
         schY={7}
         connections={{
           OUT_PLUS: "POWER_SWITCH.COM",
-          OUT_MINUS: "net.GND",
+          OUT_MINUS: nets.power.gnd.selector,
         }}
       />
       <netlabel
-        net="GND"
+        net={nets.power.gnd.name}
         connection="CHARGER_1S.OUT_MINUS"
         schX={-5.2}
         schY={6.1}
@@ -53,14 +54,14 @@ export function PowerSupply() {
         schX={3.5}
         schY={7}
         connections={{
-          VIN_MINUS: "net.GND",
-          VOUT_PLUS: "net.V5",
-          VOUT_MINUS: "net.GND",
+          VIN_MINUS: nets.power.gnd.selector,
+          VOUT_PLUS: nets.power.v5.selector,
+          VOUT_MINUS: nets.power.gnd.selector,
         }}
       />
 
       <netlabel
-        net="GND"
+        net={nets.power.gnd.name}
         connection="BOOST_5V.VOUT_MINUS"
         schX={5.1}
         schY={6.1}

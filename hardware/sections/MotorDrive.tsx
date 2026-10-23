@@ -1,10 +1,11 @@
+import { nets } from "../nets"
 import { Motor } from "../components/Motor"
 import { Mx1508Module } from "../components/Mx1508"
 
 export function MotorDrive() {
   return (
     <>
-      <schematicsection name="Motors" displayName="06 MX1508 电机驱动" />
+      <schematicsection name="Motors" displayName="MX1508 电机驱动" />
       <Mx1508Module
         doNotPlace
         name="MX1508"
@@ -12,12 +13,12 @@ export function MotorDrive() {
         schX={6}
         schY={-6}
         connections={{
-          VCC: "net.V5",
-          GND: "net.GND",
-          IN1: "net.MOTOR_IN1",
-          IN2: "net.MOTOR_IN2",
-          IN3: "net.MOTOR_IN3",
-          IN4: "net.MOTOR_IN4",
+          VCC: nets.power.v5.selector,
+          GND: nets.power.gnd.selector,
+          IN1: nets.motorDrive.in1.selector,
+          IN2: nets.motorDrive.in2.selector,
+          IN3: nets.motorDrive.in3.selector,
+          IN4: nets.motorDrive.in4.selector,
           RIGHT_PLUS: "MOTOR_RIGHT.PLUS",
           RIGHT_MINUS: "MOTOR_RIGHT.MINUS",
           LEFT_PLUS: "MOTOR_LEFT.PLUS",

@@ -30,7 +30,7 @@
 | ESP32-S3 开发板 | 原生导入乐鑫官方 KiCad 符号，保留完整 44 针、图形及板上内部电源连接；短 GPIO 别名自动生成 |
 | SSD1306 OLED | 复用官方 `@tscircuit/header-modules` 成品组件，只调整固定符号的绘图留白 |
 | 左右电机 | 共用 `Motor` 组件，复用内置两针端子表示外部电机的两线连接 |
-| 充电保护、升压模块 | 从已有 MIT 许可的 Fritzing/KiCad 板级定义适配，保留源文件及引脚顺序 |
+| 充电保护、升压模块 | 从已有 MIT 许可的 Fritzing/KiCad 板级定义适配，保留来源、许可及引脚顺序 |
 | INMP441、MAX98357A、MX1508 模块 | 保留小型的本地外部接口定义；目前未找到针脚与本方案一致、可直接导入的整板 TSX 组件，不将裸 IC 或其他开发板当作同款模块 |
 
 所有外部来源、固定提交、许可及必要的格式适配见 [vendor/README.md](vendor/README.md)。官方 header-modules 的同名 ESP32-S3 组件目前仍为 30 针映射，与本图 44 针开发板不符；MAX98357A 候选缺少扬声器端子，TP4056/MT3608 候选也缺少本方案所需的电源端子，因此未直接套用。
@@ -39,9 +39,9 @@
 
 按项目锁定的 [tscircuit skill](https://github.com/tscircuit/skill/blob/ccfd1afbefa0d1fb0f995795e805030ee5e96de1/SKILL.md) 组织为一张图纸，使用 `schematicsection` 划分供电、主控、麦克风、扬声器输出、屏幕和电机六个功能区。各模块通过 `schSectionName` 归属分区，坐标显式设置；分区不会自动排版。
 
-`index.tsx` 以 ESP32-S3 为中心，集中分配 GPIO 并组合各功能区。`sections/` 中的 `PowerSupply`、`Microphone`、`AudioOutput`、`Display`、`MotorDrive` 各自负责区内供电、固定接线、模式配置、负载和布局，通过同名网络与主控连接。调整 GPIO 只需修改入口中的对应映射。
+`index.tsx` 负责图纸设置，并以主控为中心组合六个功能区。`sections/Controller.tsx` 集中分配 ESP32-S3 的 GPIO；`PowerSupply`、`Microphone`、`AudioOutput`、`Display`、`MotorDrive` 各自负责区内供电、固定接线、模式配置、负载和布局。`nets.ts` 统一定义跨区网络，接线使用 `.selector`，图纸标签使用 `.name`，两者从同一个名称生成。调整 GPIO 只需修改主控功能区中的对应映射。
 
-`components/` 保存器件接口及必要适配，包括独立的 `PowerSwitch` 和共用的 `Motor`；`vendor/` 保存复用的原始定义和许可。功能区使用 React Fragment 组织代码，保留原有电路层级和选择器作用域。KiCad 符号由 tscircuit 原生导入，测试复用上游连通性工具。`tscircuit.config.ts` 统一关闭 PCB 与元件选型引擎，供构建、导出和开发预览使用。
+`components/` 保存器件接口及必要适配，包括独立的 `PowerSwitch` 和共用的 `Motor`；`vendor/` 保存构建所需的官方符号、来源说明与第三方许可。功能区使用 React Fragment 组织代码，保留原有电路层级和选择器作用域。KiCad 符号由 tscircuit 原生导入，测试复用上游连通性工具。`tscircuit.config.ts` 统一关闭 PCB 与元件选型引擎，供构建、导出和开发预览使用。
 
 ## 信号连接
 

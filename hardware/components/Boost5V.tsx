@@ -1,6 +1,6 @@
 import type { ChipProps } from "@tscircuit/props"
 
-// 从 vendor/mt3608/hw-045.lib 转换，保留上游针脚编号；修正 pin4 的 VOUT- 笔误。
+// 从 MT3608 KiCad 定义转换；保留针脚编号，修正 pin4 的 VOUT- 笔误，来源见 vendor/README.md。
 // 仅复用 MT3608 板级四端子接口作为 5V 升压参考，实际模块型号尚未确认。
 const pins = {
   pin1: "VIN_PLUS",

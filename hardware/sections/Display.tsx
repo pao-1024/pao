@@ -1,9 +1,10 @@
+import { nets } from "../nets"
 import { OledModule } from "../components/Oled"
 
 export function Display() {
   return (
     <>
-      <schematicsection name="Display" displayName="05 OLED 屏幕" />
+      <schematicsection name="Display" displayName="OLED 屏幕" />
       <OledModule
         doNotPlace
         name="OLED"
@@ -11,10 +12,10 @@ export function Display() {
         schX={-11}
         schY={-3}
         connections={{
-          SDA: "net.OLED_SDA",
-          SCL: "net.OLED_SCL",
-          VCC: "net.V3V3",
-          GND: "net.GND",
+          SDA: nets.display.sda.selector,
+          SCL: nets.display.scl.selector,
+          VCC: nets.power.v3v3.selector,
+          GND: nets.power.gnd.selector,
         }}
       />
     </>

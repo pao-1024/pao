@@ -1,9 +1,10 @@
+import { nets } from "../nets"
 import { Max98357Module } from "../components/Max98357"
 
 export function AudioOutput() {
   return (
     <>
-      <schematicsection name="AudioOutput" displayName="04 功放与扬声器" />
+      <schematicsection name="AudioOutput" displayName="功放与扬声器" />
       <Max98357Module
         doNotPlace
         name="AMP"
@@ -11,26 +12,26 @@ export function AudioOutput() {
         schX={7.5}
         schY={3}
         connections={{
-          VIN: "net.V3V3",
-          GND: "net.GND",
-          SD_MODE: "net.V3V3",
-          GAIN: "net.GND",
-          DIN: "net.AMP_DIN",
-          BCLK: "net.AMP_BCLK",
-          LRC: "net.AMP_LRC",
+          VIN: nets.power.v3v3.selector,
+          GND: nets.power.gnd.selector,
+          SD_MODE: nets.power.v3v3.selector,
+          GAIN: nets.power.gnd.selector,
+          DIN: nets.audioOutput.din.selector,
+          BCLK: nets.audioOutput.bclk.selector,
+          LRC: nets.audioOutput.lrc.selector,
           OUT_PLUS: "SPEAKER.pos",
           OUT_MINUS: "SPEAKER.neg",
         }}
       />
       <netlabel
-        net="V3V3"
+        net={nets.power.v3v3.name}
         connection="AMP.VIN"
         schX={5.4}
         schY={4.3}
         anchorSide="bottom"
       />
       <netlabel
-        net="GND"
+        net={nets.power.gnd.name}
         connection="AMP.GND"
         schX={5.55}
         schY={3.2}

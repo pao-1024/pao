@@ -1,6 +1,6 @@
 import type { ChipProps } from "@tscircuit/props"
 
-// 从 vendor/tp4056/TP4056.fzpz 的 connector/description 转换；保留 connector0..5 的顺序。
+// 从 TP4056 Fritzing 定义转换；保留 connector0..5 的顺序，来源见 vendor/README.md。
 const pins = {
   pin1: "USB_PLUS",
   pin2: "USB_MINUS",

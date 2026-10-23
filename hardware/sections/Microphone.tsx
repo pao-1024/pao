@@ -1,9 +1,10 @@
+import { nets } from "../nets"
 import { Inmp441Module } from "../components/Inmp441"
 
 export function Microphone() {
   return (
     <>
-      <schematicsection name="Microphone" displayName="03 麦克风" />
+      <schematicsection name="Microphone" displayName="麦克风" />
       <Inmp441Module
         doNotPlace
         name="MIC"
@@ -11,12 +12,12 @@ export function Microphone() {
         schX={-11}
         schY={0}
         connections={{
-          VDD: "net.V3V3",
-          GND: "net.GND",
-          L_R: "net.GND",
-          WS: "net.MIC_WS",
-          SCK: "net.MIC_SCK",
-          SD: "net.MIC_SD",
+          VDD: nets.power.v3v3.selector,
+          GND: nets.power.gnd.selector,
+          L_R: nets.power.gnd.selector,
+          WS: nets.microphone.ws.selector,
+          SCK: nets.microphone.sck.selector,
+          SD: nets.microphone.sd.selector,
         }}
       />
     </>
