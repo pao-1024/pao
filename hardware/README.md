@@ -91,7 +91,7 @@ ESP32-S3 3V3 → 麦克风 VDD、功放 VIN/SD、OLED VCC
 ```sh
 task hardware:setup
 cd hardware
-pnpm dev
+task dev
 ```
 
 浏览器访问命令输出的本地地址（默认 `http://localhost:3020`），查看 Schematic。PCB 已关闭，预览中的 PCB/3D 不代表实际布局。
@@ -105,11 +105,11 @@ pnpm dev
 | `task check` | 检查格式、代码、类型，并构建和检查电路                  |
 | `task test`  | 执行完整检查、7 项接线测试，并比较构建 SVG 与已提交图纸 |
 
-Task 调用 `package.json` 中的 pnpm 脚本，CI 在 `hardware/` 中执行 `task setup` 和 `task test`；`test` 已包含 `check`，只构建一次电路。Prettier 负责格式，ESLint 使用 JavaScript / TypeScript 推荐规则检查代码；两者跳过构建产物与 `vendor/`。预览和导出仍可使用 `pnpm dev`、`pnpm export`。
+`Taskfile.yaml` 逐条列出开发和检查命令，通过 `pnpm exec` 使用本地工具；CI 在 `hardware/` 中执行 `task setup` 和 `task test`；`test` 已包含 `check`，只构建一次电路。Prettier 负责格式，ESLint 使用 JavaScript / TypeScript 推荐规则检查代码；两者跳过构建产物与 `vendor/`。构建、预览和导出分别使用 `task build`、`task dev`、`task export`。
 
 锁文件从原 npm 锁文件迁移，保留固定的直接依赖版本。`pnpm.overrides` 固定电路检查器的下载来源，并统一 `math-utils` 为 0.0.36，满足部分上游包未正确声明的运行时依赖。
 
-修改接线后执行 `task fix`、`pnpm export` 和 `task test`，把源码与 SVG 一起提交。各项检查复用同一次构建产物，CI 直接比较构建 SVG 与已提交图纸。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
+修改接线后执行 `task fix`、`task export` 和 `task test`，把源码与 SVG 一起提交。各项检查复用同一次构建产物，CI 直接比较构建 SVG 与已提交图纸。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
 
 `tscircuit-jsx.d.ts` 直接复用上游 `@tscircuit/props` 的属性类型，避免聚合类型入口连带检查路由器包的第三方 TypeScript 源码。
 

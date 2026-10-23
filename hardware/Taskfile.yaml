@@ -9,14 +9,40 @@ tasks:
   fix:
     desc: 自动修复代码并统一格式
     cmds:
-      - pnpm fix
+      - pnpm exec eslint . --fix
+      - pnpm exec prettier . --write
 
   check:
     desc: 检查格式、代码、类型及电路
     cmds:
-      - pnpm check
+      - pnpm exec prettier . --check
+      - pnpm exec eslint . --max-warnings 0
+      - pnpm exec tsc
+      - task: build
+      - pnpm exec tsci check source index.tsx
+      - pnpm exec tsci check pin_specification index.tsx
+      - pnpm exec tsci check netlist index.tsx
+      - pnpm exec tsci check schematic-placement dist/index/circuit.json
+      - pnpm exec tsci check placement dist/index/circuit.json
 
   test:
     desc: 完整检查并验证接线与图纸
     cmds:
-      - pnpm test
+      - task: check
+      - node --test test/connectivity.test.mjs
+      - cmp dist/index/schematic.svg schematic.svg
+
+  build:
+    desc: 生成电路 JSON 和原理图 SVG
+    cmds:
+      - pnpm exec tsci build index.tsx --schematic-svgs
+
+  dev:
+    desc: 启动原理图预览
+    cmds:
+      - pnpm exec tsci dev index.tsx
+
+  export:
+    desc: 更新已提交的原理图 SVG
+    cmds:
+      - pnpm exec tsci export index.tsx -f schematic-svg -o schematic.svg
