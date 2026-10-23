@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import type { AnyCircuitElement, SourcePort } from "circuit-json"
 import { getSourcePortConnectivityMapFromCircuitJson } from "circuit-json-to-connectivity-map"
 
-const circuit = JSON.parse(
+const circuit: AnyCircuitElement[] = JSON.parse(
   readFileSync(new URL("../dist/index/circuit.json", import.meta.url), "utf8"),
 )
 const components = circuit.filter((item) => item.type === "source_component")
@@ -16,8 +17,10 @@ const componentNames = new Map(
   ]),
 )
 // 原生 KiCad 符号保留物理引脚；测试统一使用接线表中的逻辑名称。
-function portName(port) {
+function portName(port: SourcePort): string {
+  assert.ok(port.source_component_id, `引脚 ${port.source_port_id} 缺少模块 ID`)
   const name = componentNames.get(port.source_component_id)
+  assert.ok(name, `引脚 ${port.source_port_id} 对应的模块不存在`)
   const hints = port.port_hints ?? []
   if (name === "ESP32_S3") {
     const gpio = hints.find((hint) => /^GPIO\d+$/.test(hint))
@@ -33,14 +36,14 @@ const portsByName = new Map(ports.map((port) => [portName(port), port]))
 // 复用上游连通性工具，包含导线、命名网络和板上内部连接。
 const connectivity = getSourcePortConnectivityMapFromCircuitJson(circuit)
 
-function port(name) {
+function port(name: string): SourcePort {
   const result = portsByName.get(name)
   assert.ok(result, `缺少模块引脚 ${name}`)
   return result
 }
 
 // 核对编译后同一网络的完整成员，额外短接到任何引脚都会失败。
-function assertNetwork(expected) {
+function assertNetwork(expected: readonly string[]): void {
   const key = connectivity.getNetConnectedToId(port(expected[0]).source_port_id)
   assert.ok(key, `${expected[0]} 没有连接到网络`)
   const actual = [
@@ -78,8 +81,8 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
       "MOTOR_LEFT",
     ].sort(),
   )
-  const mcuPorts = ports.filter(
-    (item) => componentNames.get(item.source_component_id) === "ESP32_S3",
+  const mcuPorts = ports.filter((item) =>
+    portName(item).startsWith("ESP32_S3."),
   )
   assert.equal(mcuPorts.length, 44, "保留官方开发板完整的 44 个物理引脚")
   assert.equal(new Set(mcuPorts.map((item) => item.pin_number)).size, 44)
@@ -91,11 +94,11 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
     ),
   )
   assert.equal(
-    components.find((item) => item.name === "BATTERY").ftype,
+    components.find((item) => item.name === "BATTERY")?.ftype,
     "simple_power_source",
   )
   assert.equal(
-    components.find((item) => item.name === "POWER_SWITCH").ftype,
+    components.find((item) => item.name === "POWER_SWITCH")?.ftype,
     "simple_switch",
   )
   assert.deepEqual(
@@ -106,7 +109,7 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
 
 test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", () => {
   // 独立记录用户已确认的接线要求，不从电路源码导入预期值。
-  const connections = [
+  const connections: [number, string][] = [
     [4, "MIC.WS"],
     [5, "MIC.SCK"],
     [6, "MIC.SD"],
