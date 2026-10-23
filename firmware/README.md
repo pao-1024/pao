@@ -43,6 +43,12 @@ task firmware:build
 构建时自动准备小智源码、接入本地板型和外部组件、生成 IDE 索引并编译固件。
 首次需要联网下载小智源码和组件，耗时取决于网络。
 
+本地已安装 `ccache` 时，可在仓库根目录启用编译缓存，缓存保存在 `tmp/ccache/`：
+
+```sh
+IDF_CCACHE_ENABLE=1 CCACHE_DIR="$PWD/tmp/ccache" task firmware:build
+```
+
 ## 准备、配置与编译
 
 ```sh
@@ -88,7 +94,7 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 缓存按 Ubuntu 版本、CPU 架构、Python、ESP-IDF 和 EIM 版本区分；命中时跳过 SDK 安装，
 安装 runner 所需系统依赖并重新激活环境。未命中时自动安装，构建成功后保存缓存。
 
-编译通过 ESP-IDF 的 `IDF_CCACHE_ENABLE` 启用 `ccache`，最多保存 1 GiB 编译结果。
+编译通过 ESP-IDF 的 `IDF_CCACHE_ENABLE` 启用 `ccache`，最多保存 1 GB 编译结果。
 每次运行可恢复同一系统、架构和 IDF 版本的最近缓存，由 `ccache` 校验编译器、源码、
 头文件和编译参数后复用结果；构建日志会输出本轮命中率。
 
