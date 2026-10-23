@@ -1,4 +1,5 @@
 /.worktrees/
+/.agents/skills/
 /tmp/
 !/.vscode/
 /.vscode/*

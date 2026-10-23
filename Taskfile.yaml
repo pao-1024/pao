@@ -1,0 +1,19 @@
+version: '3'
+
+env:
+  PAO_BASE_REF: '{{.REF | default ""}}'
+  PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
+
+tasks:
+  build:
+    desc: 准备 ESP-IDF 和小智，构建最小语音固件（REF=分支/Tag/commit）
+    cmds:
+      - bash scripts/build.sh
+
+  skills:install:
+    desc: 安装清单中的全部项目 skill
+    preconditions:
+      - sh: node -e "JSON.parse(require('node:fs').readFileSync('skills-lock.json', 'utf8'))"
+        msg: 请确认已安装 Node.js，且 skills-lock.json 存在并且是有效 JSON
+    cmds:
+      - npx --yes skills@1.7.4 experimental_install
