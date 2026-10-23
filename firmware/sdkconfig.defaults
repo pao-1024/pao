@@ -1,0 +1,4 @@
+# ESP32-S3 voice board: I2S microphone, I2S speaker, BOOT button, no display.
+CONFIG_BOARD_TYPE_PAO_MINIMAL=y
+CONFIG_LANGUAGE_ZH_CN=y
+CONFIG_OTA_URL="https://xrobo.qiniuapi.com/v1/ota/"
