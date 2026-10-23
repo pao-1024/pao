@@ -1,0 +1,36 @@
+name: Hardware
+
+on:
+  pull_request:
+    paths:
+      - "hardware/**"
+      - ".github/workflows/hardware.yml"
+  push:
+    branches: [main]
+    paths:
+      - "hardware/**"
+      - ".github/workflows/hardware.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  wiring:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hardware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: hardware/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run export
+      - run: git diff --exit-code -- schematic.svg

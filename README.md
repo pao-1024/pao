@@ -24,6 +24,10 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
+## 硬件接线
+
+[ESP32-S3 模块接线图与预览说明](hardware/README.md)：使用 tscircuit 描述供电、电机驱动、麦克风、功放、扬声器及 OLED 的连接。
+
 ---
 
 <div align="center">

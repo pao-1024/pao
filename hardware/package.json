@@ -1,0 +1,26 @@
+{
+  "name": "@pao/hardware",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PAO ESP32-S3 模块接线参考原理图",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "tsci dev index.tsx",
+    "typecheck": "tsc --noEmit",
+    "build": "tsci build index.tsx --disable-pcb --disable-parts-engine --preview-images --schematic-svgs",
+    "export": "tsci export index.tsx -f schematic-svg -o schematic.svg --disable-parts-engine",
+    "test": "npm run typecheck && npm run build && node --test test/connectivity.test.mjs"
+  },
+  "devDependencies": {
+    "@tscircuit/props": "0.0.709",
+    "@types/react": "19.3.0",
+    "tscircuit": "0.0.3008",
+    "typescript": "5.9.3"
+  },
+  "overrides": {
+    "@tscircuit/pcb-trace-linter": "https://codeload.github.com/tscircuit/pcb-trace-linter/tar.gz/4c035f9d40ffb03ba547a08975b5e64b20371123"
+  }
+}

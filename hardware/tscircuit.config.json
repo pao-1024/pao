@@ -1,0 +1,5 @@
+{
+  "mainEntrypoint": "index.tsx",
+  "pcbDisabled": true,
+  "partsEngineDisabled": true
+}
