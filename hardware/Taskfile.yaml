@@ -29,7 +29,7 @@ tasks:
     desc: 完整检查并验证接线与图纸
     cmds:
       - task: check
-      - node --test test/connectivity.test.mjs
+      - node --test test/connectivity.test.ts
       - cmp dist/index/schematic.svg schematic.svg
 
   build:
