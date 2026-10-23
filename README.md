@@ -35,8 +35,8 @@ PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕
 ## 开发
 
 固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
-或进入 `firmware/` 后运行 `task build`；首次会自动准备 ESP-IDF 和小智源码。
-上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
+或进入 `firmware/` 后运行 `task build`。请先通过 EIM 安装并选择 ESP-IDF；
+构建时会自动准备小智源码。环境安装、上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
 
 ## 项目 Skill
 
