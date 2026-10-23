@@ -1,8 +1,9 @@
 # 固件构建
 
 小智保持完整 ESP-IDF 工程，PAO 源码作为外部组件编译成静态库并链接进去。
-板型、组件、构建脚本和配置均在 `firmware/` 下维护。上游源码、SDK、缓存和构建
-产物均放在仓库根目录 Git 忽略的 `tmp/` 下，不提交上游源码。
+板型、组件、构建脚本和配置均在 `firmware/` 下维护。上游源码、缓存和构建
+产物均放在仓库根目录 Git 忽略的 `tmp/` 下，不提交上游源码。ESP-IDF 及工具链
+由用户通过 EIM 安装和管理。
 
 当前板型为 `pao-minimal`：ESP32-S3、16 MB Flash、八线 PSRAM，只有
 I2S 麦克风、I2S 功放、BOOT 按键和状态灯，不需要屏幕。GPIO 暂沿用小智
@@ -14,7 +15,20 @@ I2S 麦克风、I2S 功放、BOOT 按键和状态灯，不需要屏幕。GPIO �
 ## 环境
 
 需要 Git、Python 3.10+ 和 [Task](https://taskfile.dev/installation/)。
-在仓库根目录运行一个命令：
+按照[乐鑫官方安装指南](https://docs.espressif.com/projects/esp-idf/zh_CN/stable/esp32s3/get-started/linux-setup.html)
+安装 ESP-IDF 安装管理器（EIM），然后安装并选择 ESP32-S3 开发环境：
+
+```sh
+eim install -i v6.0.1 -t esp32s3
+eim select
+```
+
+运行 `eim select` 时，从列表中选择已安装的 6.0.1 环境。
+SDK 和工具链的安装目录由 EIM 管理，不要求放在本仓库内。
+默认 base 的最低要求为 ESP-IDF v6.0.1；选择其他版本时需确认与所选小智版本兼容。
+可通过 `eim list` 查看已安装的版本，通过 `eim select` 切换。
+
+在仓库根目录运行：
 
 ```sh
 task firmware:build
@@ -23,11 +37,18 @@ task firmware:build
 根 Taskfile 通过 `includes` 引用 `firmware/Taskfile.yaml`，并将任务工作目录设为
 `firmware/`。也可以进入 `firmware/` 后直接执行 `task build`。
 
-首次自动在仓库根目录的 `tmp/esp-idf` 和 `tmp/idf-tools` 安装 ESP-IDF v6.0.1 及工具链，
-准备小智源码、接入本地板型和外部组件、生成 IDE 索引并编译固件。
-首次需要联网下载 SDK、工具链和组件，耗时取决于网络。
-如果已经设置 `IDF_PATH`，则复用该 SDK，并加载它的 `export.sh`；需要兼容
-所选小智版本，默认 base 的最低要求为 ESP-IDF v6.0.1。
+构建脚本直接使用已激活的 ESP-IDF 环境（`IDF_PATH` 已设置且 `idf.py` 可用）；
+否则通过 `eim run` 在 EIM 当前选中的环境中运行。未找到 EIM 时会显示安装指引并退出，
+不会自动安装 SDK 或修改系统配置。若 EIM 尚未安装或选择 IDF 版本，先完成上述安装和选择步骤。
+
+构建时自动准备小智源码、接入本地板型和外部组件、生成 IDE 索引并编译固件。
+首次需要联网下载小智源码和组件，耗时取决于网络。
+
+本地已安装 `ccache` 时，可在仓库根目录启用编译缓存，缓存保存在 `tmp/ccache/`：
+
+```sh
+IDF_CCACHE_ENABLE=1 CCACHE_DIR="$PWD/tmp/ccache" task firmware:build
+```
 
 ## 准备、配置与编译
 
@@ -60,14 +81,26 @@ python3 firmware/scripts/build.py prepare --ref main
 
 ## CI
 
-GitHub Actions 的 `Code checks` 工作流在 PR、推送到 `main` 和手动触发时运行。
+GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
+仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/`、`firmware/boards/` 和
 `firmware/simulation/probe/main/` 进行 C/C++ 静态分析。
 
-CI 不安装 ESP-IDF，不获取小智源码，不执行固件构建，也不上传产物。
-没有 SDK 头文件和完整编译配置的静态检查不能证明固件可编译；需要时在本地运行
-`task firmware:build`。板上烧录、语音连接或 GPIO 行为仍需实机验证。
+静态检查通过后，`Firmware build` 任务使用乐鑫官方
+[install-esp-idf-action](https://github.com/espressif/install-esp-idf-action)
+通过 EIM v0.20.1 自动安装 ESP-IDF v6.0.1 和工具链，再运行同一构建脚本获取
+默认小智版本并编译固件。Action 固定到完整 commit SHA，环境安装与构建总超时为 45 分钟。
+
+SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多次运行间复用。
+缓存按 Ubuntu 版本、CPU 架构、Python、ESP-IDF 和 EIM 版本区分；命中时跳过 SDK 安装，
+安装 runner 所需系统依赖并重新激活环境。未命中时自动安装，构建成功后保存缓存。
+
+编译通过 ESP-IDF 的 `IDF_CCACHE_ENABLE` 启用 `ccache`，最多保存 1 GB 编译结果。
+每次运行可恢复同一系统、架构和 IDF 版本的最近缓存，由 `ccache` 校验编译器、源码、
+头文件和编译参数后复用结果；构建日志会输出本轮命中率。
+
+CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置
 
@@ -89,7 +122,7 @@ CI 不安装 ESP-IDF，不获取小智源码，不执行固件构建，也不上
 
 VS Code/Cursor 可安装推荐的 clangd 扩展，仓库已配置编译数据库及
 `xtensa*-elf` 编译器查询权限；也提供 `PAO: configure` 和 `PAO: build`
-任务。任务自动加载 SDK 环境。其他 clangd 客户端读取 `firmware/.clangd`；若客户端
+任务。任务复用已激活的 SDK 环境，或通过 EIM 加载所选环境。其他 clangd 客户端读取 `firmware/.clangd`；若客户端
 未配置交叉编译器查询，需添加相同的 `--query-driver` 参数。
 
 手工维护 include 路径不能替代编译数据库。切换 base 后重新执行 `configure`，

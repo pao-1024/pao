@@ -5,27 +5,26 @@ cd "$(dirname "$0")/../.."
 mkdir -p tmp/temp
 export TMPDIR="$PWD/tmp/temp"
 export PIP_CACHE_DIR="$PWD/tmp/pip-cache"
-if [[ -z "${IDF_PATH:-}" ]]; then
-    export IDF_TOOLS_PATH="$PWD/tmp/idf-tools"
-    if [[ ! -d tmp/esp-idf ]]; then
-        git clone --branch v6.0.1 --depth 1 --recursive --shallow-submodules \
-            https://github.com/espressif/esp-idf.git tmp/esp-idf
-    fi
-    export IDF_PATH="$PWD/tmp/esp-idf"
-    if [[ ! -f "$IDF_TOOLS_PATH/.pao-installed-v6.0.1" ]]; then
-        "$IDF_PATH/install.sh" esp32s3
-        touch "$IDF_TOOLS_PATH/.pao-installed-v6.0.1"
-    fi
+export PAO_BUILD_ACTION="${PAO_BUILD_ACTION:-build}"
+
+if [[ -n "${IDF_PATH:-}" ]] && command -v idf.py >/dev/null 2>&1; then
+    exec python firmware/scripts/build.py "$PAO_BUILD_ACTION"
 fi
 
-# export.sh manages its own environment and does not support nounset.
-set +u
-# shellcheck source=/dev/null
-source "$IDF_PATH/export.sh"
-set -u
-if [[ "${PAO_BUILD_ACTION:-build}" == "probe" ]]; then
-    python "$IDF_PATH/tools/idf.py" -C firmware/simulation/probe -B "$PWD/tmp/probe-build" \
-        -DIDF_TARGET=esp32s3 -DSDKCONFIG="$PWD/tmp/probe-build/sdkconfig" build
-    exit
+if ! command -v eim >/dev/null 2>&1; then
+    cat >&2 <<'EOF'
+未检测到已激活的 ESP-IDF 环境，也未找到 EIM。
+请先按照乐鑫官方文档安装 ESP-IDF 安装管理器（EIM）：
+https://docs.espressif.com/projects/esp-idf/zh_CN/stable/esp32s3/get-started/linux-setup.html
+
+安装 EIM 后，为 ESP32-S3 安装并选择 ESP-IDF：
+  eim install -i v6.0.1 -t esp32s3
+  eim select
+然后重新运行 task firmware:build。
+EOF
+    exit 1
 fi
-python firmware/scripts/build.py "${PAO_BUILD_ACTION:-build}"
+
+# Expand the action inside EIM's shell to preserve argument boundaries.
+# shellcheck disable=SC2016
+exec eim run 'python firmware/scripts/build.py "$PAO_BUILD_ACTION"'

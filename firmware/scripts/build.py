@@ -27,7 +27,7 @@ def run(*args, cwd=ROOT, capture=False, check=True):
 def main():
     config = json.loads((FIRMWARE / "base.json").read_text())
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", choices=("prepare", "configure", "build"), default="build")
+    parser.add_argument("action", nargs="?", choices=("prepare", "configure", "build", "probe"), default="build")
     parser.add_argument("--ref", default=os.environ.get("PAO_BASE_REF") or config["ref"], help="upstream branch, tag or commit (default: firmware/base.json)")
     args = parser.parse_args()
     profile = os.environ.get("PAO_PROFILE", "hardware")
@@ -39,9 +39,17 @@ def main():
     temp = ROOT / "tmp" / "temp"
     temp.mkdir(parents=True, exist_ok=True)
     os.environ["TMPDIR"] = str(temp)
+    if args.action == "probe":
+        idf_path = os.environ.get("IDF_PATH")
+        if not idf_path or not (Path(idf_path) / "tools/idf.py").is_file():
+            raise RuntimeError("ESP-IDF is not active. Run through firmware/scripts/build.sh with EIM.")
+        build = ROOT / "tmp/probe-build"
+        run(sys.executable, Path(idf_path) / "tools/idf.py", "-C", FIRMWARE / "simulation/probe",
+            "-B", build, f"-DIDF_TARGET={config['target']}", f"-DSDKCONFIG={build / 'sdkconfig'}", "build")
+        return
     if not SOURCE.exists():
         run("git", "clone", "--filter=blob:none", config["repository"], SOURCE)
-    repository = run("git", "remote", "get-url", "origin", cwd=SOURCE, capture=True).stdout.strip()
+    repository = run("git", "config", "--local", "--get", "remote.origin.url", cwd=SOURCE, capture=True).stdout.strip()
     if repository != config["repository"]:
         raise RuntimeError(f"Unexpected origin in {SOURCE}: {repository}")
 
@@ -79,7 +87,7 @@ def main():
 
     idf_path = os.environ.get("IDF_PATH")
     if not idf_path or not (Path(idf_path) / "tools" / "idf.py").is_file():
-        raise RuntimeError("ESP-IDF is not active. Source ESP-IDF export.sh, then retry (see firmware/README.md).")
+        raise RuntimeError("ESP-IDF is not active. Install/select ESP-IDF with EIM, then run task firmware:build (see firmware/README.md).")
     build = ROOT / "tmp" / "build" / (revision + ("-" + profile if profile != "hardware" else ""))
     build.mkdir(parents=True, exist_ok=True)
     default_paths = [

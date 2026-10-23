@@ -22,7 +22,7 @@ sudo apt-get install build-essential git python3 python3-venv ninja-build pkg-co
   libglib2.0-dev libpixman-1-dev libgcrypt20-dev libslirp-dev
 ```
 
-ESP-IDF 使用主固件相同的自动安装入口；设置了 `IDF_PATH` 时复用已有 SDK。
+ESP-IDF 使用主固件相同的 EIM 入口；需先安装并选择 SDK，或激活已有的 SDK 环境。
 首次需要联网获取源码、组件和 QEMU 的构建依赖，后续复用缓存。
 
 ## 离线外设验证
@@ -130,4 +130,5 @@ ADC 只提供启动所需的接地校准行为。
 PSRAM tuning 会输出回退警告，当前验证不覆盖真实板子的时序校准。QEMU VM 快照和迁移不受支持。
 
 QEMU 源码版本由 `qemu.json` 固定；升级后应重新运行外设探针、完整流程和唤醒负例。
-CI 只做代码静态检查，不编译、运行仿真或上传固件。
+CI 静态检查覆盖仿真源码；Firmware 工作流保留实机固件构建，
+不编译或运行仿真，也不上传固件。

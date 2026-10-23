@@ -11,6 +11,7 @@
     "@eslint/js": "10.0.1",
     "@tscircuit/header-modules": "https://codeload.github.com/tscircuit/header-modules/tar.gz/1245074558d3bfcdbcef0d0e4b5a4f59520785a9",
     "@tscircuit/props": "0.0.709",
+    "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "circuit-json": "0.0.534",
     "circuit-json-to-connectivity-map": "0.0.33",

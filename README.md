@@ -24,15 +24,19 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
-## 硬件接线
+## 硬件即代码 · Hardware as Code
 
-[ESP32-S3 模块接线图与预览说明](hardware/README.md)：使用 tscircuit 描述供电、电机驱动、麦克风、功放、扬声器及 OLED 的连接。
+**接线可以 diff，电路可以测试，原理图可以构建。**
+
+PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕和电机驱动写成可组合的 TSX 组件。模块能复用，连线能在 PR 中审查，图纸从源码生成；CI 自动检查 GPIO、电源、输出连接和图纸一致性，让硬件设计也进入 Git、PR 和 CI 的协作流程。
+
+当前覆盖模块接线与原理图，详见 [ESP32-S3 模块接线图与预览说明](hardware/README.md)。
 
 ## 开发
 
 固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
-或进入 `firmware/` 后运行 `task build`；首次会自动准备 ESP-IDF 和小智源码。
-上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
+或进入 `firmware/` 后运行 `task build`。请先通过 EIM 安装并选择 ESP-IDF；
+构建时会自动准备小智源码。环境安装、上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
 
 ## 项目 Skill
 
