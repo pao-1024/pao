@@ -51,6 +51,10 @@ jobs:
     env:
       PAO_IDF_VERSION: v6.0.1
       PAO_EIM_VERSION: v0.20.1
+      IDF_CCACHE_ENABLE: '1'
+      CCACHE_DIR: ${{ github.workspace }}/tmp/ccache
+      CCACHE_MAXSIZE: 1G
+      CCACHE_COMPILERCHECK: content
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,6 +92,18 @@ jobs:
             libssl-dev dfu-util libusb-1.0-0 python3 python3-pip \
             python3-setuptools python3-wheel xz-utils unzip python3-venv
 
+      - name: Cache compiler results
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-v1-ubuntu-24.04-${{ runner.arch }}-${{ env.PAO_IDF_VERSION }}-${{ github.sha }}
+          restore-keys: |
+            ccache-v1-ubuntu-24.04-${{ runner.arch }}-${{ env.PAO_IDF_VERSION }}-
+
+      - name: Reset compiler cache statistics
+        id: ccache
+        run: ccache --zero-stats
+
       - name: Build firmware
         run: |
           # EIM checks the shell's $0; GitHub's temporary script name fails that check.
@@ -95,3 +111,7 @@ jobs:
             source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
             exec bash firmware/scripts/build.sh
           '
+
+      - name: Show compiler cache statistics
+        if: always() && steps.ccache.outcome == 'success'
+        run: ccache --show-stats
