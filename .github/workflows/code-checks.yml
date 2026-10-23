@@ -43,3 +43,22 @@ jobs:
             -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
             firmware/components/pao firmware/boards/pao-minimal
 
+  firmware:
+    name: Firmware build
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install ESP-IDF with EIM
+        uses: espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae # v1
+        with:
+          version: v6.0.1
+          eim-version: v0.20.1
+
+      - name: Build firmware
+        run: bash firmware/scripts/build.sh

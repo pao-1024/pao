@@ -38,7 +38,7 @@ def main():
     os.environ["TMPDIR"] = str(temp)
     if not SOURCE.exists():
         run("git", "clone", "--filter=blob:none", config["repository"], SOURCE)
-    repository = run("git", "remote", "get-url", "origin", cwd=SOURCE, capture=True).stdout.strip()
+    repository = run("git", "config", "--local", "--get", "remote.origin.url", cwd=SOURCE, capture=True).stdout.strip()
     if repository != config["repository"]:
         raise RuntimeError(f"Unexpected origin in {SOURCE}: {repository}")
 

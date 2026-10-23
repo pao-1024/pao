@@ -79,9 +79,12 @@ Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao-minimal/`
 进行 C/C++ 静态分析。
 
-CI 不安装 ESP-IDF，不获取小智源码，不执行固件构建，也不上传产物。
-没有 SDK 头文件和完整编译配置的静态检查不能证明固件可编译；需要时在本地运行
-`task firmware:build`。板上烧录、语音连接或 GPIO 行为仍需实机验证。
+静态检查通过后，`Firmware build` 任务使用乐鑫官方
+[install-esp-idf-action](https://github.com/espressif/install-esp-idf-action)
+通过 EIM v0.20.1 自动安装 ESP-IDF v6.0.1 和工具链，再运行同一构建脚本获取
+默认小智版本并编译固件。Action 固定到完整 commit SHA，环境安装与构建总超时为 45 分钟。
+
+CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置
 
