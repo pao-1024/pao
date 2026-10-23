@@ -19,21 +19,21 @@ export default function PaoWiring(): ReactElement {
     >
       <schematicsheet
         name="Wiring"
-        displayName="PAO - ESP32-S3 module wiring (reference)"
+        displayName="PAO ESP32-S3 模块接线图（参考）"
         sheetSize="A4"
       >
         <schematictext
-          text="PAO / ESP32-S3 module wiring"
+          text="PAO / ESP32-S3 模块接线图"
           schX={2.5}
           schY={9.2}
           fontSize={0.35}
         />
-        <schematicsection name="Power" displayName="01 POWER / 1S - 5V" />
-        <schematicsection name="Controller" displayName="02 CONTROLLER" />
-        <schematicsection name="Microphone" displayName="03 MICROPHONE" />
-        <schematicsection name="AudioOutput" displayName="04 SPEAKER" />
-        <schematicsection name="Display" displayName="05 DISPLAY" />
-        <schematicsection name="Motors" displayName="06 MOTORS / MX1508" />
+        <schematicsection name="Power" displayName="01 供电 / 1S → 5V" />
+        <schematicsection name="Controller" displayName="02 ESP32-S3 主控" />
+        <schematicsection name="Microphone" displayName="03 麦克风" />
+        <schematicsection name="AudioOutput" displayName="04 功放与扬声器" />
+        <schematicsection name="Display" displayName="05 OLED 屏幕" />
+        <schematicsection name="Motors" displayName="06 MX1508 电机驱动" />
 
         <battery
           doNotPlace
@@ -203,7 +203,7 @@ export default function PaoWiring(): ReactElement {
         <pinheader
           doNotPlace
           name="MOTOR_RIGHT"
-          displayName="Right wheel motor"
+          displayName="右侧电机"
           pinCount={2}
           pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
           schFacingDirection="left"
@@ -214,7 +214,7 @@ export default function PaoWiring(): ReactElement {
         <pinheader
           doNotPlace
           name="MOTOR_LEFT"
-          displayName="Left wheel motor"
+          displayName="左侧电机"
           pinCount={2}
           pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
           schFacingDirection="left"
