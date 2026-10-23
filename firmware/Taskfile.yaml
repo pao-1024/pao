@@ -6,6 +6,6 @@ env:
 
 tasks:
   build:
-    desc: 准备 ESP-IDF 和小智，构建最小语音固件（REF=分支/Tag/commit）
+    desc: 使用已配置的 ESP-IDF 或 EIM，准备小智并构建最小语音固件（REF=分支/Tag/commit）
     cmds:
       - bash scripts/build.sh

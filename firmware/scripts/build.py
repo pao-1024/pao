@@ -76,7 +76,7 @@ def main():
 
     idf_path = os.environ.get("IDF_PATH")
     if not idf_path or not (Path(idf_path) / "tools" / "idf.py").is_file():
-        raise RuntimeError("ESP-IDF is not active. Source ESP-IDF export.sh, then retry (see firmware/README.md).")
+        raise RuntimeError("ESP-IDF is not active. Install/select ESP-IDF with EIM, then run task firmware:build (see firmware/README.md).")
     build = ROOT / "tmp" / "build" / revision
     build.mkdir(parents=True, exist_ok=True)
     defaults = ";".join(str(path) for path in (
