@@ -31,12 +31,7 @@ export function MotorDrive() {
         schX={10.8}
         schY={-5.8}
       />
-      <Motor
-        name="MOTOR_LEFT"
-        displayName="左侧电机"
-        schX={15.2}
-        schY={-6.2}
-      />
+      <Motor name="MOTOR_LEFT" displayName="左侧电机" schX={15.2} schY={-6.2} />
     </>
   )
 }

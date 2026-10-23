@@ -10,20 +10,28 @@
   "scripts": {
     "dev": "tsci dev index.tsx",
     "typecheck": "tsc",
-    "check": "pnpm build && tsci check source index.tsx && tsci check pin_specification index.tsx && tsci check netlist index.tsx && tsci check schematic-placement dist/index/circuit.json && tsci check placement dist/index/circuit.json",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build && tsci check source index.tsx && tsci check pin_specification index.tsx && tsci check netlist index.tsx && tsci check schematic-placement dist/index/circuit.json && tsci check placement dist/index/circuit.json",
     "build": "tsci build index.tsx --schematic-svgs",
     "export": "tsci export index.tsx -f schematic-svg -o schematic.svg",
-    "test": "pnpm typecheck && pnpm check && node --test test/connectivity.test.mjs"
+    "test": "pnpm check && node --test test/connectivity.test.mjs && cmp dist/index/schematic.svg schematic.svg",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier . --check",
+    "fix": "eslint . --fix && prettier . --write"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@tscircuit/header-modules": "https://codeload.github.com/tscircuit/header-modules/tar.gz/1245074558d3bfcdbcef0d0e4b5a4f59520785a9",
     "@tscircuit/props": "0.0.709",
     "@types/react": "19.3.0",
     "circuit-json": "0.0.534",
     "circuit-json-to-connectivity-map": "0.0.33",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
     "react": "19.3.1",
     "tscircuit": "0.0.3008",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {

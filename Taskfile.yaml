@@ -1,6 +1,9 @@
 version: '3'
 
 includes:
+  hardware:
+    taskfile: ./hardware/Taskfile.yaml
+    dir: ./hardware
   firmware:
     taskfile: ./firmware/Taskfile.yaml
     dir: ./firmware

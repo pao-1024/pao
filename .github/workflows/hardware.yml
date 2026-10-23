@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - "hardware/**"
+      - "Taskfile.yaml"
       - ".github/workflows/hardware.yml"
   push:
     branches: [main]
     paths:
       - "hardware/**"
+      - "Taskfile.yaml"
       - ".github/workflows/hardware.yml"
 
 permissions:
@@ -35,4 +37,3 @@ jobs:
           bun-version: "1.3.10"
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
-      - run: cmp dist/index/schematic.svg schematic.svg

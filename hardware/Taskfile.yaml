@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  setup:
+    desc: 按锁文件安装硬件项目依赖
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  fix:
+    desc: 自动修复代码并统一格式
+    cmds:
+      - pnpm fix
+
+  check:
+    desc: 检查格式、代码、类型及电路
+    cmds:
+      - pnpm check
+
+  test:
+    desc: 完整检查并验证接线与图纸
+    cmds:
+      - pnpm test

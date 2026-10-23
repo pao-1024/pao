@@ -47,7 +47,8 @@ function assertNetwork(expected) {
     ...new Set(
       ports
         .filter(
-          (item) => connectivity.getNetConnectedToId(item.source_port_id) === key,
+          (item) =>
+            connectivity.getNetConnectedToId(item.source_port_id) === key,
         )
         .map(portName),
     ),
@@ -161,10 +162,7 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
 test("电池通过充电保护板和开关供电，保护前负极不并入系统地", () => {
   assertNetwork(["BATTERY.pin1", "CHARGER_1S.B_PLUS"])
   assertNetwork(["BATTERY.pin2", "CHARGER_1S.B_MINUS"])
-  assertNetwork([
-    "CHARGER_1S.OUT_PLUS",
-    "POWER_SWITCH.COM",
-  ])
+  assertNetwork(["CHARGER_1S.OUT_PLUS", "POWER_SWITCH.COM"])
   assertNetwork(["POWER_SWITCH.ON", "BOOST_5V.VIN_PLUS"])
 })
 

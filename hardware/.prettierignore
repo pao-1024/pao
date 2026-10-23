@@ -1,0 +1,6 @@
+dist/
+checks/
+.tscircuit/
+vendor/
+schematic.svg
+pnpm-lock.yaml
