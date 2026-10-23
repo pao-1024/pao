@@ -80,7 +80,8 @@ python3 firmware/scripts/build.py prepare --ref main
 
 ## CI
 
-GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR、推送到 `main` 和手动触发时运行。
+GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
+仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao-minimal/`
 进行 C/C++ 静态分析。
