@@ -30,6 +30,9 @@ def main():
     parser.add_argument("action", nargs="?", choices=("prepare", "configure", "build"), default="build")
     parser.add_argument("--ref", default=os.environ.get("PAO_BASE_REF") or config["ref"], help="upstream branch, tag or commit (default: firmware/base.json)")
     args = parser.parse_args()
+    profile = os.environ.get("PAO_PROFILE", "hardware")
+    if profile not in ("hardware", "qemu"):
+        parser.error("PAO_PROFILE must be hardware or qemu")
     if not args.ref.strip() or args.ref.startswith("-"):
         parser.error("--ref must be a non-empty branch, tag or commit")
 
@@ -77,13 +80,16 @@ def main():
     idf_path = os.environ.get("IDF_PATH")
     if not idf_path or not (Path(idf_path) / "tools" / "idf.py").is_file():
         raise RuntimeError("ESP-IDF is not active. Source ESP-IDF export.sh, then retry (see firmware/README.md).")
-    build = ROOT / "tmp" / "build" / revision
+    build = ROOT / "tmp" / "build" / (revision + ("-qemu" if profile == "qemu" else ""))
     build.mkdir(parents=True, exist_ok=True)
-    defaults = ";".join(str(path) for path in (
+    default_paths = [
         SOURCE / "sdkconfig.defaults",
         SOURCE / f"sdkconfig.defaults.{config['target']}",
         FIRMWARE / "sdkconfig.defaults",
-    ))
+    ]
+    if profile == "qemu":
+        default_paths.append(FIRMWARE / "simulation" / "sdkconfig.defaults")
+    defaults = ";".join(str(path) for path in default_paths)
     command = [sys.executable, Path(idf_path) / "tools" / "idf.py",
                "-C", SOURCE, "-B", build,
                f"-DIDF_TARGET={config['target']}",

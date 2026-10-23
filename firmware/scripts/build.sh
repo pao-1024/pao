@@ -23,4 +23,9 @@ set +u
 # shellcheck source=/dev/null
 source "$IDF_PATH/export.sh"
 set -u
+if [[ "${PAO_BUILD_ACTION:-build}" == "probe" ]]; then
+    python "$IDF_PATH/tools/idf.py" -C firmware/simulation/probe -B "$PWD/tmp/probe-build" \
+        -DIDF_TARGET=esp32s3 -DSDKCONFIG="$PWD/tmp/probe-build/sdkconfig" build
+    exit
+fi
 python firmware/scripts/build.py "${PAO_BUILD_ACTION:-build}"

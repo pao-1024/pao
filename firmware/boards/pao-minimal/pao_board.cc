@@ -1,3 +1,7 @@
+#include "sdkconfig.h"
+#ifdef CONFIG_PAO_QEMU
+#include "../pao-qemu/pao_qemu.cc"
+#else
 #include "wifi_board.h"
 #include "application.h"
 #include "button.h"
@@ -38,3 +42,4 @@ public:
 };
 
 DECLARE_BOARD(PaoBoard);
+#endif

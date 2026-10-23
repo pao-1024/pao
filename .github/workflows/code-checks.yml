@@ -35,11 +35,11 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
         run: |
           shellcheck firmware/scripts/build.sh
-          python3 -m py_compile firmware/scripts/build.py
+          python3 -m py_compile firmware/scripts/build.py firmware/simulation/qemu.py firmware/simulation/build-qemu.py
 
       - name: Check C and C++ code
         run: |
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
             -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
-            firmware/components/pao firmware/boards/pao-minimal
+            firmware/components/pao firmware/boards firmware/simulation/probe/main
 
