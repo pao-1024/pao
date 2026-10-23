@@ -1,5 +1,4 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 
 // MX1508 双路电机驱动模块的外部端子，不展开内部电路。
 const pins = {
@@ -15,7 +14,7 @@ const pins = {
   pin10: "LEFT_MINUS",
 } as const
 
-export function Mx1508Module(props: ChipProps<typeof pins>): ReactElement {
+export function Mx1508Module(props: ChipProps<typeof pins>) {
   return (
     <chip
       schWidth={2.5}

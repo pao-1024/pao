@@ -1,5 +1,4 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 
 // INMP441 麦克风模块的外部接口，不展开内部电路。
 const pins = {
@@ -11,7 +10,7 @@ const pins = {
   pin6: "SD",
 } as const
 
-export function Inmp441Module(props: ChipProps<typeof pins>): ReactElement {
+export function Inmp441Module(props: ChipProps<typeof pins>) {
   return (
     <chip
       manufacturerPartNumber="INMP441"

@@ -39,7 +39,7 @@
 
 按项目锁定的 [tscircuit skill](https://github.com/tscircuit/skill/blob/ccfd1afbefa0d1fb0f995795e805030ee5e96de1/SKILL.md) 组织为一张图纸，使用 `schematicsection` 划分供电、主控、麦克风、扬声器输出、屏幕和电机六个功能区。各模块通过 `schSectionName` 归属分区，坐标显式设置；分区不会自动排版。
 
-`index.tsx` 负责组合组件、命名网络和布局。`components/` 只保留必要的模块接口与适配；`vendor/` 保存复用的原始定义和许可。KiCad 符号通过 tscircuit 原生导入，没有自定义文件解析器或绘图引擎。
+`index.tsx` 负责组合组件、命名网络和布局。`components/` 只保留必要的模块接口与适配；`vendor/` 保存复用的原始定义和许可。KiCad 符号通过 tscircuit 原生导入，测试复用上游连通性工具。`tscircuit.config.ts` 统一关闭 PCB 与元件选型引擎，供构建、导出和开发预览使用。
 
 ## 信号连接
 
@@ -97,11 +97,11 @@ npm run dev
 | 命令 | 用途 |
 | --- | --- |
 | `npm run typecheck` | 严格检查 TSX 模块属性 |
-| `npm run check` | 依次检查源码、引脚、网络、原理图布局及放置；本项目关闭 PCB |
+| `npm run check` | 构建后检查源码、引脚、网络、原理图布局及放置 |
 | `npm run build` | 输出 `dist/index/circuit.json` 和 `dist/index/schematic.svg` |
 | `npm run export` | 更新已提交的 `schematic.svg` |
 | `npm test` | 类型检查、上述检查、构建，并验证编译产物的 GPIO、电源、保护地及输出连接 |
 
-修改接线后执行 `npm test` 和 `npm run export`，把源码与 SVG 一起提交。检查先验证源码、引脚和网络，再对关闭 PCB 的构建产物检查原理图与放置。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
+修改接线后执行 `npm test` 和 `npm run export`，把源码与 SVG 一起提交。各项检查复用同一次构建产物，CI 直接比较构建 SVG 与已提交图纸。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
 
 `tscircuit-jsx.d.ts` 直接复用上游 `@tscircuit/props` 的属性类型，避免聚合类型入口连带检查路由器包的第三方 TypeScript 源码。

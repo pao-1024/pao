@@ -1,4 +1,3 @@
-import type { ReactElement } from "react"
 import { Boost5VModule } from "./components/Boost5V"
 import { Esp32S3DevKitC1 } from "./components/Esp32S3"
 import { Inmp441Module } from "./components/Inmp441"
@@ -9,7 +8,7 @@ import { Tp4056Protection } from "./components/Tp4056"
 import { OledModule } from "./components/Oled"
 
 // 仅描述模块外部接线；引脚定义在组件中维护，排针位置见 README。
-export default function PaoWiring(): ReactElement {
+export default function PaoWiring() {
   return (
     <board
       routingDisabled

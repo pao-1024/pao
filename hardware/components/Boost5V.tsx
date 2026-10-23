@@ -1,5 +1,4 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 
 // 从 vendor/mt3608/hw-045.lib 转换，保留上游针脚编号；修正 pin4 的 VOUT- 笔误。
 // 仅复用 MT3608 板级四端子接口作为 5V 升压参考，实际模块型号尚未确认。
@@ -10,7 +9,7 @@ const pins = {
   pin4: "VOUT_PLUS",
 } as const
 
-export function Boost5VModule(props: ChipProps<typeof pins>): ReactElement {
+export function Boost5VModule(props: ChipProps<typeof pins>) {
   return (
     <chip
       {...props}

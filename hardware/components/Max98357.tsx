@@ -1,5 +1,4 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 
 // MAX98357A 功放模块的外部接口，不展开内部电路。
 const pins = {
@@ -14,7 +13,7 @@ const pins = {
   pin9: "OUT_MINUS",
 } as const
 
-export function Max98357Module(props: ChipProps<typeof pins>): ReactElement {
+export function Max98357Module(props: ChipProps<typeof pins>) {
   return (
     <chip
       manufacturerPartNumber="MAX98357A"

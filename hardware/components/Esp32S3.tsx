@@ -1,8 +1,7 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 import officialSymbol from "../vendor/espressif/ESP32-S3-DevKitC.kicad_sym"
 
-// 与内置模块采用一致的线宽，保持官方符号的坐标和文字。
+// 转换器的缺省线宽会使边框和引脚过粗，统一为内置元件的线宽。
 const symbol = officialSymbol.map((element) =>
   element.type === "schematic_line"
     ? { ...element, stroke_width: 0.02 }
@@ -16,6 +15,6 @@ const pinLabels = Object.fromEntries(
     .map(({ pin_number, name }) => [`pin${pin_number}`, name.split("/")[0]]),
 )
 
-export function Esp32S3DevKitC1(props: ChipProps): ReactElement {
+export function Esp32S3DevKitC1(props: ChipProps) {
   return <chip {...props} symbol={symbol} pinLabels={pinLabels} />
 }

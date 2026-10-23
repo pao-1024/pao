@@ -4,11 +4,10 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "jsxImportSource": "react",
     "types": ["react"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["index.tsx", "components/**/*.tsx", "*.d.ts"]
+  "include": ["index.tsx", "components/**/*.tsx", "*.ts"]
 }

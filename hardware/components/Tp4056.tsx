@@ -1,5 +1,4 @@
 import type { ChipProps } from "@tscircuit/props"
-import type { ReactElement } from "react"
 
 // 从 vendor/tp4056/TP4056.fzpz 的 connector/description 转换；保留 connector0..5 的顺序。
 const pins = {
@@ -11,7 +10,7 @@ const pins = {
   pin6: "OUT_MINUS",
 } as const
 
-export function Tp4056Protection(props: ChipProps<typeof pins>): ReactElement {
+export function Tp4056Protection(props: ChipProps<typeof pins>) {
   return (
     <chip
       schWidth={2.2}

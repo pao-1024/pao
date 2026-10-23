@@ -32,5 +32,4 @@ jobs:
           bun-version: "1.3.10"
       - run: npm ci --no-audit --no-fund
       - run: npm test
-      - run: npm run export
-      - run: git diff --exit-code -- schematic.svg
+      - run: cmp dist/index/schematic.svg schematic.svg

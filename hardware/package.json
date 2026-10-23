@@ -9,10 +9,10 @@
   },
   "scripts": {
     "dev": "tsci dev index.tsx",
-    "typecheck": "tsc --noEmit",
-    "check": "tsci check source index.tsx && tsci check pin_specification index.tsx && tsci check netlist index.tsx && npm run build && node scripts/check-layout.mjs",
-    "build": "tsci build index.tsx --disable-pcb --disable-parts-engine --preview-images --schematic-svgs",
-    "export": "tsci export index.tsx -f schematic-svg -o schematic.svg --disable-parts-engine",
+    "typecheck": "tsc",
+    "check": "npm run build && tsci check source index.tsx && tsci check pin_specification index.tsx && tsci check netlist index.tsx && node scripts/check-layout.mjs",
+    "build": "tsci build index.tsx --schematic-svgs",
+    "export": "tsci export index.tsx -f schematic-svg -o schematic.svg",
     "test": "npm run typecheck && npm run check && node --test test/connectivity.test.mjs"
   },
   "devDependencies": {
@@ -20,6 +20,7 @@
     "@tscircuit/props": "0.0.709",
     "@types/react": "19.3.0",
     "circuit-json": "0.0.534",
+    "circuit-json-to-connectivity-map": "0.0.33",
     "kicadts": "0.0.53",
     "react": "19.3.1",
     "tscircuit": "0.0.3008",
