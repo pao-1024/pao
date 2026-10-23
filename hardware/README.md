@@ -39,7 +39,9 @@
 
 按项目锁定的 [tscircuit skill](https://github.com/tscircuit/skill/blob/ccfd1afbefa0d1fb0f995795e805030ee5e96de1/SKILL.md) 组织为一张图纸，使用 `schematicsection` 划分供电、主控、麦克风、扬声器输出、屏幕和电机六个功能区。各模块通过 `schSectionName` 归属分区，坐标显式设置；分区不会自动排版。
 
-`index.tsx` 负责组合组件、命名网络和布局。`components/` 只保留必要的模块接口与适配；`vendor/` 保存复用的原始定义和许可。KiCad 符号通过 tscircuit 原生导入，测试复用上游连通性工具。`tscircuit.config.ts` 统一关闭 PCB 与元件选型引擎，供构建、导出和开发预览使用。
+`index.tsx` 以 ESP32-S3 为中心，集中分配 GPIO 并组合各功能区。`sections/` 中的 `PowerSupply`、`Microphone`、`AudioOutput`、`Display`、`MotorDrive` 各自负责区内供电、固定接线、模式配置、负载和布局，通过同名网络与主控连接。调整 GPIO 只需修改入口中的对应映射。
+
+`components/` 保存器件接口及必要适配，包括独立的 `PowerSwitch` 和共用的 `Motor`；`vendor/` 保存复用的原始定义和许可。功能区使用 React Fragment 组织代码，保留原有电路层级和选择器作用域。KiCad 符号由 tscircuit 原生导入，测试复用上游连通性工具。`tscircuit.config.ts` 统一关闭 PCB 与元件选型引擎，供构建、导出和开发预览使用。
 
 ## 信号连接
 
