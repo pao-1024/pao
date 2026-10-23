@@ -12,4 +12,4 @@ tasks:
       - sh: node -e "JSON.parse(require('node:fs').readFileSync('skills-lock.json', 'utf8'))"
         msg: 请确认已安装 Node.js，且 skills-lock.json 存在并且是有效 JSON
     cmds:
-      - pnpm dlx skills@1.7.4 experimental_install
+      - npx --yes skills@1.7.4 experimental_install
