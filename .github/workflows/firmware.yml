@@ -1,4 +1,4 @@
-name: Code checks
+name: Firmware
 
 on:
   push:
