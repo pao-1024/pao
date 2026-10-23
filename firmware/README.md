@@ -84,6 +84,10 @@ Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本
 通过 EIM v0.20.1 自动安装 ESP-IDF v6.0.1 和工具链，再运行同一构建脚本获取
 默认小智版本并编译固件。Action 固定到完整 commit SHA，环境安装与构建总超时为 45 分钟。
 
+SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多次运行间复用。
+缓存按 Ubuntu 版本、CPU 架构、Python、ESP-IDF 和 EIM 版本区分；命中时跳过 SDK 安装，
+安装 runner 所需系统依赖并重新激活环境。未命中时自动安装，构建成功后保存缓存。
+
 CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置

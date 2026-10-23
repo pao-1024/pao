@@ -48,17 +48,47 @@ jobs:
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      PAO_IDF_VERSION: v6.0.1
+      PAO_EIM_VERSION: v0.20.1
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Identify Python version
+        id: python
+        run: python3 -c "import platform; print('version=' + platform.python_version())" >> "$GITHUB_OUTPUT"
+
+      - name: Cache ESP-IDF environment
+        id: idf-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /tmp/esp
+            ~/.espressif/tools
+          key: esp-idf-v1-ubuntu-24.04-${{ runner.arch }}-python-${{ steps.python.outputs.version }}-${{ env.PAO_IDF_VERSION }}-${{ env.PAO_EIM_VERSION }}
+
       - name: Install ESP-IDF with EIM
+        if: steps.idf-cache.outputs.cache-hit != 'true'
         uses: espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae # v1
         with:
-          version: v6.0.1
-          eim-version: v0.20.1
+          version: ${{ env.PAO_IDF_VERSION }}
+          eim-version: ${{ env.PAO_EIM_VERSION }}
+          path: /tmp/esp/idf
+          tools-path: /tmp/esp
+
+      - name: Install system dependencies for cached ESP-IDF
+        if: steps.idf-cache.outputs.cache-hit == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            git cmake ninja-build wget flex bison gperf ccache libffi-dev \
+            libssl-dev dfu-util libusb-1.0-0 python3 python3-pip \
+            python3-setuptools python3-wheel xz-utils unzip python3-venv
 
       - name: Build firmware
-        run: bash firmware/scripts/build.sh
+        run: |
+          source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
+          bash firmware/scripts/build.sh
