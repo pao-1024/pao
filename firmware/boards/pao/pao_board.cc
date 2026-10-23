@@ -1,14 +1,19 @@
 #include "wifi_board.h"
 #include "application.h"
 #include "button.h"
+#include "chassis.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
 #include "led/single_led.h"
+#include "motor.h"
 #include "pao.h"
 
 class PaoBoard : public WifiBoard {
 private:
     Button boot_button_{BOOT_BUTTON_GPIO};
+    Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
+    Motor left_motor_{MOTOR_GPIO_IN3, MOTOR_GPIO_IN4};
+    Chassis chassis_{left_motor_, right_motor_};
 
 public:
     PaoBoard() {

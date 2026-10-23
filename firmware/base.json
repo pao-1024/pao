@@ -2,5 +2,5 @@
   "repository": "https://github.com/78/xiaozhi-esp32.git",
   "ref": "b3ff05c030923ebf44f494ea1cba54752d638803",
   "target": "esp32s3",
-  "board_name": "pao-minimal"
+  "board_name": "pao"
 }
