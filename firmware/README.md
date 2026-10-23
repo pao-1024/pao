@@ -44,10 +44,11 @@ task firmware:build
 构建时自动准备小智源码、接入本地板型和外部组件、生成 IDE 索引并编译固件。
 首次需要联网下载小智源码和组件，耗时取决于网络。
 
-本地已安装 `ccache` 时，可在仓库根目录启用编译缓存，缓存保存在 `tmp/ccache/`：
+构建脚本默认启用 `ccache`，环境中需要已安装该工具。缓存默认保存在 `tmp/ccache/`，
+可通过 `CCACHE_DIR` 指定其他目录，也可以临时关闭缓存：
 
 ```sh
-IDF_CCACHE_ENABLE=1 CCACHE_DIR="$PWD/tmp/ccache" task firmware:build
+IDF_CCACHE_ENABLE=0 task firmware:build
 ```
 
 ## 准备、配置与编译

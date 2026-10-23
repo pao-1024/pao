@@ -20,7 +20,7 @@ tasks:
     cmds:
       - task: sim:install
       - task: sim:build
-      - task: qemu:install
+      - task: qemu:probe
       - task: qemu:build
       - python3 simulation/full-flow.py {{.CLI_ARGS}}
   qemu:install:

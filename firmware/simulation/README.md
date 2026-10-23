@@ -84,7 +84,8 @@ task firmware:sim:full -- \
   --device-uuid '<已激活测试设备的 UUID>'
 ```
 
-命令安装固定版本的乐鑫 esp-emu、构建两个仿真板型并按顺序验证：
+命令安装固定版本的乐鑫 esp-emu，运行 QEMU 外设/浮点/重启探针，
+构建两个仿真板型并按顺序验证：
 
 1. 新建不含 SSID 的 NVS，在 esp-emu 启动固件自己的 SoftAP。
 2. 虚拟客户端加入热点，经 DHCP 获取地址，访问真实配置页并扫描虚拟 AP。
