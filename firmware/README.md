@@ -143,7 +143,8 @@ Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao/`
 进行 C/C++ 静态分析。
 
-静态检查通过后，`Firmware build` 任务使用乐鑫官方
+PR 仅运行静态检查。推送到 `main` 或在 `main` 上手动触发时，静态检查通过后，
+`Firmware build` 任务使用乐鑫官方
 [install-esp-idf-action](https://github.com/espressif/install-esp-idf-action)
 通过 EIM v0.20.1 自动安装 ESP-IDF v6.0.1 和工具链，再运行同一构建脚本获取
 默认小智版本并编译固件。Action 固定到完整 commit SHA，环境安装与构建总超时为 45 分钟。
@@ -156,7 +157,10 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 每次运行可恢复同一系统、架构和 IDF 版本的最近缓存，由 `ccache` 校验编译器、源码、
 头文件和编译参数后复用结果；构建日志会输出本轮命中率。
 
-CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实机验证。
+编译成功后，在该次工作流运行页面的 **Artifacts** 中下载 `pao-firmware-<commit SHA>`。
+产物包含构建目录中的 `.bin`、`.elf`、`flash_args`、`flasher_args.json`、`sdkconfig`，
+以及记录小智源码版本的 `base-revision.json`；保留目录结构，保存期限遵循仓库配置。
+板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置
 
