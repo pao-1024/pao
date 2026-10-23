@@ -34,6 +34,9 @@ static void floating_point(void) {
     __asm__ volatile ("maddn.s %0, %1, %2" : "+f"(sum) : "f"(half_ulp), "f"(one));
     __asm__ volatile ("rur.fsr %0\n wur.fcr %1" : "=a"(after) : "a"(fcr));
     assert(sum == 1.0f && after == fsr);
+    volatile float numerator = 16.0f, denominator = 3.0f;
+    assert(fabsf(numerator / denominator - 5.3333335f) < 0.000001f);
+    assert(sqrtf(numerator) == 4.0f);
     ESP_LOGI("PROBE", "FPU_WAKE_PRIMITIVES_PASS");
 }
 
