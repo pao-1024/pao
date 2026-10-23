@@ -55,11 +55,14 @@ python3 scripts/build.py prepare --ref main
 
 ## CI
 
-GitHub Actions 的 `Firmware` 工作流在 PR、推送到 `main` 和手动触发时运行。
+GitHub Actions 的 `Code checks` 工作流在 PR、推送到 `main` 和手动触发时运行。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
-再执行同一个 `task build` 检查 C/C++ 固件能否编译通过，默认 base 版本
-仍由 `firmware/base.json` 决定。不上传固件或其他构建产物。
-这些检查不包含板上烧录、语音连接或 GPIO 验证。
+并使用 Cppcheck 对本仓库的 `components/pao/` 和 `boards/pao-minimal/`
+进行 C/C++ 静态分析。
+
+CI 不安装 ESP-IDF，不获取小智源码，不执行固件构建，也不上传产物。
+没有 SDK 头文件和完整编译配置的静态检查不能证明固件可编译；需要时在本地运行
+`task build`。板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置
 

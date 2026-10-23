@@ -1,4 +1,4 @@
-name: Firmware
+name: Code checks
 
 on:
   push:
@@ -14,21 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build pao-minimal
+  check:
+    name: Static checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Install build dependencies
+      - name: Install check tools
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            cmake ninja-build python3-venv flex bison gperf libusb-1.0-0 shellcheck
+            shellcheck cppcheck
 
       - name: Check build scripts
         env:
@@ -37,12 +37,9 @@ jobs:
           shellcheck scripts/build.sh
           python3 -m py_compile scripts/build.py
 
-      - name: Install Task
-        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
-        with:
-          version: 3.54.0
-          repo-token: ${{ github.token }}
-
-      - name: Build firmware
-        run: task build
+      - name: Check C and C++ code
+        run: |
+          cppcheck --enable=warning,performance,portability --error-exitcode=1 \
+            -Icomponents/pao/include -Iboards/pao-minimal \
+            components/pao boards/pao-minimal
 
