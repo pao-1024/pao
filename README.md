@@ -24,6 +24,12 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
+## 开发
+
+固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
+或进入 `firmware/` 后运行 `task build`；首次会自动准备 ESP-IDF 和小智源码。
+上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
+
 ## 项目 Skill
 
 先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本（含 npm/npx），然后在仓库目录执行：

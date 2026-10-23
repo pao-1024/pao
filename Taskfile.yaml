@@ -1,5 +1,10 @@
 version: '3'
 
+includes:
+  firmware:
+    taskfile: ./firmware/Taskfile.yaml
+    dir: ./firmware
+
 tasks:
   skills:install:
     desc: 安装清单中的全部项目 skill
