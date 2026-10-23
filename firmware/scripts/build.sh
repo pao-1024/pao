@@ -5,6 +5,8 @@ cd "$(dirname "$0")/../.."
 mkdir -p tmp/temp
 export TMPDIR="$PWD/tmp/temp"
 export PIP_CACHE_DIR="$PWD/tmp/pip-cache"
+export IDF_CCACHE_ENABLE="${IDF_CCACHE_ENABLE:-1}"
+export CCACHE_DIR="${CCACHE_DIR:-$PWD/tmp/ccache}"
 export PAO_BUILD_ACTION="${PAO_BUILD_ACTION:-build}"
 
 if [[ -n "${IDF_PATH:-}" ]] && command -v idf.py >/dev/null 2>&1; then
