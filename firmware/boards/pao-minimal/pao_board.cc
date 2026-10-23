@@ -1,5 +1,7 @@
 #include "sdkconfig.h"
-#ifdef CONFIG_PAO_QEMU
+#ifdef CONFIG_PAO_ESP_EMU
+#include "../pao-esp-emu/pao_esp_emu.cc"
+#elif CONFIG_PAO_QEMU
 #include "../pao-qemu/pao_qemu.cc"
 #else
 #include "wifi_board.h"

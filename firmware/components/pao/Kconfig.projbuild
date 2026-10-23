@@ -2,3 +2,7 @@ config PAO_QEMU
     bool "PAO QEMU voice and display board"
     default n
     select ETH_USE_OPENETH
+
+config PAO_ESP_EMU
+    bool "PAO WiFi provisioning simulation"
+    default n

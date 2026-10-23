@@ -1,4 +1,4 @@
-# QEMU 语音板验证
+# 固件仿真验证
 
 使用固定版本的 [PAO QEMU fork](https://github.com/pao-1024/qemu)，运行 ESP32-S3
 的 I2S/GDMA、SSD1306 OLED、GPIO0 BOOT 按键和 GPIO48 WS2812。
@@ -35,7 +35,8 @@ task firmware:qemu:probe
 
 命令构建固定版本的 QEMU 和 ESP-IDF 探针，验证 NVS 写入后重新初始化读回、
 I2C 地址 NACK、SSD1306 全屏像素、WS2812 RGB、I2S 输入及输出采样内容、
-按键按下和松开，并在 machine reset 后再运行一轮。失败返回非零状态。
+按键按下和松开、WakeNet 使用的浮点指令，并在 machine reset 后再运行一轮。
+失败返回非零状态。
 
 结果在 `tmp/qemu-probe/result.json`，串口日志为 `uart.log`，屏幕为 `oled.pbm`，
 扬声器音频为 `speaker.wav`。这项验证不连接云服务，也不使用真实设备身份。
@@ -69,14 +70,64 @@ task firmware:qemu:run -- \
 已有构建时可直接运行 `python3 firmware/simulation/qemu.py`，用 `--build` 和 `--qemu`
 指定本地目录或可执行文件。脚本共用一个 QMP socket，同一 worktree 中不要并行运行。
 
+## 唤醒词与配网完整流程
+
+在 `tmp/device/wake-flow.pcm` 准备 16 kHz 单声道 s16le 音频：先一秒静音、
+“你好小智”、一秒静音，再说“你好，请用一句话介绍你自己。”，最后三秒静音。
+脚本在检测到唤醒后暂停输入文件，等欢迎语播放结束再继续输入提问，
+不需要预测云端回复耗时。可用 `--expected-asr` 修改提问应包含的文本。
+
+```sh
+task firmware:sim:full -- \
+  --pcm-input "$PWD/tmp/device/wake-flow.pcm" \
+  --efuse "$PWD/tmp/device/efuse.bin" \
+  --device-uuid '<已激活测试设备的 UUID>'
+```
+
+命令安装固定版本的乐鑫 esp-emu、构建两个仿真板型并按顺序验证：
+
+1. 新建不含 SSID 的 NVS，在 esp-emu 启动固件自己的 SoftAP。
+2. 虚拟客户端加入热点，经 DHCP 获取地址，访问真实配置页并扫描虚拟 AP。
+3. 拒绝超长 SSID，提交正确凭据，检查保存列表、取得 IP 和灵矽连接。
+4. 保存 Flash 后重启，检查自动重连；再使用错误 AP 密码，检查连接失败且未取得 IP。
+5. 从保存的 Flash 提取 NVS，将同一设备身份和配网结果交给 QEMU。
+6. 经真实 I2S/GDMA 注入语音，检查 WakeNet 唤醒、指定提问的 ASR、助手回复、
+   非静音 TTS 和返回 listening；读取 OLED 画面。
+
+默认总超时 240 秒。`--device-uuid` 默认随机生成；真实服务要求先激活该身份，
+自动验证建议使用专用已激活设备。输入 eFuse 不会被改写；测试产生的 Flash/NVS
+含设备配置，只保存在忽略的 `tmp/` 下。重复运行会重新开始配网并覆盖上次结果。
+
+总结果为 `tmp/full-flow/result.json`，配网、重启和密码错误日志在同一目录，
+语音结果及 `reply.wav`、`oled.pbm` 在 `tmp/qemu-wake/`。
+已有构建时可直接执行 `python3 firmware/simulation/full-flow.py` 并传入相同参数。
+单独验证唤醒和对话可运行 `task firmware:qemu:wake -- ...`。
+
+负例验证使用不含唤醒词的普通语音；文件结束后补静音，运行 12 秒输入并断言没有唤醒：
+
+```sh
+python3 firmware/simulation/qemu.py wake-negative \
+  --pcm-input "$PWD/tmp/device/input.pcm" \
+  --efuse "$PWD/tmp/device/efuse.bin" --nvs "$PWD/tmp/device/nvs.bin"
+```
+
+这里使用两个后端，且使用各自板型固件。QEMU 没有 S3 Wi-Fi 模型，语音阶段通过
+OpenETH 联网；esp-emu v0.50.0 的 `recip0.s`/`rsqrt0.s` 运算不能满足当前 WakeNet，
+且没有 I2S 麦克风输入接口，因此其配网板型禁用唤醒并使用静音 Codec。
+这套入口覆盖功能流程，不代表单个模拟器已经运行所有硬件。乐鑫模拟器依赖
+[官方 v0.50.0 二进制发行包](https://github.com/espressif/esp-emulator/releases/tag/v0.50.0)，
+当前安装脚本支持 macOS ARM64、Linux ARM64/x86_64，并校验发行包 SHA-256。
+
 ## 仿真范围
 
 这是当前语音板的功能模型，不等同于完整芯片或电气仿真。I2S 固定为本板的单声道
 32 位槽格式，输入文件对应 16 kHz 麦克风，输出对应 24 kHz 功放；OLED 读回显示 RAM，
-未模拟对比度和模拟亮度。没有验证 Wi-Fi 配网、射频、实际声音质量、声学回声消除、
-唤醒词、任意 GPIO 矩阵路由或其他 I2C/RMT 器件。仿真配置使用软件 AES/SHA 实现。
+未模拟对比度和模拟亮度。Wi-Fi 配网和凭据持久化使用乐鑫模拟器验证；
+射频、实际声音质量、声学回声消除、任意 GPIO 矩阵路由或其他 I2C/RMT 器件未验证。
+WakeNet 使用“你好小智”模型；QEMU 浮点初始估计值支持功能推理，未做到芯片查表结果逐位一致。
+仿真配置使用软件 AES/SHA 实现。
 ADC 只提供启动所需的接地校准行为。
 PSRAM tuning 会输出回退警告，当前验证不覆盖真实板子的时序校准。QEMU VM 快照和迁移不受支持。
 
-QEMU 源码版本由 `qemu.json` 固定；升级后应重新运行外设探针和语音会话。
+QEMU 源码版本由 `qemu.json` 固定；升级后应重新运行外设探针、完整流程和唤醒负例。
 CI 只做代码静态检查，不编译、运行仿真或上传固件。

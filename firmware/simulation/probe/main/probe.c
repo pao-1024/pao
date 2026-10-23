@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
@@ -13,6 +14,28 @@
 #include "freertos/task.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+
+static void floating_point(void) {
+    float input = 4.0f, reciprocal, root;
+    __asm__ volatile ("recip0.s %0, %1" : "=f"(reciprocal) : "f"(input));
+    __asm__ volatile ("rsqrt0.s %0, %1" : "=f"(root) : "f"(input));
+    assert(reciprocal == 0.25f && root == 0.5f);
+    input = -0.0f;
+    __asm__ volatile ("recip0.s %0, %1" : "=f"(reciprocal) : "f"(input));
+    assert(isinf(reciprocal) && signbit(reciprocal));
+    input = -1.0f;
+    __asm__ volatile ("rsqrt0.s %0, %1" : "=f"(root) : "f"(input));
+    assert(isnan(root));
+    float sum = 1.0f, half_ulp = 0x1p-24f, one = 1.0f;
+    uint32_t fcr, fsr, after;
+    __asm__ volatile ("rur.fcr %0\n rur.fsr %1" : "=a"(fcr), "=a"(fsr));
+    uint32_t upward = 2; // MADDN must ignore the current rounding direction.
+    __asm__ volatile ("wur.fcr %0" :: "a"(upward));
+    __asm__ volatile ("maddn.s %0, %1, %2" : "+f"(sum) : "f"(half_ulp), "f"(one));
+    __asm__ volatile ("rur.fsr %0\n wur.fcr %1" : "=a"(after) : "a"(fcr));
+    assert(sum == 1.0f && after == fsr);
+    ESP_LOGI("PROBE", "FPU_WAKE_PRIMITIVES_PASS");
+}
 
 static void oled(void) {
     i2c_master_bus_handle_t bus;
@@ -132,6 +155,7 @@ static void storage(void) {
 }
 
 void app_main(void) {
+    floating_point();
     storage();
     oled();
     led();

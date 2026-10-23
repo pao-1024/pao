@@ -67,7 +67,8 @@ def main():
         raise KeyboardInterrupt()
     signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("probe", "voice"))
+    parser.add_argument("mode", choices=("probe", "voice", "wake", "wake-negative"))
+    parser.add_argument("--expected-asr", default="介绍你自己", help="Question text required after wakeup")
     parser.add_argument("--qemu", type=Path, default=ROOT / "tmp/qemu-install-build/qemu-system-xtensa")
     parser.add_argument("--build", type=Path)
     parser.add_argument("--pcm-input", type=Path, help="16 kHz mono signed 16-bit little-endian PCM")
@@ -80,7 +81,9 @@ def main():
         args.build = ROOT / "tmp/build" / (revision + "-qemu")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
-    if args.mode == "voice" and not args.pcm_input:
+    if args.mode == "wake" and not args.expected_asr:
+        parser.error("--expected-asr must be nonempty")
+    if args.mode != "probe" and not args.pcm_input:
         parser.error("voice requires --pcm-input")
     qmp_path = ROOT / "tmp" / "qmp.sock"
     if qmp_path.exists():
@@ -112,7 +115,7 @@ def main():
     if args.efuse:
         command += ["-drive", f"file={args.efuse.resolve()},if=none,id=efuse,format=raw,snapshot=on",
                     "-global", "driver=nvram.esp32s3.efuse,property=drive,value=efuse"]
-    command += ["-nic", "user,model=open_eth"] if args.mode == "voice" else ["-nic", "none"]
+    command += ["-nic", "user,model=open_eth"] if args.mode != "probe" else ["-nic", "none"]
     deadline = time.monotonic() + args.timeout
     qmp = None
     with (output / "qemu.log").open("w") as log:
@@ -121,6 +124,10 @@ def main():
         try:
             def wait_for(predicate, label):
                 while time.monotonic() < deadline:
+                    if uart.exists():
+                        content = uart.read_text(errors="replace")
+                        if "Guru Meditation Error" in content or "abort() was called" in content:
+                            raise RuntimeError(f"Guest crashed; see {uart}")
                     if predicate():
                         return
                     if process.poll() is not None:
@@ -158,6 +165,7 @@ def main():
                     qmp.set("gpio-inputs", 0xffffffffffffffff)
                     wait_for(lambda: text().count("PROBE_DONE") == cycle + 1, "probe complete")
                 assert "AUDIO_CONTENT_PASS" in text(), "I2S input content mismatch"
+                assert text().count("FPU_WAKE_PRIMITIVES_PASS") == 2, "WakeNet floating-point regression"
                 assert text().count("NVS_ROUNDTRIP_PASS") == 2, "Flash persistence failed"
                 image = qmp.get("oled-pbm")
                 pixels = list(map(int, image.split()[3:]))
@@ -165,22 +173,47 @@ def main():
                 assert qmp.get("led-rgb") == 0x123456, "WS2812 color mismatch"
             else:
                 marker("activating -> idle")
-                qmp.set("gpio-inputs", 0xfffffffffffffffe)
-                marker("BOOT_DOWN")
-                qmp.set("gpio-inputs", 0xffffffffffffffff)
-                marker("connecting -> listening")
-                qmp.set("input-active", 1)
-                marker("Application: >> ")
-                reply_offset = pcm_output.stat().st_size
-                marker("Application: << ")
-                marker("speaking -> listening")
-                image = qmp.get("oled-pbm")
+                if args.mode == "wake-negative":
+                    qmp.set("input-active", 1)
+                    start = qmp.get("rx-bytes")
+                    wait_for(lambda: qmp.get("rx-bytes") - start >= 16_000 * 4 * 12,
+                             "12 seconds of negative wake audio")
+                    assert "Wake word detected:" not in text(), "False wakeup"
+                    assert "idle -> connecting" not in text(), "Unexpected conversation"
+                    image = qmp.get("oled-pbm")
+                elif args.mode == "wake":
+                    qmp.set("input-active", 1)
+                    marker("Wake word detected:")
+                    qmp.set("input-active", 0)
+                else:
+                    qmp.set("gpio-inputs", 0xfffffffffffffffe)
+                    marker("BOOT_DOWN")
+                    qmp.set("gpio-inputs", 0xffffffffffffffff)
+                if args.mode != "wake-negative":
+                    marker("connecting -> listening")
+                    if args.mode == "wake":
+                        marker("speaking -> listening")
+                    qmp.set("input-active", 1)
+                    if args.mode == "wake":
+                        wait_for(lambda: any("Application: >> " in line and args.expected_asr in line
+                                             for line in text().splitlines()), "question ASR after wakeup")
+                    else:
+                        marker("Application: >> ")
+                    offset = text().rfind("Application: >> ")
+                    reply_offset = pcm_output.stat().st_size
+                    wait_for(lambda: "Application: << " in text()[offset:], "assistant reply")
+                    wait_for(lambda: "speaking -> listening" in text()[offset:], "reply playback")
+                    image = qmp.get("oled-pbm")
                 assert "1" in image.split()[3:], "OLED is blank"
             (output / "oled.pbm").write_text(image)
             result = {"mode": args.mode, "rx_bytes": qmp.get("rx-bytes"),
                       "tx_bytes": qmp.get("tx-bytes"), "led_rgb": qmp.get("led-rgb")}
             if args.mode == "probe":
                 result["boot_cycles"] = 2
+            elif args.mode != "wake-negative":
+                result["asr"] = next(line.split("Application: >> ", 1)[1] for line in
+                                     reversed(text().splitlines()) if "Application: >> " in line)
+                result["wakeword_detected"] = "Wake word detected:" in text()
             assert result["rx_bytes"] > 0 and result["tx_bytes"] > 0, "No I2S DMA traffic"
         finally:
             if qmp:
@@ -199,7 +232,7 @@ def main():
     assert any(samples), "I2S speaker output is silent"
     if args.mode == "probe":
         assert all(x in (0, 0x2345) for x in samples), "I2S output content mismatch"
-    else:
+    elif args.mode != "wake-negative":
         reply_pcm = pcm_output.read_bytes()[reply_offset:]
         reply_samples = array.array("h")
         reply_samples.frombytes(reply_pcm)

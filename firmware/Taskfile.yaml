@@ -5,6 +5,24 @@ env:
   PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
 
 tasks:
+  sim:install:
+    desc: 安装固定版本的乐鑫模拟器
+    cmds:
+      - python3 simulation/install-esp-emu.py
+  sim:build:
+    desc: 构建乐鑫模拟器的 Wi-Fi 配网固件
+    env:
+      PAO_PROFILE: esp-emu
+    cmds:
+      - bash scripts/build.sh
+  sim:full:
+    desc: 验证首次配网、唤醒、云端对话、重连及错误密码（使用 -- 传入参数）
+    cmds:
+      - task: sim:install
+      - task: sim:build
+      - task: qemu:install
+      - task: qemu:build
+      - python3 simulation/full-flow.py {{.CLI_ARGS}}
   qemu:install:
     desc: 构建固定版本的 PAO QEMU fork（需要本机编译依赖）
     cmds:
@@ -28,6 +46,11 @@ tasks:
     deps: [qemu:install, qemu:build]
     cmds:
       - python3 simulation/qemu.py voice {{.CLI_ARGS}}
+  qemu:wake:
+    desc: 验证真实 I2S、WakeNet 唤醒及后续云端对话（使用 -- 传入参数）
+    deps: [qemu:install, qemu:build]
+    cmds:
+      - python3 simulation/qemu.py wake {{.CLI_ARGS}}
   build:
     desc: 准备 ESP-IDF 和小智，构建最小语音固件（REF=分支/Tag/commit）
     cmds:
