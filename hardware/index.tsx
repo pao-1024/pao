@@ -1,11 +1,28 @@
+import type { PinHeaderProps, SwitchProps } from "@tscircuit/props"
 import { Boost5VModule } from "./components/Boost5V"
 import { Esp32S3DevKitC1 } from "./components/Esp32S3"
 import { Inmp441Module } from "./components/Inmp441"
 import { Max98357Module } from "./components/Max98357"
 import { Mx1508Module } from "./components/Mx1508"
-import { PowerSwitch } from "./components/PowerSwitch"
 import { Tp4056Protection } from "./components/Tp4056"
 import { OledModule } from "./components/Oled"
+
+function PowerSwitch(props: SwitchProps) {
+  return <switch {...props} />
+}
+
+function Motor(props: Omit<PinHeaderProps, "pinCount" | "pinLabels">) {
+  return (
+    <pinheader
+      doNotPlace
+      schFacingDirection="left"
+      schSectionName="Motors"
+      {...props}
+      pinCount={2}
+      pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
+    />
+  )
+}
 
 // 仅描述模块外部接线；引脚定义在组件中维护，排针位置见 README。
 export default function PaoWiring() {
@@ -199,25 +216,15 @@ export default function PaoWiring() {
             LEFT_MINUS: "MOTOR_LEFT.MINUS",
           }}
         />
-        <pinheader
-          doNotPlace
+        <Motor
           name="MOTOR_RIGHT"
           displayName="右侧电机"
-          pinCount={2}
-          pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
-          schFacingDirection="left"
-          schSectionName="Motors"
           schX={10.8}
           schY={-5.8}
         />
-        <pinheader
-          doNotPlace
+        <Motor
           name="MOTOR_LEFT"
           displayName="左侧电机"
-          pinCount={2}
-          pinLabels={{ pin1: "PLUS", pin2: "MINUS" }}
-          schFacingDirection="left"
-          schSectionName="Motors"
           schX={15.2}
           schY={-6.2}
         />
