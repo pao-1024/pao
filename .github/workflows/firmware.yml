@@ -42,7 +42,7 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
         run: |
-          shellcheck firmware/scripts/build.sh
+          shellcheck firmware/scripts/build.sh firmware/tests/motor/run.sh
           python3 -m py_compile firmware/scripts/build.py
 
       - name: Check C and C++ code
@@ -50,6 +50,9 @@ jobs:
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
             -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
             firmware/components/pao firmware/boards/pao-minimal
+
+      - name: Test motor driver
+        run: bash firmware/tests/motor/run.sh
 
   firmware:
     name: Firmware build
