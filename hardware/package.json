@@ -10,14 +10,17 @@
   "scripts": {
     "dev": "tsci dev index.tsx",
     "typecheck": "tsc --noEmit",
+    "check": "tsci check source index.tsx && tsci check pin_specification index.tsx && tsci check netlist index.tsx && npm run build && node scripts/check-layout.mjs",
     "build": "tsci build index.tsx --disable-pcb --disable-parts-engine --preview-images --schematic-svgs",
     "export": "tsci export index.tsx -f schematic-svg -o schematic.svg --disable-parts-engine",
-    "test": "npm run typecheck && npm run build && node --test test/connectivity.test.mjs"
+    "test": "npm run typecheck && npm run check && node --test test/connectivity.test.mjs"
   },
   "devDependencies": {
     "@tscircuit/header-modules": "https://codeload.github.com/tscircuit/header-modules/tar.gz/1245074558d3bfcdbcef0d0e4b5a4f59520785a9",
     "@tscircuit/props": "0.0.709",
     "@types/react": "19.3.0",
+    "circuit-json": "0.0.534",
+    "kicadts": "0.0.53",
     "react": "19.3.1",
     "tscircuit": "0.0.3008",
     "typescript": "5.9.3"

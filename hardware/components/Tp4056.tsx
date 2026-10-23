@@ -14,16 +14,17 @@ const pins = {
 export function Tp4056Protection(props: ChipProps<typeof pins>): ReactElement {
   return (
     <chip
+      schWidth={2.2}
       {...props}
       pinLabels={pins}
       schPinArrangement={{
         leftSide: {
           direction: "top-to-bottom",
-          pins: ["USB_PLUS", "USB_MINUS"],
+          pins: ["USB_PLUS", "USB_MINUS", "B_PLUS", "B_MINUS"],
         },
         rightSide: {
           direction: "top-to-bottom",
-          pins: ["OUT_PLUS", "B_PLUS", "B_MINUS", "OUT_MINUS"],
+          pins: ["OUT_PLUS", "OUT_MINUS"],
         },
       }}
     />

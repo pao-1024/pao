@@ -1,6 +1,9 @@
-# 电源模块定义来源
+# 外部元件定义来源
 
-此目录保留上游原始定义与 MIT 许可证，供核对转换后的 TSX 组件。两个组件只描述模块外部接线接口，不包含可制造的 PCB footprint。
+此目录保留外部定义、固定版本与许可证，供核对实际复用内容。本项目只描述模块外部接线，不生成可制造的 PCB。
+
+- [乐鑫 ESP32-S3 开发板](espressif/README.md)：官方完整 44 针 KiCad 符号，由 tscircuit 原生导入。
+- 下列充电、升压模块：保留 MIT 许可源文件，适配为 TSX 外部接口。
 
 ## TP4056 充电保护模块
 
@@ -8,7 +11,7 @@
 - 本地原件：`tp4056/TP4056.fzpz`；许可证：`tp4056/LICENSE`（MIT，Thiago Vilella）。
 - 转换组件：`../components/Tp4056.tsx` 中的 `Tp4056Protection`。
 
-读取归档内 `.fzp` 的 `connector/description`，保留连接点顺序及原理图两侧位置：
+读取归档内 `.fzp` 的 `connector/description`，保留连接点顺序；原理图按左侧输入、右侧输出排布，便于阅读供电链路：
 
 | Fritzing 连接点 | 原始描述 | TSX 引脚 | 接口名 |
 | --- | --- | --- | --- |

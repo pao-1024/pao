@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["index.tsx", "components/**/*.tsx", "tscircuit-jsx.d.ts"]
+  "include": ["index.tsx", "components/**/*.tsx", "*.d.ts"]
 }

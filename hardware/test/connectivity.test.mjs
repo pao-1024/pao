@@ -14,9 +14,43 @@ const componentNames = new Map(
     component.name,
   ]),
 )
-const portName = (port) =>
-  `${componentNames.get(port.source_component_id)}.${port.name}`
+// 原生 KiCad 符号保留物理引脚；测试统一使用接线表中的逻辑名称。
+function portName(port) {
+  const name = componentNames.get(port.source_component_id)
+  const hints = port.port_hints ?? []
+  if (name === "ESP32_S3") {
+    const gpio = hints.find((hint) => /^GPIO\d+$/.test(hint))
+    return `${name}.${gpio ?? { "5V": "V5", "3V3": "V3V3" }[port.name] ?? port.name}`
+  }
+  if (["SPEAKER", "MOTOR_RIGHT", "MOTOR_LEFT"].includes(name)) {
+    return `${name}.${port.pin_number === 1 ? "PLUS" : "MINUS"}`
+  }
+  return `${name}.${port.name}`
+}
 const portsByName = new Map(ports.map((port) => [portName(port), port]))
+
+// 从实际导线和板上内部连接建立网络，涵盖开发板重复的电源/地排针。
+const parents = new Map()
+function root(id) {
+  if (!parents.has(id)) return undefined
+  if (parents.get(id) !== id) parents.set(id, root(parents.get(id)))
+  return parents.get(id)
+}
+function connect(ids) {
+  for (const id of ids) if (!parents.has(id)) parents.set(id, id)
+  for (const id of ids) parents.set(root(id), root(ids[0]))
+}
+for (const trace of traces) {
+  connect([
+    ...trace.connected_source_port_ids,
+    ...(trace.connected_source_net_ids ?? []),
+  ])
+}
+for (const component of components) {
+  for (const group of component.internally_connected_source_port_ids ?? []) {
+    connect(group)
+  }
+}
 
 function port(name) {
   const result = portsByName.get(name)
@@ -25,7 +59,7 @@ function port(name) {
 }
 
 function network(name) {
-  const key = port(name).subcircuit_connectivity_map_key
+  const key = root(port(name).source_port_id)
   assert.ok(key, `${name} 没有连接到网络`)
   return key
 }
@@ -33,10 +67,11 @@ function network(name) {
 // 核对编译后同一网络的完整成员，额外短接到任何引脚都会失败。
 function assertNetwork(expected) {
   const key = network(expected[0])
-  const actual = ports
-    .filter((item) => item.subcircuit_connectivity_map_key === key)
-    .map(portName)
-    .sort()
+  const actual = [
+    ...new Set(
+      ports.filter((item) => root(item.source_port_id) === key).map(portName),
+    ),
+  ].sort()
   assert.deepEqual(
     actual,
     [...expected].sort(),
@@ -63,7 +98,18 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
       "MOTOR_LEFT",
     ].sort(),
   )
-  assert.equal(portsByName.size, ports.length, "模块引脚名称不能重复")
+  const mcuPorts = ports.filter(
+    (item) => componentNames.get(item.source_component_id) === "ESP32_S3",
+  )
+  assert.equal(mcuPorts.length, 44, "保留官方开发板完整的 44 个物理引脚")
+  assert.equal(new Set(mcuPorts.map((item) => item.pin_number)).size, 44)
+  assert.ok(
+    circuit.some(
+      (item) =>
+        item.type === "schematic_component" &&
+        item.symbol_name === "speaker_horz",
+    ),
+  )
   assert.equal(
     components.find((item) => item.name === "BATTERY").ftype,
     "simple_power_source",
@@ -99,7 +145,11 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
   }
   assert.deepEqual(
     ports
-      .filter((item) => portName(item).startsWith("ESP32_S3.GPIO"))
+      .filter(
+        (item) =>
+          portName(item).startsWith("ESP32_S3.GPIO") &&
+          root(item.source_port_id),
+      )
       .map(portName)
       .sort(),
     connections.map(([gpio]) => `ESP32_S3.GPIO${gpio}`).sort(),
@@ -171,7 +221,11 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
 
 test("省略可选按钮，三脚开关的 OFF 脚明确悬空", () => {
   for (const gpio of [0, 39, 40]) {
-    assert.ok(!portsByName.has(`ESP32_S3.GPIO${gpio}`), "不应包含可选按钮连接")
+    assert.equal(
+      root(port(`ESP32_S3.GPIO${gpio}`).source_port_id),
+      undefined,
+      "可选按钮 GPIO 保持未接",
+    )
   }
   const unused = port("POWER_SWITCH.OFF")
   assert.equal(unused.do_not_connect, true)
@@ -182,5 +236,17 @@ test("省略可选按钮，三脚开关的 OFF 脚明确悬空", () => {
         !trace.connected_source_port_ids.includes(unused.source_port_id),
     ),
     "OFF 脚不得出现导线",
+  )
+})
+
+test("原理图标注完整，所有内容均在图纸内", () => {
+  assert.deepEqual(
+    circuit.filter((item) =>
+      [
+        "schematic_element_outside_sheet_warning",
+        "schematic_component_styling_warning",
+      ].includes(item.type),
+    ),
+    [],
   )
 })
