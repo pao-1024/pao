@@ -26,7 +26,7 @@
 
 | 元件 | 实际复用方式 |
 | --- | --- |
-| 电池、SPDT 开关、扬声器 | tscircuit 内置 `battery`、`switch`、`schematicsymbol`；开关只需处理 React 同名 SVG 标签的类型冲突 |
+| 电池、SPDT 开关、扬声器 | tscircuit 内置 `battery`、`switch`、`schematicsymbol` |
 | ESP32-S3 开发板 | 原生导入乐鑫官方 KiCad 符号，保留完整 44 针、图形及板上内部电源连接；短 GPIO 别名自动生成 |
 | SSD1306 OLED | 复用官方 `@tscircuit/header-modules` 成品组件，只调整固定符号的绘图留白 |
 | 左右电机 | 使用内置两针端子，清楚表示外部电机的两线连接 |

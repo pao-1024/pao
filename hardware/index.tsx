@@ -103,8 +103,8 @@ export default function PaoWiring(): ReactElement {
           schX={-2}
           schY={0}
           connections={{
-            V5: "net.V5",
-            V3V3: "net.V3V3",
+            "5V": "net.V5",
+            "3V3": "net.V3V3",
             GND: "net.GND",
             GPIO4: "net.MIC_WS",
             GPIO5: "net.MIC_SCK",

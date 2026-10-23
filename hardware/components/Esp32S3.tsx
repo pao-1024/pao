@@ -10,14 +10,10 @@ const symbol = officialSymbol.map((element) =>
 )
 
 // 引脚编号、名称和图形来自乐鑫官方定义，仅补充便于接线的短别名。
-const powerAliases: Record<string, string> = { "5V": "V5", "3V3": "V3V3" }
 const pinLabels = Object.fromEntries(
   symbol
     .filter((element) => element.type === "source_port")
-    .map(({ pin_number, name }) => [
-      `pin${pin_number}`,
-      powerAliases[name] ?? name.split("/")[0],
-    ]),
+    .map(({ pin_number, name }) => [`pin${pin_number}`, name.split("/")[0]]),
 )
 
 export function Esp32S3DevKitC1(props: ChipProps): ReactElement {

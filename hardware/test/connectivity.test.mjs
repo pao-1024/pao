@@ -20,7 +20,7 @@ function portName(port) {
   const hints = port.port_hints ?? []
   if (name === "ESP32_S3") {
     const gpio = hints.find((hint) => /^GPIO\d+$/.test(hint))
-    return `${name}.${gpio ?? { "5V": "V5", "3V3": "V3V3" }[port.name] ?? port.name}`
+    return `${name}.${gpio ?? port.name}`
   }
   if (["SPEAKER", "MOTOR_RIGHT", "MOTOR_LEFT"].includes(name)) {
     return `${name}.${port.pin_number === 1 ? "PLUS" : "MINUS"}`
@@ -157,9 +157,9 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  const v5 = assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.V5", "MX1508.VCC"])
+  const v5 = assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.5V", "MX1508.VCC"])
   const v3v3 = assertNetwork([
-    "ESP32_S3.V3V3",
+    "ESP32_S3.3V3",
     "MIC.VDD",
     "AMP.VIN",
     "AMP.SD_MODE",
@@ -212,7 +212,7 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
   ]
   const keys = outputs.map(assertNetwork)
   assert.equal(new Set(keys).size, 6, "六条输出线不得互相短接")
-  const supplyKeys = ["ESP32_S3.GND", "ESP32_S3.V5", "ESP32_S3.V3V3"].map(
+  const supplyKeys = ["ESP32_S3.GND", "ESP32_S3.5V", "ESP32_S3.3V3"].map(
     network,
   )
   for (const key of keys)
