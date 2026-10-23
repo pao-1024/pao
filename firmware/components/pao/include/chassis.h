@@ -15,9 +15,9 @@ public:
     Chassis& operator=(const Chassis&) = delete;
 
     // forward、turn ∈ [-1, 1]，分别表示前进和向左旋转的控制量。
-    // 有限越界值限幅，任一非有限值使两轮停止；不能在 ISR 中调用。
+    // drive(0, 0) 滑行停止；有限越界值限幅，任一非有限值使两轮停止。
+    // 不能在 ISR 中调用。
     void drive(float forward, float turn);
-    void stop();
 
 private:
     Motor& left_;

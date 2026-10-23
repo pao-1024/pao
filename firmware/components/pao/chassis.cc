@@ -10,11 +10,11 @@ Chassis::Chassis(Motor& left, Motor& right) : left_(left), right_(right) {
     if (&left_ == &right_) {
         ESP_ERROR_CHECK(ESP_ERR_INVALID_ARG);
     }
-    stop();
+    drive(0, 0);
 }
 
 Chassis::~Chassis() {
-    stop();
+    drive(0, 0);
 }
 
 void Chassis::drive(float forward, float turn) {
@@ -31,8 +31,4 @@ void Chassis::drive(float forward, float turn) {
     const float scale = std::max({1.0f, std::fabs(left_speed), std::fabs(right_speed)});
     left_.setSpeed(left_speed / scale);
     right_.setSpeed(right_speed / scale);
-}
-
-void Chassis::stop() {
-    drive(0, 0);
 }
