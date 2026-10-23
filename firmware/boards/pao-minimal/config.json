@@ -1,7 +1,0 @@
-{
-  "type": "pao-minimal",
-  "target": "esp32s3",
-  "builds": [
-    {"name": "pao-minimal", "sdkconfig_append": []}
-  ]
-}

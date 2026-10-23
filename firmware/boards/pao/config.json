@@ -1,0 +1,7 @@
+{
+  "type": "pao",
+  "target": "esp32s3",
+  "builds": [
+    {"name": "pao", "sdkconfig_append": []}
+  ]
+}

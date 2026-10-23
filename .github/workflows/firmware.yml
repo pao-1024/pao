@@ -48,8 +48,8 @@ jobs:
       - name: Check C and C++ code
         run: |
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
-            -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
-            firmware/components/pao firmware/boards/pao-minimal
+            -Ifirmware/components/pao/include -Ifirmware/boards/pao \
+            firmware/components/pao firmware/boards/pao
 
   firmware:
     name: Firmware build
