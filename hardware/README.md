@@ -1,6 +1,6 @@
 # PAO 模块接线图
 
-使用 [tscircuit](https://tscircuit.com/) 的 TSX 描述用户提供的[小智机器人接线方案](reference-wiring.jpg)。本版按图连接供电、ESP32-S3、MX1508 电机驱动小红板、INMP441、MAX98357、扬声器和 SSD1306 OLED，省略图中标注可选的三个外接按钮。
+使用 [tscircuit](https://tscircuit.com/) 的 TSX 描述用户提供的小智机器人接线方案。本版按图连接供电、ESP32-S3、MX1508 电机驱动小红板、INMP441、MAX98357、扬声器和 SSD1306 OLED，省略图中标注可选的三个外接按钮。
 
 这是**模块之间的接线参考**，尚未实物验证。ESP32-S3 保留官方 44 个物理引脚；其他本地接口中的 `pin1` 等是符号索引。接线按 GPIO 名称和模块丝印确认。本目录仅用于模块接线，未验证 PCB 封装、机械尺寸或模块内部电路，不生成可生产的 PCB。
 
