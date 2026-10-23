@@ -103,15 +103,7 @@ left.setSpeed(0.0f);
 同一实例的调用串行执行，换向先关闭原方向输出。请从普通任务调用，不支持 ISR。
 以上 GPIO 对应硬件接线参考，当前板型不会自动创建或启动电机。
 
-主机测试需要 C++17 编译器和 pthread，无需 SDK 或实物：
-
-```sh
-task firmware:test
-# 或直接运行：bash firmware/tests/motor/run.sh
-```
-
-测试替换 GPIO/MCPWM 硬件边界，覆盖方向、停止、占空比、输入边界、双电机独立控制、
-并发换向和资源释放；真实 PWM 波形和带载效果仍需实机验证。
+真实 PWM 波形和带载效果仍需实机验证。
 MCPWM API 见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/mcpwm.html)。
 
 ## CI
@@ -120,7 +112,7 @@ GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在
 仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao-minimal/`
-进行 C/C++ 静态分析，并使用主机 C++ 编译器运行电机驱动测试。
+进行 C/C++ 静态分析。
 
 静态检查通过后，`Firmware build` 任务使用乐鑫官方
 [install-esp-idf-action](https://github.com/espressif/install-esp-idf-action)

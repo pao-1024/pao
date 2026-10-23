@@ -5,11 +5,6 @@ env:
   PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
 
 tasks:
-  test:
-    desc: 使用主机 C++ 编译器验证电机驱动（无需 ESP-IDF 或硬件）
-    cmds:
-      - bash tests/motor/run.sh
-
   build:
     desc: 使用已配置的 ESP-IDF 或 EIM，准备小智并构建最小语音固件（REF=分支/Tag/commit）
     cmds:
