@@ -22,14 +22,17 @@ jobs:
         working-directory: hardware
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: hardware/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: hardware/package-lock.json
+          cache: pnpm
+          cache-dependency-path: hardware/pnpm-lock.yaml
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.10"
-      - run: npm ci --no-audit --no-fund
-      - run: npm test
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
       - run: cmp dist/index/schematic.svg schematic.svg

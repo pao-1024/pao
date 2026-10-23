@@ -36,7 +36,7 @@
 
 ## 项目 Skill
 
-先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本（含 npm/npx），然后在仓库目录执行：
+先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本，以及 pnpm 10.32.1，然后在仓库目录执行：
 
 ```sh
 task skills:install

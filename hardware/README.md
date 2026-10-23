@@ -86,24 +86,28 @@ ESP32-S3 3V3 → 麦克风 VDD、功放 VIN/SD、OLED VCC
 
 ## 本地预览与验证
 
-需要 **Node.js 24+、npm 和 Bun 1.3.10+**。当前锁定版本的 `tsci` 命令使用 Bun 运行；[Bun 安装说明](https://bun.sh/docs/installation)。从仓库根目录执行：
+需要 **Node.js 24+、pnpm 10.32.1 和 Bun 1.3.10+**。当前锁定版本的 `tsci` 命令使用 Bun 运行；[Bun 安装说明](https://bun.sh/docs/installation)。从仓库根目录执行：
 
 ```sh
 cd hardware
-npm ci
-npm run dev
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
 浏览器访问命令输出的本地地址（默认 `http://localhost:3020`），查看 Schematic。PCB 已关闭，预览中的 PCB/3D 不代表实际布局。
 
 | 命令 | 用途 |
 | --- | --- |
-| `npm run typecheck` | 严格检查 TSX 模块属性 |
-| `npm run check` | 构建后检查源码、引脚、网络、原理图布局及放置 |
-| `npm run build` | 输出 `dist/index/circuit.json` 和 `dist/index/schematic.svg` |
-| `npm run export` | 更新已提交的 `schematic.svg` |
-| `npm test` | 类型检查、上述检查、构建，并验证编译产物的 GPIO、电源、保护地及输出连接 |
+| `pnpm typecheck` | 严格检查 TSX 模块属性 |
+| `pnpm check` | 构建后检查源码、引脚、网络、原理图布局及放置 |
+| `pnpm build` | 输出 `dist/index/circuit.json` 和 `dist/index/schematic.svg` |
+| `pnpm export` | 更新已提交的 `schematic.svg` |
+| `pnpm test` | 类型检查、上述检查、构建，并验证编译产物的 GPIO、电源、保护地及输出连接 |
 
-修改接线后执行 `npm test` 和 `npm run export`，把源码与 SVG 一起提交。各项检查复用同一次构建产物，CI 直接比较构建 SVG 与已提交图纸。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
+锁文件从原 npm 锁文件迁移，保留固定的直接依赖版本。`pnpm.overrides` 固定电路检查器的下载来源，并统一 `math-utils` 为 0.0.36，满足部分上游包未正确声明的运行时依赖。
+
+修改接线后执行 `pnpm test` 和 `pnpm export`，把源码与 SVG 一起提交。各项检查复用同一次构建产物，CI 直接比较构建 SVG 与已提交图纸。测试覆盖开发板内部相连的重复电源引脚，并核对 12 路 GPIO、保护前负极隔离及差分输出。模块接口未模拟内部芯片电气特性，引脚检查仍会提示缺少完整电气属性；自动检查不替代实物验证。
 
 `tscircuit-jsx.d.ts` 直接复用上游 `@tscircuit/props` 的属性类型，避免聚合类型入口连带检查路由器包的第三方 TypeScript 源码。
+
+当前锁定版本的 `tsci check schematic-placement` 发现布局问题时仍可能返回成功状态，需查看命令输出确认结果。
