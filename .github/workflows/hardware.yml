@@ -1,0 +1,43 @@
+name: Hardware
+
+on:
+  pull_request:
+    paths:
+      - "hardware/**"
+      - "Taskfile.yaml"
+      - ".github/workflows/hardware.yml"
+  push:
+    branches: [main]
+    paths:
+      - "hardware/**"
+      - "Taskfile.yaml"
+      - ".github/workflows/hardware.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  wiring:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hardware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: hardware/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: hardware/pnpm-lock.yaml
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.10"
+      - uses: go-task/setup-task@v2
+        with:
+          version: "3.43.3"
+      - run: task setup
+      - name: Check and test hardware
+        run: task test

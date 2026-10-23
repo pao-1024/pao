@@ -1,0 +1,2 @@
+# 保留上游导出格式；将生成的 SVG 标为构建产物。
+schematic.svg -whitespace linguist-generated=true
