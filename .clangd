@@ -1,0 +1,11 @@
+CompileFlags:
+  CompilationDatabase: tmp
+  # GCC-only options from ESP-IDF's Xtensa toolchain.
+  Remove:
+    - -mdisable-hardware-atomics
+    - -mlongcalls
+    - -mno-target-align
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -fzero-init-padding-bits=*
+    - -fno-malloc-dce

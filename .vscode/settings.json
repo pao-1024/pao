@@ -1,0 +1,8 @@
+{
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/tmp/compile_commands.json",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**/xtensa*-elf-gcc,**/xtensa*-elf-g++"
+  ],
+  "cmake.configureOnOpen": false
+}

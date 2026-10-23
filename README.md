@@ -24,6 +24,11 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
+## 开发
+
+运行 `task build` 构建最小语音固件；首次会自动准备 ESP-IDF 和小智源码。
+上游版本选择、GPIO 和 IDE 配置见[构建说明](docs/build.md)。
+
 ---
 
 <div align="center">
