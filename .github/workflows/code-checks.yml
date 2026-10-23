@@ -90,5 +90,8 @@ jobs:
 
       - name: Build firmware
         run: |
-          source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
-          bash firmware/scripts/build.sh
+          # EIM checks the shell's $0; GitHub's temporary script name fails that check.
+          bash -e -c '
+            source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
+            exec bash firmware/scripts/build.sh
+          '
