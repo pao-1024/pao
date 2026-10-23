@@ -34,12 +34,12 @@ jobs:
         env:
           PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
         run: |
-          shellcheck scripts/build.sh
-          python3 -m py_compile scripts/build.py
+          shellcheck firmware/scripts/build.sh
+          python3 -m py_compile firmware/scripts/build.py
 
       - name: Check C and C++ code
         run: |
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
-            -Icomponents/pao/include -Iboards/pao-minimal \
-            components/pao boards/pao-minimal
+            -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
+            firmware/components/pao firmware/boards/pao-minimal
 

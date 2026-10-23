@@ -1,5 +1,5 @@
 CompileFlags:
-  CompilationDatabase: tmp
+  CompilationDatabase: ../tmp
   # GCC-only options from ESP-IDF's Xtensa toolchain.
   Remove:
     - -mdisable-hardware-atomics

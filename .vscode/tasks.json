@@ -5,7 +5,7 @@
       "label": "PAO: configure",
       "type": "process",
       "command": "task",
-      "args": ["build", "ACTION=configure"],
+      "args": ["firmware:build", "ACTION=configure"],
       "options": {"cwd": "${workspaceFolder}"},
       "problemMatcher": ["$gcc"]
     },
@@ -13,7 +13,7 @@
       "label": "PAO: build",
       "type": "process",
       "command": "task",
-      "args": ["build"],
+      "args": ["firmware:build"],
       "options": {"cwd": "${workspaceFolder}"},
       "group": {"kind": "build", "isDefault": true},
       "problemMatcher": ["$gcc"]

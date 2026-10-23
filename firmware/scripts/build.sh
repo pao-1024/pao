@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 mkdir -p tmp/temp
 export TMPDIR="$PWD/tmp/temp"
@@ -23,4 +23,4 @@ set +u
 # shellcheck source=/dev/null
 source "$IDF_PATH/export.sh"
 set -u
-python scripts/build.py "${PAO_BUILD_ACTION:-build}"
+python firmware/scripts/build.py "${PAO_BUILD_ACTION:-build}"

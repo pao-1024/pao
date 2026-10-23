@@ -1,15 +1,11 @@
 version: '3'
 
-env:
-  PAO_BASE_REF: '{{.REF | default ""}}'
-  PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
+includes:
+  firmware:
+    taskfile: ./firmware/Taskfile.yaml
+    dir: ./firmware
 
 tasks:
-  build:
-    desc: 准备 ESP-IDF 和小智，构建最小语音固件（REF=分支/Tag/commit）
-    cmds:
-      - bash scripts/build.sh
-
   skills:install:
     desc: 安装清单中的全部项目 skill
     preconditions:
