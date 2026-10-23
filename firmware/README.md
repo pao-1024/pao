@@ -8,7 +8,8 @@
 当前板型为 `pao-minimal`：ESP32-S3、16 MB Flash、八线 PSRAM，只有
 I2S 麦克风、I2S 功放、BOOT 按键和状态灯，不需要屏幕。GPIO 暂沿用小智
 面包板配置，详见[板型与接线](boards/pao-minimal/README.md)。
-业务组件初始化仅输出日志，没有电机或发射控制逻辑。默认 OTA 网关指向灵矽，
+业务组件初始化仅输出日志；提供独立电机驱动类，板型尚未接入电机或发射控制。
+默认 OTA 网关指向灵矽，
 但未验证设备绑定及语音连接。
 
 ## 环境
@@ -79,6 +80,32 @@ python3 firmware/scripts/build.py prepare --ref main
 切换构建参数或修改 defaults 后，已有 `sdkconfig` 的值优先；应在对应构建目录
 使用 `idf.py menuconfig` 修改，或移走该构建目录后重新配置。
 
+## 电机驱动
+
+`components/pao/include/motor.h` 提供 C++ `Motor` 类，每个实例控制 MX1508 的一路电机。
+构造时传入两根不同、支持输出的 GPIO，内部使用 MCPWM 产生 1 kHz PWM；构造后保持停止，
+析构时停止并释放 PWM 资源。SDK 初始化或资源申请失败时通过 `ESP_ERROR_CHECK` 终止。
+
+```cpp
+#include "motor.h"
+
+Motor right(GPIO_NUM_11, GPIO_NUM_12);
+Motor left(GPIO_NUM_13, GPIO_NUM_14);
+
+right.setSpeed(0.5f);   // 正向，50% 占空比
+left.setSpeed(-0.5f);   // 反向，50% 占空比
+right.setSpeed(0.0f);   // 两根输入均为低电平，滑行停止
+left.setSpeed(0.0f);
+```
+
+`setSpeed(float speed)` 接受 `[-1, 1]`，绝对值表示占空比，实际转速随电机、供电和负载变化。
+正负方向由 GPIO 顺序及电机接线决定。有限越界值限幅，NaN 和无穷值按停止处理；
+同一实例的调用串行执行，换向先关闭原方向输出。请从普通任务调用，不支持 ISR。
+以上 GPIO 对应硬件接线参考，当前板型不会自动创建或启动电机。
+
+真实 PWM 波形和带载效果仍需实机验证。
+MCPWM API 见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/mcpwm.html)。
+
 ## CI
 
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
@@ -104,7 +131,7 @@ CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实�
 
 ## 接入位置
 
-- `firmware/components/pao/`：业务组件及公开 C 接口，不依赖小智私有类。
+- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机驱动，不依赖小智私有类。
 - `firmware/boards/pao-minimal/`：独立板型、引脚、音频 Codec 和按键初始化，调用
   `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
