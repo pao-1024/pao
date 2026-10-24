@@ -6,7 +6,7 @@
 由用户通过 EIM 安装和管理。
 
 当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
-I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动和双路继电器发射模块，不需要屏幕。
+I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动和两块单路继电器发射模块，不需要屏幕。
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
 板级初始化创建左右电机、两轮底盘和电磁发射器，上电保持停止与断开；
 业务组件初始化仅输出日志，尚未接入上层运动指令或发射指令。
@@ -137,8 +137,9 @@ chassis.drive(0.0f, 0.0f);   // 滑行停止
 
 ## 电磁发射器
 
-`components/pao/include/launcher.h` 提供 `Launcher`，用两个 GPIO 驱动双路继电器模块：
-CH1 接高压升压模块使能（充能），CH2 串在 SCR 门极回路（发射）。两路均为低电平吸合。
+`components/pao/include/launcher.h` 提供 `Launcher`，用两个 GPIO 分别驱动一块 3.3V 单路继电器模块：
+CH1 接高压升压模块使能（充能），CH2 串在 SCR 门极回路（发射）。两块模块的触发跳帽均设在 L 档，
+低电平吸合，线圈由 3V3 供电。
 
 ```cpp
 #include "launcher.h"

@@ -20,6 +20,7 @@
 #define MOTOR_GPIO_IN3 GPIO_NUM_13
 #define MOTOR_GPIO_IN4 GPIO_NUM_14
 
-// 双路继电器模块：CH1 控制升压使能（充能），CH2 触发 SCR 门极（发射），均为低电平吸合。
+// 两块 3.3V 单路继电器模块：CH1 控制升压使能（充能），CH2 触发 SCR 门极（发射）。
+// 触发跳帽均设在 L 档，低电平吸合，线圈由 3V3 供电。
 #define LAUNCHER_GPIO_CHARGE GPIO_NUM_17
 #define LAUNCHER_GPIO_FIRE GPIO_NUM_18
