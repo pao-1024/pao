@@ -20,6 +20,7 @@ export function Mx1508Module(props: ChipProps<typeof pins>) {
       schWidth={2.5}
       {...props}
       pinLabels={pins}
+      schPinStyle={{ LEFT_PLUS: { marginTop: 0.8 } }}
       schPinArrangement={{
         leftSide: {
           direction: "top-to-bottom",

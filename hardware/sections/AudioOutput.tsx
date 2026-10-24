@@ -26,16 +26,16 @@ export function AudioOutput() {
       <netlabel
         net={nets.power.v3v3.name}
         connection="AMP.VIN"
-        schX={5.4}
-        schY={4.3}
+        schX={7}
+        schY={4.6}
         anchorSide="bottom"
       />
       <netlabel
         net={nets.power.gnd.name}
         connection="AMP.GND"
-        schX={5.55}
-        schY={3.2}
-        anchorSide="right"
+        schX={7}
+        schY={1.4}
+        anchorSide="top"
       />
       <schematicsymbol
         name="SPEAKER"

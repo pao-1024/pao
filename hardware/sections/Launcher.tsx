@@ -11,8 +11,8 @@ export function Launcher() {
       {/* 此区标题手动定位在元件簇正上方，避免与相邻 OLED 分区重叠。 */}
       <schematictext
         text="电磁发射器 / 双继电器"
-        schX={-9}
-        schY={-4.2}
+        schX={-6.1}
+        schY={-4.8}
         fontSize={0.18}
       />
       {/* CH1：充能。触点把专用 3.3V 送到发射器供电脚，供电即开始充能。 */}
@@ -37,7 +37,7 @@ export function Launcher() {
         name="RELAY_FIRE"
         schSectionName="Launcher"
         schX={-9}
-        schY={-9.6}
+        schY={-8.4}
         noConnect={["NC"]}
         connections={{
           VCC: nets.power.v3v3Aux.selector,
@@ -52,11 +52,60 @@ export function Launcher() {
         name="LAUNCHER"
         displayName="电磁发射器"
         schSectionName="Launcher"
-        schX={-4.4}
-        schY={-7.8}
+        schX={-3.2}
+        schY={-6}
         connections={{
           GND: nets.power.gnd.selector,
         }}
+      />
+      <netlabel
+        net={nets.power.v3v3Aux.name}
+        connection="RELAY_CHARGE.VCC"
+        schX={-10.6}
+        schY={-5.8}
+        anchorSide="right"
+      />
+      <netlabel
+        net={nets.power.gnd.name}
+        connection="RELAY_CHARGE.GND"
+        schX={-11.2}
+        schY={-6}
+        anchorSide="right"
+      />
+      <netlabel
+        net={nets.power.v3v3Aux.name}
+        connection="RELAY_CHARGE.COM"
+        schX={-7.4}
+        schY={-6}
+        anchorSide="left"
+      />
+      <netlabel
+        net={nets.power.v3v3Aux.name}
+        connection="RELAY_FIRE.VCC"
+        schX={-10.6}
+        schY={-8.2}
+        anchorSide="right"
+      />
+      <netlabel
+        net={nets.power.gnd.name}
+        connection="RELAY_FIRE.GND"
+        schX={-11.2}
+        schY={-8.4}
+        anchorSide="right"
+      />
+      <netlabel
+        net={nets.power.gnd.name}
+        connection="RELAY_FIRE.COM"
+        schX={-7.4}
+        schY={-8.4}
+        anchorSide="left"
+      />
+      <netlabel
+        net={nets.power.gnd.name}
+        connection="LAUNCHER.GND"
+        schX={-5}
+        schY={-6}
+        anchorSide="right"
       />
     </>
   )
