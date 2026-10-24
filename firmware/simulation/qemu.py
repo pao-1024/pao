@@ -90,7 +90,7 @@ def main():
         raise RuntimeError(f"QMP socket already exists: {qmp_path}; check for a running simulator")
     output = ROOT / "tmp" / ("qemu-" + args.mode)
     output.mkdir(parents=True, exist_ok=True)
-    for name in ("result.json", "speaker.wav", "reply.wav", "oled.pbm", "oled.png"):
+    for name in ("result.json", "speaker.wav", "reply.wav", "oled.pbm", "oled.png", "indicator.svg", "motors.svg"):
         (output / name).unlink(missing_ok=True)
     temp = ROOT / "tmp" / "temp"
     temp.mkdir(exist_ok=True)
@@ -118,6 +118,8 @@ def main():
     command += ["-nic", "user,model=open_eth"] if args.mode != "probe" else ["-nic", "none"]
     deadline = time.monotonic() + args.timeout
     qmp = None
+    indicator_events = []
+    motor_events = []
     with (output / "qemu.log").open("w") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                    env=dict(os.environ, TMPDIR=str(temp)))
@@ -150,6 +152,7 @@ def main():
             qmp = Qmp(qmp_path)
             if args.mode == "probe":
                 qmp.set("input-active", 1)
+                assert qmp.get("gpio-outputs") == 0, "GPIO outputs were not reset"
             qmp.command("cont")
             if args.mode == "probe":
                 for cycle in range(2):
@@ -157,13 +160,35 @@ def main():
                         qmp.command("stop")
                         qmp.command("system_reset")
                         wait_for(lambda: qmp.get("rx-bytes") == 0, "peripheral reset")
+                        assert qmp.get("gpio-outputs") == 0, "GPIO outputs survived reset"
                         qmp.set("input-active", 1)
                         qmp.command("cont")
                     wait_for(lambda: text().count("BUTTON_READY") == cycle + 1, "button ready")
                     qmp.set("gpio-inputs", 0xfffffffffffffffe)
                     wait_for(lambda: text().count("BUTTON_PRESSED") == cycle + 1, "button pressed")
+                    indicator_events.append({"cycle": cycle + 1, "on": True})
+                    print(f"SIM_EVENT cycle={cycle + 1} indicator=ON", flush=True)
                     qmp.set("gpio-inputs", 0xffffffffffffffff)
+                    wait_for(lambda: text().count("BUTTON_RELEASED") == cycle + 1, "button released")
+                    indicator_events.append({"cycle": cycle + 1, "on": False})
+                    print(f"SIM_EVENT cycle={cycle + 1} indicator=OFF", flush=True)
+                    # MX1508 Rev1.3 truth table: IN1 is the low bit of each pair.
+                    states = ("coast", "forward", "reverse", "brake")
+                    for stage in range(16):
+                        wait_for(lambda: text().count(f"MOTOR_STAGE value={stage};") == cycle + 1,
+                                 f"motor input combination {stage}")
+                        levels = (qmp.get("gpio-outputs") >> 11) & 15
+                        assert levels == stage, f"Motor GPIO mismatch: {levels} != {stage}"
+                        event = {"cycle": cycle + 1, "inputs": levels,
+                                 "right": states[levels & 3], "left": states[(levels >> 2) & 3]}
+                        motor_events.append(event)
+                        print(f"MOTOR_EVENT {json.dumps(event)}", flush=True)
+                        qmp.set("gpio-inputs", 0xfffffffffffffffe)
+                        wait_for(lambda: text().count(f"MOTOR_ACK value={stage};") == cycle + 1,
+                                 "motor stage acknowledgement")
+                        qmp.set("gpio-inputs", 0xffffffffffffffff)
                     wait_for(lambda: text().count("PROBE_DONE") == cycle + 1, "probe complete")
+                    assert (qmp.get("gpio-outputs") >> 11) & 15 == 0, "Motor outputs not disabled"
                 assert "AUDIO_CONTENT_PASS" in text(), "I2S input content mismatch"
                 assert text().count("FPU_WAKE_PRIMITIVES_PASS") == 2, "WakeNet floating-point regression"
                 assert text().count("NVS_ROUNDTRIP_PASS") == 2, "Flash persistence failed"
@@ -210,6 +235,8 @@ def main():
                       "tx_bytes": qmp.get("tx-bytes"), "led_rgb": qmp.get("led-rgb")}
             if args.mode == "probe":
                 result["boot_cycles"] = 2
+                result["virtual_indicator_events"] = indicator_events
+                result["motor_events"] = motor_events
             elif args.mode != "wake-negative":
                 result["asr"] = next(line.split("Application: >> ", 1)[1] for line in
                                      reversed(text().splitlines()) if "Application: >> " in line)
@@ -232,6 +259,34 @@ def main():
     assert any(samples), "I2S speaker output is silent"
     if args.mode == "probe":
         assert all(x in (0, 0x2345) for x in samples), "I2S output content mismatch"
+        # This host-only indicator has no device register or actuator mapping.
+        svg = ['<svg xmlns="http://www.w3.org/2000/svg" width="640" height="140" viewBox="0 0 640 140">',
+               '<rect width="640" height="140" fill="#fff"/>']
+        for index, event in enumerate(indicator_events):
+            x = 80 + 160 * index
+            color = "#16a34a" if event["on"] else "#9ca3af"
+            state = "ON" if event["on"] else "OFF"
+            svg.append(f'<circle cx="{x}" cy="45" r="22" fill="{color}"/>')
+            svg.append(f'<text x="{x}" y="100" text-anchor="middle" font-family="sans-serif" font-size="16">'
+                       f'Cycle {event["cycle"]}: {state}</text>')
+        svg.append('</svg>')
+        (output / "indicator.svg").write_text("\n".join(svg) + "\n")
+        height = 60 + len(motor_events) * 30
+        svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="680" height="{height}" viewBox="0 0 680 {height}">',
+               '<style>text {font:16px sans-serif}</style>',
+               f'<rect width="680" height="{height}" fill="#fff"/>',
+               '<text x="20" y="30">Boot / inputs</text><text x="250" y="30">Right motor</text>',
+               '<text x="470" y="30">Left motor</text>']
+        colors = {"coast": "#9ca3af", "forward": "#16a34a", "reverse": "#2563eb", "brake": "#d97706"}
+        for index, event in enumerate(motor_events):
+            y = 65 + index * 30
+            svg.append(f'<text x="20" y="{y}">{event["cycle"]} / {event["inputs"]:04b}</text>')
+            for x, side in ((250, "right"), (470, "left")):
+                state = event[side]
+                svg.append(f'<circle cx="{x}" cy="{y - 5}" r="8" fill="{colors[state]}"/>')
+                svg.append(f'<text x="{x + 20}" y="{y}">{state}</text>')
+        svg.append('</svg>')
+        (output / "motors.svg").write_text("\n".join(svg) + "\n")
     elif args.mode != "wake-negative":
         reply_pcm = pcm_output.read_bytes()[reply_offset:]
         reply_samples = array.array("h")

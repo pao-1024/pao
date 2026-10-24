@@ -157,6 +157,26 @@ static void storage(void) {
     ESP_LOGI("PROBE", "NVS_ROUNDTRIP_PASS");
 }
 
+static void motors(void) {
+    gpio_config_t config = {.pin_bit_mask = UINT64_C(15) << 11, .mode = GPIO_MODE_OUTPUT};
+    ESP_ERROR_CHECK(gpio_config(&config));
+    for (unsigned state = 0; state < 16; state++) {
+        for (unsigned pin = 0; pin < 4; pin++) {
+            ESP_ERROR_CHECK(gpio_set_level(11 + pin, (state >> pin) & 1));
+        }
+        ESP_LOGI("PROBE", "MOTOR_STAGE value=%u;", state);
+        unsigned ticks = 0;
+        while (gpio_get_level(0) && ticks++ < 5000) vTaskDelay(1);
+        assert(!gpio_get_level(0));
+        ESP_LOGI("PROBE", "MOTOR_ACK value=%u;", state);
+        ticks = 0;
+        while (!gpio_get_level(0) && ticks++ < 5000) vTaskDelay(1);
+        assert(gpio_get_level(0));
+    }
+    for (unsigned pin = 11; pin <= 14; pin++) ESP_ERROR_CHECK(gpio_reset_pin(pin));
+    ESP_LOGI("PROBE", "MOTOR_OUTPUTS_DISABLED");
+}
+
 void app_main(void) {
     floating_point();
     storage();
@@ -164,5 +184,6 @@ void app_main(void) {
     led();
     audio();
     button();
+    motors();
     ESP_LOGI("PROBE", "PROBE_DONE");
 }

@@ -3,7 +3,7 @@
 使用固定版本的 [PAO QEMU fork](https://github.com/pao-1024/qemu)，运行 ESP32-S3
 的 I2S/GDMA、SSD1306 OLED、GPIO0 BOOT 按键和 GPIO48 WS2812。
 小智仿真板沿用真实 I2S Codec、音频处理、Opus 和服务协议，以 OpenETH 替代 Wi-Fi。
-电机和发射控制不在该固件中。
+左右电机由 GPIO 输出的数字逻辑模型验证；另有一个仅供仿真显示亮灭的虚拟小灯。
 
 ## 本机依赖
 
@@ -40,6 +40,19 @@ I2C 地址 NACK、SSD1306 全屏像素、WS2812 RGB、I2S 输入及输出采样�
 
 结果在 `tmp/qemu-probe/result.json`，串口日志为 `uart.log`，屏幕为 `oled.pbm`，
 扬声器音频为 `speaker.wav`。这项验证不连接云服务，也不使用真实设备身份。
+
+探针还提供纯软件的模拟事件占位：观察到虚拟按键按下时输出 `SIM_EVENT ... indicator=ON`，
+观察到松开后输出 `indicator=OFF`，跨两轮重启记录到 `result.json` 的
+`virtual_indicator_events`，并生成 `indicator.svg` 显示亮灯/灭灯记录。
+这个指示灯只存在于主机报告中，不映射设备寄存器、GPIO 或执行机构，也不代表任何外设控制已验证。
+
+电机模型读取固件实际写入 GPIO11–14 的输出，按照
+[MX1508 Rev1.3 数据手册的真值表](https://pcb.daince.net/_media/2wd_project_v100:584fa0ef01fdf-1.pdf)
+解释每路两个输入：`00` 待机、`10` 正转、`01` 反转、`11` 刹车。
+探针遍历左右两路的全部 16 种组合，并在第二轮重启后重复验证，结束时关闭输出。
+结果写入 `result.json` 的 `motor_events`，`motors.svg` 用颜色和文字展示两路状态。
+这里的正反转是驱动器的逻辑方向，不推断装配后的小车前后方向；不计算转速、惯性或负载。
+电机状态检查仅位于独立探针中，语音固件没有接入电机控制接口。
 
 ## 灵矽语音会话
 
