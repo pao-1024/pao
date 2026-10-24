@@ -172,8 +172,8 @@ if (launcher.fire() == ESP_ERR_INVALID_STATE) {
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
 仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
-并使用 Cppcheck 对本仓库的 `firmware/components/pao/`、`firmware/boards/` 和
-`firmware/simulation/probe/main/` 进行 C/C++ 静态分析。
+并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/`
+进行 C/C++ 静态分析。
 
 PR 仅运行静态检查。推送到 `main` 或在 `main` 上手动触发时，静态检查通过后，
 `Firmware build` 任务使用乐鑫官方

@@ -1,11 +1,4 @@
-#include "sdkconfig.h"
 #include "wifi_board.h"
-#ifdef CONFIG_PAO_QEMU_NETWORK
-#include "../../simulation/qemu_network.h"
-using PaoNetworkBoard = QemuNetworkBoard;
-#else
-using PaoNetworkBoard = WifiBoard;
-#endif
 #include "application.h"
 #include "button.h"
 #include "chassis.h"
@@ -24,7 +17,7 @@ using PaoNetworkBoard = WifiBoard;
 
 #define TAG "PaoBoard"
 
-class PaoBoard : public PaoNetworkBoard {
+class PaoBoard : public WifiBoard {
 private:
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};

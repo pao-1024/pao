@@ -17,11 +17,25 @@ import urllib.request
 import uuid
 import wave
 
-from qemu import flash_image
-
 ROOT = Path(__file__).resolve().parents[2]
 SSID = "pao-sim-ap"
 PASSWORD = "pao-sim-password"
+
+
+def flash_image(build, destination, nvs):
+    config = json.loads((build / "flasher_args.json").read_text())
+    image = bytearray(b"\xff" * (16 * 1024 * 1024))
+    for offset, name in config["flash_files"].items():
+        data = (build / name).read_bytes()
+        start = int(offset, 0)
+        if start < 0 or start + len(data) > len(image):
+            raise ValueError(f"Flash segment outside 16 MB: {name}")
+        image[start:start + len(data)] = data
+    data = nvs.read_bytes()
+    if len(data) != 0x4000:
+        raise ValueError("Voice NVS must match the 0x4000-byte partition")
+    image[0x9000:0xd000] = data
+    destination.write_bytes(image)
 
 
 def main():
@@ -49,7 +63,7 @@ def main():
     revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
     build = (args.build or ROOT / "tmp/build" / revision).resolve()
     config = json.loads((build / "config/sdkconfig.json").read_text())
-    if (not config.get("BOARD_TYPE_PAO") or config.get("PAO_QEMU_NETWORK")
+    if (not config.get("BOARD_TYPE_PAO")
             or not config.get("USE_AFE_WAKE_WORD") or not config.get("SR_WN_WN9_NIHAOXIAOZHI_TTS")):
         raise RuntimeError("Build the production PAO firmware with WakeNet enabled")
     output = ROOT / "tmp/esp32sim-full-flow"

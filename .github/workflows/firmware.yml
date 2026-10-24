@@ -49,7 +49,7 @@ jobs:
         run: |
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
             -Ifirmware/components/pao/include -Ifirmware/boards/pao \
-            firmware/components/pao firmware/boards firmware/simulation/probe/main
+            firmware/components/pao firmware/boards
 
   firmware:
     name: Firmware build

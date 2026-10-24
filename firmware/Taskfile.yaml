@@ -12,8 +12,6 @@ tasks:
       - python3 simulation/build-esp32sim.py
   sim:build:
     desc: 构建仓库正式 PAO 固件（真实 Wi-Fi、I2S 和 WakeNet）
-    env:
-      PAO_PROFILE: hardware
     cmds:
       - bash scripts/build.sh
   sim:full:
@@ -22,34 +20,6 @@ tasks:
       - task: sim:install
       - task: sim:build
       - python3 simulation/esp32sim-flow.py {{.CLI_ARGS}}
-  qemu:install:
-    desc: 构建固定版本的 PAO QEMU fork（需要本机编译依赖）
-    cmds:
-      - python3 simulation/build-qemu.py
-  qemu:build:
-    desc: 构建正式 PAO 固件的 QEMU 网络适配配置
-    env:
-      PAO_PROFILE: qemu
-    cmds:
-      - bash scripts/build.sh
-  qemu:probe:
-    desc: 构建并验证 QEMU 外设及重启
-    deps: [qemu:install]
-    env:
-      PAO_BUILD_ACTION: probe
-    cmds:
-      - bash scripts/build.sh
-      - python3 simulation/qemu.py probe --build ../tmp/probe-build
-  qemu:run:
-    desc: 在 QEMU 中运行真实灵矽语音会话（使用 -- 传入参数）
-    deps: [qemu:install, qemu:build]
-    cmds:
-      - python3 simulation/qemu.py voice {{.CLI_ARGS}}
-  qemu:wake:
-    desc: 验证真实 I2S、WakeNet 唤醒及后续云端对话（使用 -- 传入参数）
-    deps: [qemu:install, qemu:build]
-    cmds:
-      - python3 simulation/qemu.py wake {{.CLI_ARGS}}
   build:
     desc: 使用已配置的 ESP-IDF 或 EIM，准备小智并构建 PAO 固件（REF=分支/Tag/commit）
     cmds:

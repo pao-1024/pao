@@ -1,4 +1,0 @@
-config PAO_QEMU_NETWORK
-    bool "Use OpenETH transport for the PAO board in QEMU"
-    default n
-    select ETH_USE_OPENETH
