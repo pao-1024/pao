@@ -58,6 +58,8 @@ def main():
     command = [emulator, "--board", "pao", "--boot", "rom", "--rom", args.rom.resolve(),
                "--mac", args.mac, "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
                "--flash-file", flash, "--wifi", f"ssid={SSID},psk={PASSWORD}",
+               # The firmware's remote-control page on port 80, reachable from the host.
+               "--hostfwd", "tcp:127.0.0.1:8081-:80",
                "--web", "8080", "--web-dir", ROOT / "tmp/simulator-web", "--console", "uart0", "--no-dump"]
     # Refresh firmware images over the persistent flash without overwriting its NVS.
     images = json.loads((build / "flasher_args.json").read_text())["flash_files"]
@@ -67,7 +69,8 @@ def main():
         if start < 0xd000 and start + image.stat().st_size > 0x9000:
             parser.error(f"Firmware image overlaps the saved NVS partition: {name}")
         command.extend(["--flash-at", f"{offset}={image}"])
-    print("Open http://127.0.0.1:8080/ and enable the microphone/speaker. Ctrl+C stops and saves flash.", flush=True)
+    print("Open http://127.0.0.1:8080/ and enable the microphone/speaker; the remote control is at "
+          "http://127.0.0.1:8081/. Ctrl+C stops and saves flash.", flush=True)
     os.execv(emulator, [str(arg) for arg in command])
 
 

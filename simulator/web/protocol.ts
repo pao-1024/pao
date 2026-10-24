@@ -98,6 +98,29 @@ export function motion(left: number, right: number) {
   return `${direction}并${turn > 0 ? "左" : "右"}转`;
 }
 
+/** Car pose in scene units (the car is about 1.7 long); heading 0 faces +Z and grows turning left. */
+export type Pose = { x: number; z: number; heading: number };
+// ponytail: duty maps linearly to speed with no inertia or stall; calibrate against the real car if the view must match distances.
+export const MAX_SPEED = 3, TRACK = 1.56;
+
+/** Differential drive: integrates signed wheel duties in [-1, 1] over `dt` seconds. */
+export function stepPose(pose: Pose, left: number, right: number, dt: number): Pose {
+  const speed = (left + right) / 2 * MAX_SPEED, turn = (right - left) * MAX_SPEED / TRACK;
+  const heading = pose.heading + turn * dt / 2;
+  return { x: pose.x + Math.sin(heading) * speed * dt, z: pose.z + Math.cos(heading) * speed * dt, heading: pose.heading + turn * dt };
+}
+
+/** Simulated launcher energy: the module charges while CH1 (GPIO17) pulls in and a CH2 (GPIO18) pull-in spends it. */
+export type Launcher = { energy: number; shots: number; lastShot: number | null };
+// ponytail: linear charge over a guessed full-charge time; replace with the measured curve once the module is characterised.
+export const FULL_CHARGE_S = 5;
+
+/** Advances the launcher by `dt` seconds with CH1 as it was, then applies a CH2 pull-in seen in the same interval. */
+export function stepLauncher(state: Launcher, dt: number, charging: boolean, fired: boolean): Launcher {
+  const energy = charging ? Math.min(1, state.energy + dt / FULL_CHARGE_S) : state.energy;
+  return fired ? { energy: 0, shots: state.shots + 1, lastShot: energy } : { ...state, energy };
+}
+
 const STATES: Record<string, string> = {
   starting: "启动中", wifi_configuring: "配网", idle: "待机", connecting: "连接中", listening: "聆听",
   speaking: "说话", upgrading: "升级", activating: "激活中", audio_testing: "音频测试", fatal_error: "错误",

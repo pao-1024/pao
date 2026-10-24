@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
-import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, wheels } from "./protocol.ts";
-import type { Bus, Module, Wire } from "./protocol.ts";
+import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, stepLauncher, wheels } from "./protocol.ts";
+import type { Bus, Launcher, Module, Wire } from "./protocol.ts";
+import { Car3D } from "./car3d.tsx";
 import "./style.css";
 
 type Microphone = {
@@ -55,6 +56,9 @@ function App() {
   const [logFilter, setLogFilter] = useState("");
   const [device, setDevice] = useState("未知");
   const [command, setCommand] = useState<Command>(null);
+  const [launcherCommand, setLauncherCommand] = useState<string | null>(null);
+  const [launcher, setLauncher] = useState<Launcher>({ energy: 0, shots: 0, lastShot: null });
+  const charge = useRef({ time: 0, charging: false });
   const [uartBytes, setUartBytes] = useState(0);
   const [audio, setAudio] = useState({ speaker: { rate: 0, peak: 0 }, microphone: { rate: 0, peak: 0 } });
   const [now, setNow] = useState(performance.now());
@@ -121,12 +125,23 @@ function App() {
       const drive = line.match(/Chassis drive: forward=(-?\d+) turn=(-?\d+) duration_ms=(\d+)/);
       if (drive) setCommand({ forward: +drive[1], turn: +drive[2], duration: +drive[3] });
       if (line.includes("Chassis stopped")) setCommand(null);
+      const launch = line.match(/Launcher charge: duration_ms=(\d+) fire_after=(\d)/);
+      if (launch) setLauncherCommand(+launch[1] ? `充能 ${launch[1]} ms${+launch[2] ? " 后发射" : ""}` : "stop");
+      if (line.includes("Launcher charge stopped")) setLauncherCommand("充能到时，自动断电");
+      if (line.includes("Launcher fired")) setLauncherCommand("fire");
+      if (line.includes("Launcher fire rejected")) setLauncherCommand("fire 被拒绝：充能中");
     }
     if (lines.length) setLogLines(previous => [...previous, ...lines].slice(-LOG_LINES));
   }
 
   function trace(message: { time: number; levels: string; known: string; pwm: [number, number][]; i2c: [number, number]; dropped: number; events: TraceEvent[] }) {
     simTime.current = message.time;
+    // CH1 as it stood during this interval charges first; a CH2 pull-in reported in the same batch fires after.
+    const fired = message.events.some(event => event.k === "gpio" && event.pin === 18 && !event.v);
+    const dt = Math.max(0, message.time - charge.current.time);
+    setLauncher(state => stepLauncher(state, dt, charge.current.charging, fired));
+    const levels = BigInt(`0x${message.levels}`), known17 = (BigInt(`0x${message.known}`) >> 17n & 1n) === 1n;
+    charge.current = { time: message.time, charging: known17 && (levels >> 17n & 1n) === 0n };
     setPins(previous => ({
       ...previous, levels: BigInt(`0x${message.levels}`), known: BigInt(`0x${message.known}`),
       pwm: new Map(message.pwm), i2c: message.i2c,
@@ -299,6 +314,8 @@ function App() {
           {recording ? "关闭麦克风" : "启用麦克风和扬声器"}
         </button>
         <button disabled={!connected} onClick={pressBoot}>BOOT</button>
+        {/* 固件内置遥控页，由 run-esp32sim.py 的 --hostfwd 转发到本机 8081。 */}
+        <a className="button" href="http://127.0.0.1:8081/" target="_blank" rel="noreferrer">遥控</a>
       </div>
     </header>
     <p className="hint" role="status">{hint}</p>
@@ -313,11 +330,13 @@ function App() {
             <span className="led-row"><span className={`led ${led === "rgb(0,0,0)" ? "" : "lit"}`} style={{ "--led": led } as CSSProperties} aria-label={led === "rgb(0,0,0)" ? "状态灯 灭" : "状态灯 亮"} /> GPIO48</span>
           </div>
         </div>
-        <Car left={left} right={right} charging={charging} firing={firing} />
+        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} />
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
           <dt>固件指令</dt><dd>{command ? `drive forward=${command.forward} turn=${command.turn} · ${command.duration} ms` : "无进行中的运动"}</dd>
-          <dt>发射器</dt><dd>{firing ? "发射中（CH2 吸合）" : charging ? "充能中（CH1 吸合）" : known(17) ? "断电" : "未初始化"}</dd>
+          <dt>发射器</dt><dd>{firing ? "发射中（CH2 吸合）" : charging ? "充能中（CH1 吸合）" : known(17) ? "断电" : "未初始化"} · 电量 {percent(launcher.energy)}</dd>
+          <dt>发射记录</dt><dd>{launcher.shots ? `共 ${launcher.shots} 发 · 上一发能量 ${percent(launcher.lastShot ?? 0)}${launcher.lastShot ? "" : "（空发）"}` : "尚未发射"}</dd>
+          <dt>发射器指令</dt><dd>{launcherCommand ?? "无"}</dd>
         </dl>
       </section>
 
@@ -396,35 +415,6 @@ function record(stream: Stream, samples: Float32Array, rate: number, scope: HTML
     if (x) context.lineTo(x, y); else context.moveTo(x, y);
   }
   context.stroke();
-}
-
-function Car({ left, right, charging, firing }: { left: number; right: number; charging: boolean; firing: boolean }) {
-  const wheel = (x: number, speed: number, name: string) => {
-    const fill = Math.min(1, Math.abs(speed)) * 38, cx = x + 13;
-    return <g>
-      <rect x={x} y={40} width={26} height={84} rx={6} className="tyre" />
-      <rect x={x + 4} y={speed >= 0 ? 82 - fill : 82} width={18} height={fill} rx={3} className={speed >= 0 ? "drive fwd" : "drive rev"} />
-      {speed > 0.01 && <path d={`M${cx} 24 l-7 10 h14 z`} className="arrow fwd" />}
-      {speed < -0.01 && <path d={`M${cx} 140 l-7 -10 h14 z`} className="arrow rev" />}
-      <text x={cx} y={160} className="label">{name} {Math.round(speed * 100)}%</text>
-    </g>;
-  };
-  const forward = (left + right) / 2, turn = (right - left) / 2;
-  const moving = Math.abs(left) > 0.01 || Math.abs(right) > 0.01;
-  return <svg viewBox="0 0 240 172" className="car" role="img" aria-label={`底盘：${motion(left, right)}`}>
-    <rect x={62} y={30} width={116} height={116} rx={18} className="body" />
-    <rect x={92} y={16} width={56} height={24} rx={6} className={`launcher ${firing ? "fire" : charging ? "charge" : ""}`} />
-    <text x={120} y={32} className="label small">{firing ? "发射" : charging ? "充能" : "发射器"}</text>
-    <text x={120} y={60} className="label muted">前</text>
-    {wheel(30, left, "左")}
-    {wheel(184, right, "右")}
-    {moving
-      ? <g className="motion" transform={`rotate(${-turn * 60} 120 96)`}>
-          <line x1={120} y1={forward >= 0 ? 118 : 74} x2={120} y2={forward >= 0 ? 80 : 112} />
-          <path d={forward >= 0 ? "M120 70 l-8 12 h16 z" : "M120 122 l-8 -12 h16 z"} />
-        </g>
-      : <text x={120} y={100} className="label muted">停止</text>}
-  </svg>;
 }
 
 function Wiring({ value, isActive }: { value: (wire: Wire) => string; isActive: (pin: number) => boolean }) {
