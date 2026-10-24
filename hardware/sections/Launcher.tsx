@@ -1,11 +1,9 @@
 import { nets } from "../nets"
-import { Buck3V3Module } from "../components/Buck3V3"
 import { LauncherModule } from "../components/LauncherModule"
 import { RelayModule } from "../components/RelayModule"
 
-// 发射器供电自成一路：5V 降压到 3.3V 后只供继电器线圈与发射器，
-// 不并到主控 3V3，避免充能脉冲拉塌开发板稳压器。
-// 布局按「5V → 降压 → 继电器 → 发射器」从左到右推进，供电侧统一在左。
+// 发射器区只画「继电器 → 发射器」的接线。
+// 专用 3.3V 由供电区的 BUCK_3V3 产生，这里通过 V3V3_AUX 网络引入。
 export function Launcher() {
   return (
     <>
@@ -13,31 +11,17 @@ export function Launcher() {
       {/* 此区标题手动定位在元件簇正上方，避免与相邻 OLED 分区重叠。 */}
       <schematictext
         text="电磁发射器 / 双继电器"
-        schX={-10.5}
-        schY={-4.4}
+        schX={-9}
+        schY={-4.2}
         fontSize={0.18}
-      />
-      <Buck3V3Module
-        doNotPlace
-        name="BUCK_3V3"
-        displayName="发射器 3.3V 降压"
-        schSectionName="Launcher"
-        schX={-11.5}
-        schY={-7.4}
-        connections={{
-          VIN_PLUS: nets.power.v5.selector,
-          VIN_MINUS: nets.power.gnd.selector,
-          VOUT_PLUS: nets.power.v3v3Aux.selector,
-          VOUT_MINUS: nets.power.gnd.selector,
-        }}
       />
       {/* CH1：充能。触点把专用 3.3V 送到发射器供电脚，供电即开始充能。 */}
       <RelayModule
         doNotPlace
         name="RELAY_CHARGE"
         schSectionName="Launcher"
-        schX={-7}
-        schY={-5.4}
+        schX={-9}
+        schY={-6}
         noConnect={["NC"]}
         connections={{
           VCC: nets.power.v3v3Aux.selector,
@@ -52,8 +36,8 @@ export function Launcher() {
         doNotPlace
         name="RELAY_FIRE"
         schSectionName="Launcher"
-        schX={-7}
-        schY={-9.2}
+        schX={-9}
+        schY={-9.6}
         noConnect={["NC"]}
         connections={{
           VCC: nets.power.v3v3Aux.selector,
@@ -66,8 +50,8 @@ export function Launcher() {
       <netlabel
         net={nets.power.gnd.name}
         connection="LAUNCHER.GND"
-        schX={-5.3}
-        schY={-7.3}
+        schX={-7.1}
+        schY={-7.9}
         anchorSide="right"
       />
       <LauncherModule
@@ -75,8 +59,8 @@ export function Launcher() {
         name="LAUNCHER"
         displayName="电磁发射器"
         schSectionName="Launcher"
-        schX={-2.2}
-        schY={-7.3}
+        schX={-4.4}
+        schY={-7.8}
         connections={{
           GND: nets.power.gnd.selector,
         }}
