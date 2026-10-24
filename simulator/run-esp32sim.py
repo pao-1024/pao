@@ -60,6 +60,10 @@ def main():
                "--flash-file", flash, "--wifi", f"ssid={SSID},psk={PASSWORD}",
                # The firmware's remote-control page on port 80, reachable from the host.
                "--hostfwd", "tcp:127.0.0.1:8081-:80",
+               # Wake-word recognition runs below real time while someone speaks; catch up during
+               # silence instead of skipping the lag, so no speech is dropped. 4 s fills the 16 kHz
+               # microphone queue.
+               "--max-lag", "4",
                "--web", "8080", "--web-dir", ROOT / "tmp/simulator-web", "--console", "uart0", "--no-dump"]
     # Refresh firmware images over the persistent flash without overwriting its NVS.
     images = json.loads((build / "flasher_args.json").read_text())["flash_files"]

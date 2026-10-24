@@ -36,6 +36,7 @@ function App() {
   const microphone = useRef<Microphone | null>(null);
   const speaker = useRef<AudioContext | null>(null);
   const playHead = useRef(0);
+  const playLead = useRef(0.06);
   const active = useRef(new Map<number, number>());
   const nextRow = useRef(0);
   const simTime = useRef(0);
@@ -44,7 +45,7 @@ function App() {
   const paused = useRef(false);
   const [connected, setConnected] = useState(false);
   const [stat, setStat] = useState({ time: 0, speed: null as number | null, insns: 0 });
-  const [hint, setHint] = useState("授权麦克风后说“你好小智”。建议使用耳机。");
+  const [hint, setHint] = useState("授权麦克风后说“小炮小炮”。建议使用耳机。");
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [led, setLed] = useState("rgb(0,0,0)");
@@ -109,7 +110,12 @@ function App() {
       audio.getChannelData(0).set(samples);
       const source = context.createBufferSource();
       source.buffer = audio; source.connect(context.destination);
-      playHead.current = Math.max(playHead.current, context.currentTime + 0.06);
+      // Emulation can fall below real time; every underrun grows the jitter buffer so playback
+      // pauses less often, trading up to 0.5 s of extra latency for smoother speech.
+      if (playHead.current < context.currentTime) {
+        if (playHead.current > 0) playLead.current = Math.min(0.5, playLead.current + 0.05);
+        playHead.current = context.currentTime + playLead.current;
+      }
       source.start(playHead.current); playHead.current += audio.duration;
     }
   }
@@ -176,7 +182,10 @@ function App() {
     function connect() {
       const connection = new WebSocket(`ws://${location.host}/ws`);
       connection.binaryType = "arraybuffer"; socket.current = connection;
-      connection.onopen = () => setConnected(true);
+      connection.onopen = () => {
+        setConnected(true);
+        if (microphone.current) setHint("正在收音，说“小炮小炮”");
+      };
       connection.onmessage = event => {
         if (event.data instanceof ArrayBuffer) { binary(event.data); return; }
         const message = JSON.parse(event.data);
@@ -188,12 +197,14 @@ function App() {
           const input = BigInt(`0x${message.gpio_in}`);
           setPins(previous => previous.input === input ? previous : { ...previous, input });
         } else if (message.t === "microphone-error") {
-          void stopMicrophone(); setHint(message.message);
+          // The simulator bounds its own backlog; this reports a full queue or a missing I2S port.
+          setHint(`麦克风数据未送达设备：${message.message}`);
         }
       };
       connection.onclose = () => {
         if (disposed) return;
-        void stopMicrophone(); setConnected(false);
+        // The microphone and speaker stay open; audio resumes on the next connection.
+        setConnected(false);
         retry = setTimeout(connect, 1000);
       };
     }
@@ -241,8 +252,9 @@ function App() {
       const source = context.createMediaStreamSource(stream);
       const node = new AudioWorkletNode(context, "pao-microphone");
       node.port.onmessage = event => {
-        if (connection.readyState !== WebSocket.OPEN) return;
-        connection.send(event.data);
+        const current = socket.current;
+        if (!current || current.readyState !== WebSocket.OPEN) return;
+        current.send(event.data);
         // [5][port][PCM16] at the 1/16 slot gain of pao-microphone.js.
         const data = new DataView(event.data as ArrayBuffer), samples = new Float32Array((data.byteLength - 2) / 2);
         for (let i = 0; i < samples.length; i++) samples[i] = data.getInt16(2 + i * 2, true) / 2048;
@@ -254,7 +266,7 @@ function App() {
         throw Error("模拟器连接已断开");
       }
       microphone.current = {stream, context, source, node};
-      setRecording(true); setHint("正在收音，说“你好小智”");
+      setRecording(true); setHint("正在收音，说“小炮小炮”");
     } catch (error) {
       stream?.getTracks().forEach(track => track.stop());
       if (context) await context.close();
@@ -310,7 +322,7 @@ function App() {
         <span className="chip">指令 <b>{(stat.insns / 1e6).toFixed(0)} M</b></span>
       </div>
       <div className="actions">
-        <button className={recording ? "primary on" : "primary"} disabled={!connected || busy} onClick={() => void toggleMicrophone()}>
+        <button className={recording ? "primary on" : "primary"} disabled={busy || (!connected && !recording)} onClick={() => void toggleMicrophone()}>
           {recording ? "关闭麦克风" : "启用麦克风和扬声器"}
         </button>
         <button disabled={!connected} onClick={pressBoot}>BOOT</button>
