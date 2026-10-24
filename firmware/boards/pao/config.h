@@ -19,3 +19,8 @@
 #define MOTOR_GPIO_IN2 GPIO_NUM_12
 #define MOTOR_GPIO_IN3 GPIO_NUM_13
 #define MOTOR_GPIO_IN4 GPIO_NUM_14
+
+// 两块 3.3V 单路继电器模块：CH1 给发射器供电（通电即充能），CH2 短接发射按钮。
+// 触发跳帽均设在 L 档，低电平吸合，线圈由 5V 降压得到的专用 3.3V 供电。
+#define LAUNCHER_GPIO_CHARGE GPIO_NUM_17
+#define LAUNCHER_GPIO_FIRE GPIO_NUM_18

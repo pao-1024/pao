@@ -4,6 +4,7 @@
 #include "chassis.h"
 #include "codecs/no_audio_codec.h"
 #include "config.h"
+#include "launcher.h"
 #include "led/single_led.h"
 #include "motor.h"
 #include "pao.h"
@@ -14,6 +15,7 @@ private:
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
     Motor left_motor_{MOTOR_GPIO_IN3, MOTOR_GPIO_IN4};
     Chassis chassis_{left_motor_, right_motor_};
+    Launcher launcher_{LAUNCHER_GPIO_CHARGE, LAUNCHER_GPIO_FIRE};
 
 public:
     PaoBoard() {
