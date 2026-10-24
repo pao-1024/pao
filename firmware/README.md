@@ -152,8 +152,9 @@ demo.setEnabled(RelayDemo::Channel::kFirst, false);
 demo.allOff();
 ```
 
-接口固定为低电平吸合，匹配 [Seengreat 2-CH Relay HAT](https://seengreat.com/wiki/107/)
-的 3.3V VIO 配置；常开触点各自连接一盏串联 1kΩ 电阻的 LED。
+接口固定为低电平吸合，继电器板使用 3.3V 供电及逻辑输入；
+常开触点各自连接一盏使用 5V 供电、串联 1kΩ 电阻的 LED。
+接线前须核对实际模块的触发极性和输入偏置。
 调用串行执行，仅支持普通任务；每路状态保持到下一次调用或析构。
 SDK 错误或非法 GPIO/通道通过 `ESP_ERROR_CHECK` 终止。
 驱动不自动切换通道，GPIO 电平和继电器实际吸合、复位状态需实机验证。
