@@ -25,9 +25,8 @@ GPIO 按[硬件接线图](../../../hardware/README.md)配置，具体定义在�
 固件用 MultiNet（`mn7_cn`）把它作为命令词识别，配置在 `firmware/sdkconfig.defaults`：
 `CONFIG_CUSTOM_WAKE_WORD` 为空格分隔的拼音，`CONFIG_CUSTOM_WAKE_WORD_THRESHOLD`（1–99，越小越灵敏）
 用于调节误唤醒和漏唤醒，需实机测试后确定。
-MultiNet 计算量是 WakeNet 的数倍，固件只在 VAD 判定为语音时运行识别，并在语音结束后保持 1 s，
-避免唤醒词两字之间的停顿清空识别状态；持续静音时跳过；
-环境噪声持续触发 VAD 时占用会回升。
+MultiNet 计算量是 WakeNet 的数倍，固件只在 VAD 判定为语音及其后 1 s 内运行识别，
+唤醒词中间的停顿不会打断识别；环境噪声持续触发 VAD 时 CPU 占用会回升。
 设备说话或聆听时再次说唤醒词会打断当前回复并重新开始聆听。
 直接说话打断需要回声消除，板上 I2S 没有扬声器回采通道，暂不支持。
 板型和构建配置名称均为 `pao`，

@@ -132,10 +132,10 @@ function App() {
       if (drive) setCommand({ forward: +drive[1], turn: +drive[2], duration: +drive[3] });
       if (line.includes("Chassis stopped")) setCommand(null);
       const launch = line.match(/Launcher charge: duration_ms=(\d+) fire_after=(\d)/);
-      if (launch) setLauncherCommand(+launch[1] ? `充能 ${launch[1]} ms${+launch[2] ? " 后发射" : ""}` : "stop");
+      if (launch) setLauncherCommand(+launch[1] ? `充能 ${launch[1]} ms${+launch[2] ? " 后发射" : ""}` : "断电");
       if (line.includes("Launcher charge stopped")) setLauncherCommand("充能到时，自动断电");
-      if (line.includes("Launcher fired")) setLauncherCommand("fire");
-      if (line.includes("Launcher fire rejected")) setLauncherCommand("fire 被拒绝：充能中");
+      if (line.includes("Launcher fired")) setLauncherCommand("发射");
+      if (line.includes("Launcher fire rejected")) setLauncherCommand("发射被拒绝：充能中");
     }
     if (lines.length) setLogLines(previous => [...previous, ...lines].slice(-LOG_LINES));
   }
@@ -146,10 +146,10 @@ function App() {
     const fired = message.events.some(event => event.k === "gpio" && event.pin === 18 && !event.v);
     const dt = Math.max(0, message.time - charge.current.time);
     setLauncher(state => stepLauncher(state, dt, charge.current.charging, fired));
-    const levels = BigInt(`0x${message.levels}`), known17 = (BigInt(`0x${message.known}`) >> 17n & 1n) === 1n;
-    charge.current = { time: message.time, charging: known17 && (levels >> 17n & 1n) === 0n };
+    const levels = BigInt(`0x${message.levels}`), known = BigInt(`0x${message.known}`);
+    charge.current = { time: message.time, charging: (known >> 17n & 1n) === 1n && (levels >> 17n & 1n) === 0n };
     setPins(previous => ({
-      ...previous, levels: BigInt(`0x${message.levels}`), known: BigInt(`0x${message.known}`),
+      ...previous, levels, known,
       pwm: new Map(message.pwm), i2c: message.i2c,
     }));
     const list: Omit<Row, "id" | "time">[] = [];
