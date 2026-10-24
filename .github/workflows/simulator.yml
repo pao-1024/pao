@@ -1,0 +1,43 @@
+name: Simulator
+
+on:
+  push:
+    branches: [main]
+    paths: ['simulator/**', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+  pull_request:
+    paths: ['simulator/**', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Simulator static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: simulator/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: simulator/pnpm-lock.yaml
+      - name: Install browser dependencies
+        working-directory: simulator
+        run: pnpm install --frozen-lockfile
+      - name: Check scripts and browser input
+        env:
+          PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
+        run: |
+          python3 -m py_compile simulator/*.py
+          node --check simulator/web/pao-microphone.js
+          pnpm --dir simulator run check

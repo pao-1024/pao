@@ -1,4 +1,4 @@
-# 固件仿真验证
+# PAO 模拟器
 
 仿真通过本仓库的 `pao-sim` Rust 扩展，调用固定版本的
 [esp32sim 内核](https://github.com/pao-1024/esp32sim)，
@@ -7,21 +7,22 @@
 `pao` 模拟板将 GPIO41/42 上 SSD1306 的真实 I2C 写入渲染为图像，并显示 GPIO48 状态灯。
 交互模式使用电脑麦克风和扬声器；自动验证使用 PCM 文件并保存 WAV。
 
-板型与 SSD1306 模型在 `pao-sim/src/`，网页与 AudioWorklet 在 `web/`。
+板型与 SSD1306 模型在 `pao-sim/src/`，React 网页与 AudioWorklet 在 `web/`。
 内核 fork 只维护通用 CPU、网络、Flash、I2S 支持和库入口，不包含 PAO 板型或页面。
 启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
 `BoardModel` 接口挂载本地板型；不依赖动态插件 ABI。
 
 `esp32sim.json` 固定内核 commit；安装脚本将其检出到 `tmp/esp32sim/`，
 再由本地 crate 的 path 依赖链接该源码缓存。`Cargo.lock` 固定 crate 依赖关系。
-构建产物为 `tmp/esp32sim-build/release/pao-sim`，网页由本仓库直接维护和提供。
+构建产物为 `tmp/esp32sim-build/release/pao-sim`，React 网页构建到 `tmp/simulator-web/`。
 
 ## 网页语音交互
 
-完成一次下方的完整流程后，启动已配网、已激活的同一测试设备：
+先构建正式固件并完成一次下方的命令行验证，准备好已配网、已激活的 Flash。
+随后一条命令构建模拟器、React 网页并启动同一测试设备：
 
 ```sh
-task firmware:sim:run -- \
+task simulator:run -- \
   --rom '<ESP32-S3 ROM ELF 的绝对路径>' \
   --mac '<已激活测试设备的 MAC>'
 ```
@@ -30,11 +31,16 @@ task firmware:sim:run -- \
 说“你好小智”后直接提问。网页同时显示 OLED、状态灯和 BOOT 按键。
 无需 `--wake-input` 或 `--pcm-input`。建议戴耳机避免扬声器声音再次进入麦克风。
 终端按 Ctrl+C 退出并保存独立的 `interactive.bin`，不会覆盖自动验证的 Flash。
-更新模拟器版本后先运行 `task firmware:sim:install`。
+每次启动都加载当前固件构建的镜像段，并保留交互 Flash 中的 NVS，避免一直运行旧固件。
+`task simulator:install` 只安装依赖并构建模拟器和网页，`task simulator:check` 检查脚本、React 类型及音频封包。
+
+两个 Python 入口用途不同：`run-esp32sim.py` 启动持续运行的网页交互，使用电脑麦克风，
+退出时保存独立的交互 Flash；`esp32sim-flow.py` 用音频文件自动驱动配网和对话，
+检查结果并退出，供开发时回归验证使用，不是交互启动入口。
 
 ## 环境与输入
 
-需要 Git、Python 3.10+、Task 和稳定版 Rust 工具链。
+需要 Git、Python 3.10+、Task、Node.js 24+、pnpm 10.32.1 和稳定版 Rust 工具链。
 ESP-IDF 使用主固件相同的 EIM 入口；先安装并选择 SDK，或激活已有 SDK 环境。
 首次需要联网下载源码、组件及模拟器依赖，后续复用缓存。
 
@@ -46,12 +52,14 @@ ESP-IDF 使用主固件相同的 EIM 入口；先安装并选择 SDK，或激活
 ROM 使用 ESP-IDF 工具包中的 `esp-rom-elfs/<版本>/esp32s3_rev0_rom.elf`。
 自动验证使用专用已激活测试设备的 MAC 和 UUID；不要提交设备身份、音频或服务配置。
 
-## 完整流程
+## 命令行回归验证
 
 在仓库根目录运行：
 
 ```sh
-task firmware:sim:full -- \
+task firmware:build
+task simulator:install
+python3 simulator/esp32sim-flow.py \
   --rom '<ESP32-S3 ROM ELF 的绝对路径>' \
   --wake-input "$PWD/tmp/device/wake.pcm" \
   --pcm-input "$PWD/tmp/device/input.pcm" \
@@ -59,7 +67,7 @@ task firmware:sim:full -- \
   --device-uuid '<已激活测试设备的 UUID>'
 ```
 
-命令构建模拟器及正式固件，按顺序验证：
+Python 入口使用已构建的模拟器和正式固件，按顺序验证：
 
 1. 新建不含 SSID 的 NVS，从 ROM 启动固件，初始化 OLED 并开启 SoftAP。
 2. 虚拟客户端加入热点，经 DHCP 获取地址，访问真实配置页并扫描虚拟 AP。
@@ -84,11 +92,11 @@ task firmware:sim:full -- \
 - `provision-oled.png`、`oled.png`：两轮运行的屏幕画面。
 - Flash/NVS：含测试设备配置，仅供本地复跑。
 
-模拟器版本由 `esp32sim.json` 固定。`task firmware:sim:install` 单独构建模拟器，
-`task firmware:sim:build` 单独构建正式固件。
-已有构建时，可直接执行 `python3 firmware/simulation/esp32sim-flow.py` 并传入相同参数；
+模拟器版本由 `esp32sim.json` 固定。`task simulator:install` 单独构建模拟器，
+`task firmware:build` 单独构建正式固件。
+已有构建时，可直接执行 `python3 simulator/esp32sim-flow.py` 并传入相同参数；
 `--build`、`--emulator` 分别指定已有固件构建目录和模拟器。
 
 仿真覆盖主要功能，不模拟射频干扰、电气特性和声学环境；
-浮点初始估计值不保证与芯片逐位一致。CI 仅静态检查仿真脚本，
+浮点初始估计值不保证与芯片逐位一致。独立的 Simulator CI 仅检查脚本、React 类型和音频封包，
 不编译或运行模拟器；主分支实机固件构建沿用仓库现有 CI。

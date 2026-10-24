@@ -7,6 +7,9 @@ includes:
   firmware:
     taskfile: ./firmware/Taskfile.yaml
     dir: ./firmware
+  simulator:
+    taskfile: ./simulator/Taskfile.yaml
+    dir: ./simulator
 
 tasks:
   skills:install:

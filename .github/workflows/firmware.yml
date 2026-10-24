@@ -43,7 +43,7 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
         run: |
           shellcheck firmware/scripts/build.sh
-          python3 -m py_compile firmware/scripts/build.py firmware/simulation/*.py
+          python3 -m py_compile firmware/scripts/build.py
 
       - name: Check C and C++ code
         run: |

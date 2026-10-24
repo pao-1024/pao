@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
@@ -31,7 +31,7 @@ def main():
     run("git", "fetch", "--depth=1", "origin", config["ref"], cwd=source)
     run("git", "checkout", "--detach", config["ref"], cwd=source)
     run("cargo", "build", "--locked", "--release", "--manifest-path",
-        ROOT / "firmware/simulation/pao-sim/Cargo.toml")
+        ROOT / "simulator/pao-sim/Cargo.toml")
     print(target / "release/pao-sim")
 
 

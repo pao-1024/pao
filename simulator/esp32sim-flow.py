@@ -17,7 +17,7 @@ import urllib.request
 import uuid
 import wave
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SSID = "pao-sim-ap"
 PASSWORD = "pao-sim-password"
 

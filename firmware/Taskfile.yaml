@@ -6,24 +6,6 @@ env:
   PYTHONPYCACHEPREFIX: '{{.ROOT_DIR}}/tmp/pycache'
 
 tasks:
-  sim:run:
-    desc: 启动网页交互，使用电脑麦克风、扬声器和 BOOT 按键
-    cmds:
-      - python3 simulation/run-esp32sim.py {{.CLI_ARGS}}
-  sim:install:
-    desc: 获取固定版本的 esp32sim 内核并构建本地 PAO 扩展（需要 Rust 工具链）
-    cmds:
-      - python3 simulation/build-esp32sim.py
-  sim:build:
-    desc: 构建仓库正式 PAO 固件（真实 Wi-Fi、I2S 和 WakeNet）
-    cmds:
-      - bash scripts/build.sh
-  sim:full:
-    desc: 用正式固件验证配网、OLED、唤醒、语音及按键（使用 -- 传入参数）
-    cmds:
-      - task: sim:install
-      - task: sim:build
-      - python3 simulation/esp32sim-flow.py {{.CLI_ARGS}}
   build:
     desc: 使用已配置的 ESP-IDF 或 EIM，准备小智并构建 PAO 固件（REF=分支/Tag/commit）
     cmds:

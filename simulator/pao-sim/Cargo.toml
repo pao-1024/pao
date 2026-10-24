@@ -6,9 +6,9 @@ license = "MIT"
 publish = false
 
 [dependencies]
-esp32sim = { path = "../../../tmp/esp32sim/cli" }
-esp-soc = { path = "../../../tmp/esp32sim/esp-soc" }
-esp-periph = { path = "../../../tmp/esp32sim/esp-periph" }
+esp32sim = { path = "../../tmp/esp32sim/cli" }
+esp-soc = { path = "../../tmp/esp32sim/esp-soc" }
+esp-periph = { path = "../../tmp/esp32sim/esp-periph" }
 
 [profile.release]
 opt-level = 3

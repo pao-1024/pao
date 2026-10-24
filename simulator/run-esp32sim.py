@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
@@ -20,15 +20,24 @@ def main():
     output = ROOT / "tmp/esp32sim-full-flow"
     seed = output / "saved.bin"
     revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
-    elf = ROOT / "tmp/build" / revision / "xiaozhi.elf"
+    build = ROOT / "tmp/build" / revision
+    elf = build / "xiaozhi.elf"
     for path in [args.rom, emulator, seed, elf]:
         if not path.is_file():
-            parser.error(f"Missing {path}; prepare the emulator, firmware and provisioned flash with sim:full first")
+            parser.error(f"Missing {path}; build firmware and complete provisioning with simulator/esp32sim-flow.py first")
     command = [emulator, "--board", "pao", "--boot", "rom", "--rom", args.rom.resolve(),
                "--mac", args.mac, "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
                "--flash-image", seed, "--flash-file", output / "interactive.bin",
                "--wifi", "ssid=pao-sim-ap,psk=pao-sim-password",
-               "--web", "8080", "--web-dir", ROOT / "firmware/simulation/web", "--console", "uart0", "--no-dump"]
+               "--web", "8080", "--web-dir", ROOT / "tmp/simulator-web", "--console", "uart0", "--no-dump"]
+    # Refresh firmware images over the persistent flash without overwriting its NVS.
+    images = json.loads((build / "flasher_args.json").read_text())["flash_files"]
+    for offset, name in images.items():
+        image = build / name
+        start = int(offset, 0)
+        if start < 0xd000 and start + image.stat().st_size > 0x9000:
+            parser.error(f"Firmware image overlaps the saved NVS partition: {name}")
+        command.extend(["--flash-at", f"{offset}={image}"])
     print("Open http://127.0.0.1:8080/ and enable the microphone/speaker. Ctrl+C stops and saves flash.", flush=True)
     os.execv(emulator, [str(arg) for arg in command])
 
