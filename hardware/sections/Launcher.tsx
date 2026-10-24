@@ -47,13 +47,6 @@ export function Launcher() {
           NO: "LAUNCHER.FIRE",
         }}
       />
-      <netlabel
-        net={nets.power.gnd.name}
-        connection="LAUNCHER.GND"
-        schX={-7.1}
-        schY={-7.9}
-        anchorSide="right"
-      />
       <LauncherModule
         doNotPlace
         name="LAUNCHER"
