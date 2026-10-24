@@ -111,7 +111,7 @@ test("编译产物包含全部模块，且没有电路错误", () => {
   )
 })
 
-test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
+test("14 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
   // 独立记录接线要求，不从电路源码导入预期值。
   const connections: [number, string][] = [
     [4, "MIC.WS"],
@@ -132,6 +132,7 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
   }
+  // 板载 BOOT 与状态灯只挂标签，不接外部器件，因此不进上面的成对断言。
   assert.deepEqual(
     ports
       .filter(
@@ -141,8 +142,26 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
       )
       .map(portName)
       .sort(),
-    connections.map(([gpio]) => `ESP32_S3.GPIO${gpio}`).sort(),
+    [
+      ...connections.map(([gpio]) => `ESP32_S3.GPIO${gpio}`),
+      "ESP32_S3.GPIO0",
+      "ESP32_S3.GPIO48",
+    ].sort(),
   )
+})
+
+test("板载 BOOT 按键与 WS2812 状态灯已标出，且不引外部接线", () => {
+  for (const name of ["ESP32_S3.GPIO0", "ESP32_S3.GPIO48"]) {
+    const pin = port(name)
+    const key = connectivity.getNetConnectedToId(pin.source_port_id)
+    assert.ok(key, `${name} 应有网络标签`)
+    const members = ports
+      .filter(
+        (item) => connectivity.getNetConnectedToId(item.source_port_id) === key,
+      )
+      .map(portName)
+    assert.deepEqual(members, [name], `${name} 只应有板载标签`)
+  }
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {

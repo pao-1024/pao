@@ -29,6 +29,9 @@ export function Controller() {
           GPIO14: nets.motorDrive.in4.selector,
           GPIO17: nets.launcher.charge.selector,
           GPIO18: nets.launcher.fire.selector,
+          // 板载资源：BOOT 按键与 WS2812 状态灯，不需要外部接线。
+          GPIO0: nets.onboard.boot.selector,
+          GPIO48: nets.onboard.led.selector,
         }}
       />
     </>

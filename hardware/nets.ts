@@ -31,6 +31,11 @@ export const nets = {
     in3: net("MOTOR_IN3"),
     in4: net("MOTOR_IN4"),
   },
+  // 开发板自带的按键与状态灯，只在主控引脚上标注，不接外部器件。
+  onboard: {
+    boot: net("ONBOARD_BOOT"),
+    led: net("ONBOARD_LED"),
+  },
   launcher: {
     charge: net("LAUNCH_CHARGE"),
     fire: net("LAUNCH_FIRE"),
