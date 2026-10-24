@@ -14,6 +14,29 @@ SSID = "pao-sim-ap"
 PASSWORD = "pao-sim-password"
 
 
+def load_identity(state):
+    """Create one virtual device identity and reuse it across simulator runs."""
+    identity_file = state / "identity.json"
+    if identity_file.is_file():
+        identity = json.loads(identity_file.read_text())
+        if (not isinstance(identity, dict) or
+                not isinstance(identity.get("mac"), str) or
+                not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", identity["mac"]) or
+                not isinstance(identity.get("uuid"), str)):
+            raise ValueError("identity.json must contain a valid MAC and UUID")
+        uuid.UUID(identity["uuid"])
+        return identity
+    if (state / "interactive.bin").exists():
+        raise ValueError("Flash exists without identity.json; restore the identity file or "
+                         f"move {state} aside to initialize a new virtual device")
+    mac = bytearray(os.urandom(6))
+    mac[0] = (mac[0] & 0xfc) | 0x02  # Locally administered, unicast address.
+    identity = {"mac": mac.hex(":"), "uuid": str(uuid.uuid4())}
+    state.mkdir(parents=True, exist_ok=True)
+    identity_file.write_text(json.dumps(identity, indent=2) + "\n")
+    return identity
+
+
 def create_flash(build, flash, device_uuid):
     """Write a blank 16 MB flash whose NVS already holds the virtual AP and device UUID."""
     description = json.loads((build / "project_description.json").read_text())
@@ -37,26 +60,24 @@ def create_flash(build, flash, device_uuid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rom", type=Path, required=True)
-    parser.add_argument("--mac", required=True)
-    parser.add_argument("--device-uuid", type=uuid.UUID, help="activated device UUID; needed only to create the flash")
     args = parser.parse_args()
-    if not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", args.mac):
-        parser.error("--mac must contain six hexadecimal octets")
     emulator = ROOT / "tmp/esp32sim-build/release/pao-sim"
-    flash = ROOT / "tmp/esp32sim-full-flow/interactive.bin"
+    state = ROOT / "tmp/esp32sim-full-flow"
+    flash = state / "interactive.bin"
     revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
     build = ROOT / "tmp/build" / revision
     elf = build / "xiaozhi.elf"
     for path in [args.rom, emulator, elf]:
         if not path.is_file():
             parser.error(f"Missing {path}; run task firmware:build first")
+    try:
+        identity = load_identity(state)
+    except (OSError, ValueError) as error:
+        parser.error(f"Cannot load {state / 'identity.json'}: {error}")
     if not flash.is_file():
-        if args.device_uuid is None:
-            parser.error(f"Missing {flash}; pass --device-uuid to create it")
-        flash.parent.mkdir(parents=True, exist_ok=True)
-        create_flash(build, flash, args.device_uuid)
+        create_flash(build, flash, identity["uuid"])
     command = [emulator, "--board", "pao", "--boot", "rom", "--rom", args.rom.resolve(),
-               "--mac", args.mac, "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
+               "--mac", identity["mac"], "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
                "--flash-file", flash, "--wifi", f"ssid={SSID},psk={PASSWORD}",
                # The firmware's remote-control page on port 80, reachable from the host.
                "--hostfwd", "tcp:127.0.0.1:8081-:80",
