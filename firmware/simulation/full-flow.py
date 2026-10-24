@@ -42,11 +42,11 @@ def main():
     if args.efuse.stat().st_size != 336:
         parser.error("Expected a 336-byte QEMU-compatible eFuse image")
     revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
-    build = (args.build or ROOT / "tmp/build" / (revision + "-esp-emu")).resolve()
+    build = (args.build or ROOT / "tmp/build" / revision).resolve()
     qemu_build = (args.qemu_build or ROOT / "tmp/build" / (revision + "-qemu")).resolve()
     config = json.loads((build / "config/sdkconfig.json").read_text())
-    if not config.get("PAO_ESP_EMU") or not config.get("WAKE_WORD_DISABLED"):
-        raise RuntimeError("Build must use the WiFi-only esp-emu profile")
+    if not config.get("BOARD_TYPE_PAO") or config.get("PAO_QEMU_NETWORK"):
+        raise RuntimeError("WiFi verification requires the repository's production PAO build")
     output = ROOT / "tmp/full-flow"
     output.mkdir(parents=True, exist_ok=True)
     lock = (output / "run.lock").open("a")
@@ -99,6 +99,8 @@ def main():
             content = log.read_text(errors="replace")
             if "Guru Meditation Error" in content or "abort() was called" in content:
                 raise RuntimeError(f"Guest crashed: {log}")
+            if "task_wdt: Task watchdog got triggered" in content:
+                raise RuntimeError(f"Guest task watchdog triggered: {log}")
             if predicate(content):
                 return content
             if process.poll() is not None:
@@ -129,7 +131,8 @@ def main():
         saved = json.loads(request("/saved/list"))
         assert SSID in saved, "SSID was not saved"
         assert json.loads(request("/exit", {}))["success"] is True
-        wait(process, log, lambda text: "State: activating -> idle" in text, "cloud activation")
+        content = wait(process, log, lambda text: "State: activating -> idle" in text, "cloud activation")
+        assert "pao: External PAO component initialized" in content, "Production board initialization missing"
     # --save-state flushes Flash at simulator exit; transfer only the common NVS partition.
     nvs = output / "provisioned-nvs.bin"
     nvs.write_bytes(flash.read_bytes()[0x9000:0xd000])
@@ -137,6 +140,7 @@ def main():
         content = wait(process, log, lambda text: "State: activating -> idle" in text,
                        "automatic reconnect after restart")
         assert "Got IP:" in content and "Access Point started" not in content
+        assert "pao: External PAO component initialized" in content, "Production board initialization missing"
     with simulator("wrong-password.log", password="wrong-sim-password", duration="25s") as (process, log):
         process.wait(timeout=min(40, max(1, deadline - time.monotonic())))
         content = log.read_text(errors="replace")
@@ -163,7 +167,8 @@ def main():
                     process.kill()
                     process.wait()
     voice = json.loads((ROOT / "tmp/qemu-wake/result.json").read_text())
-    result = {"provisioned": True, "saved_ssid": saved, "restart_reconnected": True,
+    result = {"firmware_board": "pao", "wifi_firmware": "production",
+              "provisioned": True, "saved_ssid": saved, "restart_reconnected": True,
               "invalid_ssid_rejected": True, "wrong_password_rejected": True,
               "wakeword_dialog": voice, "backends": "esp-emu WiFi -> persisted NVS -> QEMU I2S/WakeNet"}
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")

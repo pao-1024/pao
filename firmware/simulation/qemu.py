@@ -218,6 +218,7 @@ def main():
                 assert len(pixels) == 8192 and all(v == (i // 128) % 2 for i, v in enumerate(pixels)), "OLED pixel mismatch"
                 assert qmp.get("led-rgb") == 0x123456, "WS2812 color mismatch"
             else:
+                marker("pao: External PAO component initialized")
                 marker("activating -> idle")
                 if args.mode == "wake-negative":
                     qmp.set("input-active", 1)
@@ -226,14 +227,15 @@ def main():
                              "12 seconds of negative wake audio")
                     assert "Wake word detected:" not in text(), "False wakeup"
                     assert "idle -> connecting" not in text(), "Unexpected conversation"
-                    image = qmp.get("oled-pbm")
                 elif args.mode == "wake":
                     qmp.set("input-active", 1)
                     marker("Wake word detected:")
                     qmp.set("input-active", 0)
                 else:
+                    start = qmp.get("rx-bytes")
                     qmp.set("gpio-inputs", 0xfffffffffffffffe)
-                    marker("BOOT_DOWN")
+                    wait_for(lambda: qmp.get("rx-bytes") - start >= 6400,
+                             "100 ms button hold while real I2S DMA runs")
                     qmp.set("gpio-inputs", 0xffffffffffffffff)
                 if args.mode != "wake-negative":
                     marker("connecting -> listening")
@@ -249,9 +251,8 @@ def main():
                     reply_offset = pcm_output.stat().st_size
                     wait_for(lambda: "Application: << " in text()[offset:], "assistant reply")
                     wait_for(lambda: "speaking -> listening" in text()[offset:], "reply playback")
-                    image = qmp.get("oled-pbm")
-                assert "1" in image.split()[3:], "OLED is blank"
-            (output / "oled.pbm").write_text(image)
+            if args.mode == "probe":
+                (output / "oled.pbm").write_text(image)
             result = {"mode": args.mode, "rx_bytes": qmp.get("rx-bytes"),
                       "tx_bytes": qmp.get("tx-bytes"), "led_rgb": qmp.get("led-rgb")}
             if args.mode == "probe":
@@ -260,6 +261,8 @@ def main():
                 result["motor_events"] = motor_events
                 result["pwm_events"] = pwm_events
             elif args.mode != "wake-negative":
+                result["firmware_board"] = "pao"
+                result["network_transport"] = "OpenETH"
                 result["asr"] = next(line.split("Application: >> ", 1)[1] for line in
                                      reversed(text().splitlines()) if "Application: >> " in line)
                 result["wakeword_detected"] = "Wake word detected:" in text()

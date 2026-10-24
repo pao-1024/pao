@@ -10,9 +10,9 @@ tasks:
     cmds:
       - python3 simulation/install-esp-emu.py
   sim:build:
-    desc: 构建乐鑫模拟器的 Wi-Fi 配网固件
+    desc: 构建仓库正式 PAO 固件，直接交给乐鑫模拟器验证配网
     env:
-      PAO_PROFILE: esp-emu
+      PAO_PROFILE: hardware
     cmds:
       - bash scripts/build.sh
   sim:full:
@@ -28,7 +28,7 @@ tasks:
     cmds:
       - python3 simulation/build-qemu.py
   qemu:build:
-    desc: 构建 QEMU 专用语音、OLED、按键和指示灯固件
+    desc: 构建正式 PAO 固件的 QEMU 网络适配配置
     env:
       PAO_PROFILE: qemu
     cmds:

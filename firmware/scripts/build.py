@@ -34,8 +34,8 @@ def parse_args(config):
     )
     args = parser.parse_args()
     args.profile = os.environ.get("PAO_PROFILE", "hardware")
-    if args.profile not in ("hardware", "qemu", "esp-emu"):
-        parser.error("PAO_PROFILE must be hardware, qemu or esp-emu")
+    if args.profile not in ("hardware", "qemu"):
+        parser.error("PAO_PROFILE must be hardware or qemu")
     if not args.ref.strip() or args.ref.startswith("-"):
         parser.error("--ref must be a non-empty branch, tag or commit")
     return args
@@ -111,8 +111,6 @@ def build_firmware(config, revision, action, profile):
     ]
     if profile == "qemu":
         default_paths.append(FIRMWARE / "simulation" / "sdkconfig.defaults")
-    elif profile == "esp-emu":
-        default_paths.append(FIRMWARE / "simulation" / "esp-emu.defaults")
     defaults = ";".join(str(path) for path in default_paths)
     command = [
         sys.executable, Path(idf_path) / "tools" / "idf.py",

@@ -1,9 +1,21 @@
 # 固件仿真验证
 
-使用固定版本的 [PAO QEMU fork](https://github.com/pao-1024/qemu)，运行 ESP32-S3
-的 I2S/GDMA、SSD1306 OLED、GPIO0 BOOT 按键和 GPIO48 WS2812。
-小智仿真板沿用真实 I2S Codec、音频处理、Opus 和服务协议，以 OpenETH 替代 Wi-Fi。
+固件统一使用仓库的 `firmware/boards/pao/pao_board.cc`、PAO 组件和固定版本小智应用，
+没有独立的仿真板级实现或静音 Codec。乐鑫模拟器直接运行 `task firmware:build`
+生成的正式固件，验证 Wi-Fi 配网、持久化、重连和灵矽登录。
+QEMU 使用相同 `PaoBoard`、I2S Codec、音频处理、Opus 和服务协议；
+其配置仅增加 OpenETH 网络适配、启用现有 WakeNet，并使用模拟器支持的密码实现。
+这仍是不同配置编译的镜像，不能视为正式 Wi-Fi 镜像在 QEMU 原样跑通。
+
+固定版本的 [PAO QEMU fork](https://github.com/pao-1024/qemu) 提供 ESP32-S3
+I2S/GDMA、GPIO0、GPIO48 和 MCPWM 功能模型。正式 PAO 固件没有启用屏幕；
+SSD1306 OLED 仅由独立外设探针验证。
 左右电机通过实际 GPIO/MCPWM 输出验证方向和占空比；另有一个仅供仿真显示亮灭的虚拟小灯。
+
+正式镜像在 esp-emu v0.50.0 中已能使用保存的凭据连接 Wi-Fi、登录灵矽并进入 idle。
+首次配网仍阻塞：播放配网提示音时，模拟器未清除 I2S `tx_update` 位，
+正式驱动停在 `i2s_ll_tx_update()`，触发任务看门狗。因此 `sim:full` 当前会失败，
+不能把两种配置的独立结果当作正式镜像的完整流程已通过。
 
 ## 本机依赖
 
@@ -78,11 +90,12 @@ task firmware:qemu:run -- \
 设备尚未激活时，需要在 `tmp/qemu-voice/uart.log` 中查看激活码并完成服务端激活。
 
 结果在 `tmp/qemu-voice/result.json`，完整音频在 `speaker.wav`，ASR 完成后的回复音频在
-`reply.wav`，画面在 `oled.pbm`。脚本单独检查 ASR 后的非静音输出，防止将启动提示音
+`reply.wav`。正式 PAO 固件没有屏幕，OLED 画面仅由外设探针生成。
+脚本单独检查 ASR 后的非静音输出，防止将启动提示音
 误认为 TTS 播放。仿真使用 Flash/eFuse 的临时写入层，不改写输入
 镜像；运行中从 OTA 获得的服务配置不会保存回输入文件。
 
-仅构建固件可运行 `task firmware:qemu:build`。它使用独立的
+仅构建网络适配配置可运行 `task firmware:qemu:build`。它使用独立的
 `tmp/build/<base-commit>-qemu/` 目录，不覆盖实机固件。
 已有构建时可直接运行 `python3 firmware/simulation/qemu.py`，用 `--build` 和 `--qemu`
 指定本地目录或可执行文件。脚本共用一个 QMP socket，同一 worktree 中不要并行运行。
@@ -102,7 +115,7 @@ task firmware:sim:full -- \
 ```
 
 命令安装固定版本的乐鑫 esp-emu，运行 QEMU 外设/浮点/重启探针，
-构建两个仿真板型并按顺序验证：
+构建正式 PAO 固件及其 QEMU 网络适配配置，按顺序验证：
 
 1. 新建不含 SSID 的 NVS，在 esp-emu 启动固件自己的 SoftAP。
 2. 虚拟客户端加入热点，经 DHCP 获取地址，访问真实配置页并扫描虚拟 AP。
@@ -110,14 +123,14 @@ task firmware:sim:full -- \
 4. 保存 Flash 后重启，检查自动重连；再使用错误 AP 密码，检查连接失败且未取得 IP。
 5. 从保存的 Flash 提取 NVS，将同一设备身份和配网结果交给 QEMU。
 6. 经真实 I2S/GDMA 注入语音，检查 WakeNet 唤醒、指定提问的 ASR、助手回复、
-   非静音 TTS 和返回 listening；读取 OLED 画面。
+   非静音 TTS 和返回 listening。
 
 默认总超时 240 秒。`--device-uuid` 默认随机生成；真实服务要求先激活该身份，
 自动验证建议使用专用已激活设备。输入 eFuse 不会被改写；测试产生的 Flash/NVS
 含设备配置，只保存在忽略的 `tmp/` 下。重复运行会重新开始配网并覆盖上次结果。
 
 总结果为 `tmp/full-flow/result.json`，配网、重启和密码错误日志在同一目录，
-语音结果及 `reply.wav`、`oled.pbm` 在 `tmp/qemu-wake/`。
+语音结果及 `reply.wav` 在 `tmp/qemu-wake/`。
 已有构建时可直接执行 `python3 firmware/simulation/full-flow.py` 并传入相同参数。
 单独验证唤醒和对话可运行 `task firmware:qemu:wake -- ...`。
 
@@ -129,10 +142,11 @@ python3 firmware/simulation/qemu.py wake-negative \
   --efuse "$PWD/tmp/device/efuse.bin" --nvs "$PWD/tmp/device/nvs.bin"
 ```
 
-这里使用两个后端，且使用各自板型固件。QEMU 没有 S3 Wi-Fi 模型，语音阶段通过
-OpenETH 联网；esp-emu v0.50.0 的 `recip0.s`/`rsqrt0.s` 运算不能满足当前 WakeNet，
-且没有 I2S 麦克风输入接口，因此其配网板型禁用唤醒并使用静音 Codec。
-这套入口覆盖功能流程，不代表单个模拟器已经运行所有硬件。乐鑫模拟器依赖
+这里使用两个后端，共用正式 `PaoBoard` 源码。QEMU 没有 S3 Wi-Fi 模型，语音阶段通过
+`qemu_network.h` 将网络传输适配为 OpenETH，不支持在 QEMU 中进行 Wi-Fi 配网。
+esp-emu v0.50.0 没有 I2S 麦克风输入接口，其 `recip0.s`/`rsqrt0.s` 运算不能满足当前
+WakeNet。正式固件的默认配置未启用唤醒词；配网验证不替换它的 I2S Codec。
+这套入口覆盖两种配置下的功能流程，不代表正式 Wi-Fi 镜像已在单个模拟器完整运行。乐鑫模拟器依赖
 [官方 v0.50.0 二进制发行包](https://github.com/espressif/esp-emulator/releases/tag/v0.50.0)，
 当前安装脚本支持 macOS ARM64、Linux ARM64/x86_64，并校验发行包 SHA-256。
 

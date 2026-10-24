@@ -1,10 +1,11 @@
 #include "sdkconfig.h"
-#ifdef CONFIG_PAO_ESP_EMU
-#include "../pao-esp-emu/pao_esp_emu.cc"
-#elif CONFIG_PAO_QEMU
-#include "../pao-qemu/pao_qemu.cc"
-#else
 #include "wifi_board.h"
+#ifdef CONFIG_PAO_QEMU_NETWORK
+#include "../../simulation/qemu_network.h"
+using PaoNetworkBoard = QemuNetworkBoard;
+#else
+using PaoNetworkBoard = WifiBoard;
+#endif
 #include "application.h"
 #include "button.h"
 #include "chassis.h"
@@ -14,7 +15,7 @@
 #include "motor.h"
 #include "pao.h"
 
-class PaoBoard : public WifiBoard {
+class PaoBoard : public PaoNetworkBoard {
 private:
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
@@ -49,4 +50,3 @@ public:
 };
 
 DECLARE_BOARD(PaoBoard);
-#endif
