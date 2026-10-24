@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "pao.c" "motor.cc" "chassis.cc"
+    SRCS "pao.c" "motor.cc" "chassis.cc" "relay_demo.cc"
     INCLUDE_DIRS "include"
     REQUIRES esp_driver_gpio esp_driver_mcpwm
     PRIV_REQUIRES log

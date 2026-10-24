@@ -7,6 +7,7 @@
 #include "led/single_led.h"
 #include "motor.h"
 #include "pao.h"
+#include "relay_demo.h"
 
 class PaoBoard : public WifiBoard {
 private:
@@ -14,6 +15,7 @@ private:
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
     Motor left_motor_{MOTOR_GPIO_IN3, MOTOR_GPIO_IN4};
     Chassis chassis_{left_motor_, right_motor_};
+    RelayDemo relay_demo_{RELAY_DEMO_GPIO_CH1, RELAY_DEMO_GPIO_CH2};
 
 public:
     PaoBoard() {

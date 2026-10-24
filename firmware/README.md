@@ -8,6 +8,7 @@
 当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
 I2S 功放、BOOT 按键、状态灯和 MX1508 双路电机驱动，不需要屏幕。
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
+另接入双继电器低压指示灯演示，上电保持两路关闭。
 板级初始化创建左右电机和两轮底盘，上电保持停止；业务组件初始化仅输出日志，
 尚未接入上层运动指令或发射控制。
 默认 OTA 网关指向灵矽，
@@ -135,6 +136,28 @@ chassis.drive(0.0f, 0.0f);   // 滑行停止
 该底盘面向无编码器电机，实际速度和行驶轨迹需上车调校，相同输出也可能跑偏。
 板型已创建底盘实例，等待上层运动指令。
 
+## 继电器指示灯演示
+
+`components/pao/include/relay_demo.h` 提供 `RelayDemo`，仅用于两路低压 LED 继电器演示。
+构造时传入两根不同、支持输出的 GPIO，先写入高电平再启用输出；析构时关闭两路。
+板型使用 GPIO17/18 创建实例，保持关闭，等待后续适配层调用。
+
+```cpp
+#include "relay_demo.h"
+
+RelayDemo demo(GPIO_NUM_17, GPIO_NUM_18);
+demo.setEnabled(RelayDemo::Channel::kFirst, true);   // 点亮第一路指示灯
+demo.setEnabled(RelayDemo::Channel::kSecond, true);  // 点亮第二路指示灯
+demo.setEnabled(RelayDemo::Channel::kFirst, false);
+demo.allOff();
+```
+
+接口固定为低电平吸合，匹配 [Seengreat 2-CH Relay HAT](https://seengreat.com/wiki/107/)
+的 3.3V VIO 配置；常开触点各自连接一盏串联 1kΩ 电阻的 LED。
+调用串行执行，仅支持普通任务；每路状态保持到下一次调用或析构。
+SDK 错误或非法 GPIO/通道通过 `ESP_ERROR_CHECK` 终止。
+驱动不自动切换通道，GPIO 电平和继电器实际吸合、复位状态需实机验证。
+
 ## CI
 
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
@@ -164,8 +187,8 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 
 ## 接入位置
 
-- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机和底盘驱动，不依赖小智私有类。
-- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机和底盘初始化，
+- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘和继电器演示驱动，不依赖小智私有类。
+- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键、电机、底盘和继电器演示初始化，
   调用 `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
 - `EXTRA_COMPONENT_DIRS`：直接引用本仓库组件，不复制源码。
