@@ -29,8 +29,8 @@ export const nets = {
     in3: net("MOTOR_IN3"),
     in4: net("MOTOR_IN4"),
   },
-  relayDemo: {
-    ch1: net("DEMO_CH1"),
-    ch2: net("DEMO_CH2"),
+  launcher: {
+    charge: net("LAUNCH_CHARGE"),
+    fire: net("LAUNCH_FIRE"),
   },
 } as const

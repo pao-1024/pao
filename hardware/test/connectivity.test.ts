@@ -79,12 +79,9 @@ test("编译产物包含全部模块，且没有电路错误", () => {
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
-      "RELAY_DEMO1",
-      "RELAY_DEMO2",
-      "R_DEMO1",
-      "R_DEMO2",
-      "LED_DEMO1",
-      "LED_DEMO2",
+      "RELAY_CHARGE",
+      "RELAY_FIRE",
+      "LAUNCHER",
     ].sort(),
   )
   const mcuPorts = ports.filter((item) =>
@@ -128,8 +125,8 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
     [14, "MX1508.IN4"],
-    [17, "RELAY_DEMO1.IN"],
-    [18, "RELAY_DEMO2.IN"],
+    [17, "RELAY_CHARGE.IN"],
+    [18, "RELAY_FIRE.IN"],
   ]
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
@@ -148,21 +145,16 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  assertNetwork([
-    "BOOST_5V.VOUT_PLUS",
-    "ESP32_S3.5V",
-    "MX1508.VCC",
-    "RELAY_DEMO1.COM",
-    "RELAY_DEMO2.COM",
-  ])
+  assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.5V", "MX1508.VCC"])
   assertNetwork([
     "ESP32_S3.3V3",
     "MIC.VDD",
     "AMP.VIN",
     "AMP.SD_MODE",
     "OLED.VCC",
-    "RELAY_DEMO1.VCC",
-    "RELAY_DEMO2.VCC",
+    "RELAY_CHARGE.VCC",
+    "RELAY_CHARGE.COM",
+    "RELAY_FIRE.VCC",
   ])
   assertNetwork([
     "CHARGER_1S.OUT_MINUS",
@@ -175,10 +167,10 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GAIN",
     "OLED.GND",
     "MX1508.GND",
-    "RELAY_DEMO1.GND",
-    "RELAY_DEMO2.GND",
-    "LED_DEMO1.pin2",
-    "LED_DEMO2.pin2",
+    "RELAY_CHARGE.GND",
+    "RELAY_FIRE.GND",
+    "RELAY_FIRE.COM",
+    "LAUNCHER.GND",
   ])
 })
 
@@ -201,18 +193,24 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
   outputs.forEach(assertNetwork)
 })
 
-test("每路继电器常开触点只连接独立的限流电阻和 LED", () => {
-  for (const channel of [1, 2]) {
-    assertNetwork([`RELAY_DEMO${channel}.NO`, `R_DEMO${channel}.pin1`])
-    assertNetwork([`R_DEMO${channel}.pin2`, `LED_DEMO${channel}.pin1`])
-    const resistor = components.find((item) => item.name === `R_DEMO${channel}`)
-    assert.ok(resistor?.ftype === "simple_resistor")
-    assert.equal(resistor.resistance, 1000)
-  }
+test("发射器按黑盒模块接线，对外只有供电、发射与地三根线", () => {
+  // CH1 触点把 3.3V 送到发射器供电脚，通电即开始充能。
+  assertNetwork(["RELAY_CHARGE.NO", "LAUNCHER.VCC"])
+  // CH2 触点把发射按钮短接到地，等同于按下发射键。
+  assertNetwork(["RELAY_FIRE.NO", "LAUNCHER.FIRE"])
+
+  // 内部升压、储能与放电开关不展开，模块引脚固定为三个。
+  assert.deepEqual(
+    ports
+      .filter((item) => portName(item).startsWith("LAUNCHER."))
+      .map(portName)
+      .sort(),
+    ["LAUNCHER.FIRE", "LAUNCHER.GND", "LAUNCHER.VCC"],
+  )
 })
 
-test("三脚开关的 OFF 脚及继电器的常闭触点明确悬空", () => {
-  for (const name of ["POWER_SWITCH.OFF", "RELAY_DEMO1.NC", "RELAY_DEMO2.NC"]) {
+test("三脚开关的 OFF 脚及两路继电器的常闭触点明确悬空", () => {
+  for (const name of ["POWER_SWITCH.OFF", "RELAY_CHARGE.NC", "RELAY_FIRE.NC"]) {
     const unused = port(name)
     assert.equal(unused.do_not_connect, true)
     assert.equal(unused.subcircuit_connectivity_map_key, undefined)

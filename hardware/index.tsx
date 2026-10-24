@@ -4,7 +4,7 @@ import { Display } from "./sections/Display"
 import { Microphone } from "./sections/Microphone"
 import { MotorDrive } from "./sections/MotorDrive"
 import { PowerSupply } from "./sections/PowerSupply"
-import { RelayDemo } from "./sections/RelayDemo"
+import { Launcher } from "./sections/Launcher"
 
 // 各功能区内聚接线和布局，入口只组合整张图纸。
 export default function PaoWiring() {
@@ -32,7 +32,7 @@ export default function PaoWiring() {
         <AudioOutput />
         <Display />
         <MotorDrive />
-        <RelayDemo />
+        <Launcher />
       </schematicsheet>
     </board>
   )
