@@ -3,26 +3,25 @@ version: '3'
 env:
   PAO_BASE_REF: '{{.REF | default ""}}'
   PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
+  PYTHONPYCACHEPREFIX: '{{.ROOT_DIR}}/tmp/pycache'
 
 tasks:
   sim:install:
-    desc: 安装固定版本的乐鑫模拟器
+    desc: 构建固定版本的 PAO esp32sim fork（需要 Rust 工具链）
     cmds:
-      - python3 simulation/install-esp-emu.py
+      - python3 simulation/build-esp32sim.py
   sim:build:
-    desc: 构建仓库正式 PAO 固件，直接交给乐鑫模拟器验证配网
+    desc: 构建仓库正式 PAO 固件（真实 Wi-Fi、I2S 和 WakeNet）
     env:
       PAO_PROFILE: hardware
     cmds:
       - bash scripts/build.sh
   sim:full:
-    desc: 验证首次配网、唤醒、云端对话、重连及错误密码（使用 -- 传入参数）
+    desc: 用正式固件验证首次配网、冷启动重连、真实唤醒及云端对话（使用 -- 传入参数）
     cmds:
       - task: sim:install
       - task: sim:build
-      - task: qemu:probe
-      - task: qemu:build
-      - python3 simulation/full-flow.py {{.CLI_ARGS}}
+      - python3 simulation/esp32sim-flow.py {{.CLI_ARGS}}
   qemu:install:
     desc: 构建固定版本的 PAO QEMU fork（需要本机编译依赖）
     cmds:
