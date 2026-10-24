@@ -1,4 +1,4 @@
-"""Check persistent simulator identity without building or running firmware."""
+"""Check simulator startup without building or running firmware."""
 import importlib.util
 import json
 from pathlib import Path
@@ -11,6 +11,61 @@ import uuid
 SPEC = importlib.util.spec_from_file_location("run_esp32sim", Path(__file__).with_name("run-esp32sim.py"))
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
+
+
+class RomTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.rom_dir = Path(self.temp.name) / "ROM files"
+        self.rom_dir.mkdir()
+        self.rom = self.rom_dir / "esp32s3_rev0_rom.elf"
+        self.rom.touch()
+        self.environment = patch.dict(runner.os.environ, {}, clear=True)
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+
+    def test_explicit_rom_takes_priority_over_environment_and_eim(self):
+        runner.os.environ["ESP_ROM_ELF_DIR"] = "/missing"
+        with patch.object(runner.subprocess, "run", side_effect=AssertionError("EIM invoked")):
+            self.assertEqual(runner.find_rom(self.rom), self.rom.resolve())
+
+    def test_activated_environment_does_not_need_eim(self):
+        runner.os.environ["ESP_ROM_ELF_DIR"] = str(self.rom_dir)
+        with patch.object(runner.subprocess, "run", side_effect=AssertionError("EIM invoked")):
+            self.assertEqual(runner.find_rom(), self.rom.resolve())
+
+    def test_selected_eim_environment_is_used_despite_log_output(self):
+        result = runner.subprocess.CompletedProcess(
+            [], 0, stdout=f"EIM environment setup logs\nPAO_SIM_ROM_DIR={self.rom_dir}\n", stderr="")
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/eim"), \
+                patch.object(runner.subprocess, "run", return_value=result):
+            self.assertEqual(runner.find_rom(), self.rom.resolve())
+
+    def test_missing_explicit_rom_is_reported_without_using_eim(self):
+        with patch.object(runner.subprocess, "run", side_effect=AssertionError("EIM invoked")):
+            with self.assertRaisesRegex(ValueError, "Missing.*missing.elf"):
+                runner.find_rom(self.rom_dir / "missing.elf")
+
+    def test_missing_environment_and_eim_gives_configuration_hint(self):
+        with patch.object(runner.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(ValueError, "eim select"):
+                runner.find_rom()
+
+    def test_eim_failure_gives_configuration_hint(self):
+        result = runner.subprocess.CompletedProcess([], 1, stdout="", stderr="No selected IDF")
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/eim"), \
+                patch.object(runner.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "eim select"):
+                runner.find_rom()
+
+    def test_eim_without_rom_directory_gives_configuration_hint(self):
+        result = runner.subprocess.CompletedProcess(
+            [], 0, stdout="Environment setup logs\nPAO_SIM_ROM_DIR=\n", stderr="")
+        with patch.object(runner.shutil, "which", return_value="/usr/bin/eim"), \
+                patch.object(runner.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(ValueError, "--rom"):
+                runner.find_rom()
 
 
 class IdentityTests(unittest.TestCase):
@@ -65,7 +120,7 @@ class IdentityTests(unittest.TestCase):
         root = Path(self.temp.name)
         build = root / "tmp/build/test-revision"
         emulator = root / "tmp/esp32sim-build/release/pao-sim"
-        rom = root / "rom.elf"
+        rom = root / "esp32s3_rev0_rom.elf"
         for path in [build / "xiaozhi.elf", emulator, rom]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
@@ -81,12 +136,14 @@ class IdentityTests(unittest.TestCase):
             return json.loads((root / "tmp/esp32sim-full-flow/identity.json").read_text())
 
         with patch.object(runner, "ROOT", root), \
-                patch("sys.argv", ["run-esp32sim.py", "--rom", str(rom)]), \
+                patch("sys.argv", ["run-esp32sim.py"]), \
+                patch.dict(runner.os.environ, {"ESP_ROM_ELF_DIR": str(root)}), \
                 patch.object(runner, "create_flash", side_effect=create_flash) as create, \
                 patch.object(runner.os, "execv") as execute:
             runner.main()
             first_identity = identity_from_file()
             command = execute.call_args.args[1]
+            self.assertEqual(command[command.index("--rom") + 1], str(rom.resolve()))
             self.assertEqual(command[command.index("--mac") + 1], first_identity["mac"])
             runner.main()
 

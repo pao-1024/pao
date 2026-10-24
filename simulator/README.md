@@ -32,11 +32,12 @@ ESP-IDF 使用主固件相同的 EIM 入口；先安装并选择 SDK，或激活
 
 ```sh
 task firmware:build
-task simulator:run -- \
-  --rom '<ESP32-S3 ROM ELF 的绝对路径>'
+task simulator:run
 ```
 
-ROM 使用 ESP-IDF 工具包中的 `esp-rom-elfs/<版本>/esp32s3_rev0_rom.elf`。
+启动器从已激活 ESP-IDF 环境的 `ESP_ROM_ELF_DIR` 自动定位 `esp32s3_rev0_rom.elf`；
+未激活时，通过 `eim run` 读取当前选中环境的 ROM 目录。
+需要使用其他 ROM 时，可运行 `task simulator:run -- --rom '<ROM ELF 的绝对路径>'`。
 首次启动自动生成本地单播 MAC 和 UUID，保存到 `tmp/esp32sim-full-flow/identity.json`，
 后续每次启动复用同一身份，无需手动传入设备参数。
 `interactive.bin` 的 NVS 预置该 UUID 和虚拟 AP `pao-sim-ap` 的凭据，

@@ -6,12 +6,35 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 SSID = "pao-sim-ap"
 PASSWORD = "pao-sim-password"
+
+
+def find_rom(rom=None):
+    """Use an explicit ROM or the ROM tools from the active ESP-IDF environment."""
+    if rom is None:
+        directory = os.environ.get("ESP_ROM_ELF_DIR")
+        if not directory and shutil.which("eim"):
+            result = subprocess.run(
+                ["eim", "run", 'printf "\\nPAO_SIM_ROM_DIR=%s\\n" "$ESP_ROM_ELF_DIR"'],
+                capture_output=True, text=True)
+            if result.returncode:
+                raise ValueError("EIM could not activate ESP-IDF; run eim select or pass --rom")
+            # EIM also prints setup logs, so identify the probe's output explicitly.
+            prefix = "PAO_SIM_ROM_DIR="
+            directory = next((line.removeprefix(prefix) for line in result.stdout.splitlines()
+                              if line.startswith(prefix)), None)
+        if not directory:
+            raise ValueError("Cannot find ESP32-S3 ROM; activate ESP-IDF, run eim select, or pass --rom")
+        rom = Path(directory).expanduser() / "esp32s3_rev0_rom.elf"
+    if not rom.is_file():
+        raise ValueError(f"Missing ESP32-S3 ROM ELF: {rom}; check ESP-IDF ROM tools or pass --rom")
+    return rom.resolve()
 
 
 def load_identity(state):
@@ -59,15 +82,19 @@ def create_flash(build, flash, device_uuid):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rom", type=Path, required=True)
+    parser.add_argument("--rom", type=Path, help="ROM ELF (default: active ESP-IDF or selected EIM environment)")
     args = parser.parse_args()
+    try:
+        rom = find_rom(args.rom)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
     emulator = ROOT / "tmp/esp32sim-build/release/pao-sim"
     state = ROOT / "tmp/esp32sim-full-flow"
     flash = state / "interactive.bin"
     revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
     build = ROOT / "tmp/build" / revision
     elf = build / "xiaozhi.elf"
-    for path in [args.rom, emulator, elf]:
+    for path in [emulator, elf]:
         if not path.is_file():
             parser.error(f"Missing {path}; run task firmware:build first")
     try:
@@ -76,7 +103,7 @@ def main():
         parser.error(f"Cannot load {state / 'identity.json'}: {error}")
     if not flash.is_file():
         create_flash(build, flash, identity["uuid"])
-    command = [emulator, "--board", "pao", "--boot", "rom", "--rom", args.rom.resolve(),
+    command = [emulator, "--board", "pao", "--boot", "rom", "--rom", rom,
                "--mac", identity["mac"], "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
                "--flash-file", flash, "--wifi", f"ssid={SSID},psk={PASSWORD}",
                # The firmware's remote-control page on port 80, reachable from the host.
