@@ -17,13 +17,25 @@ export function Max98357Module(props: ChipProps<typeof pins>) {
   return (
     <chip
       manufacturerPartNumber="MAX98357A"
-      schWidth={2.5}
+      schWidth={2.4}
       {...props}
       pinLabels={pins}
+      schPinStyle={{
+        SD_MODE: { marginLeft: 0.8 },
+        GAIN: { marginLeft: 0.8 },
+      }}
       schPinArrangement={{
+        topSide: {
+          direction: "left-to-right",
+          pins: ["VIN", "SD_MODE"],
+        },
         leftSide: {
           direction: "top-to-bottom",
-          pins: ["VIN", "GND", "SD_MODE", "GAIN", "DIN", "BCLK", "LRC"],
+          pins: ["DIN", "BCLK", "LRC"],
+        },
+        bottomSide: {
+          direction: "left-to-right",
+          pins: ["GND", "GAIN"],
         },
         rightSide: {
           direction: "top-to-bottom",

@@ -29,9 +29,9 @@ export function MotorDrive() {
         name="MOTOR_RIGHT"
         displayName="右侧电机"
         schX={10.8}
-        schY={-5.8}
+        schY={-5.4}
       />
-      <Motor name="MOTOR_LEFT" displayName="左侧电机" schX={15.2} schY={-6.2} />
+      <Motor name="MOTOR_LEFT" displayName="左侧电机" schX={10.8} schY={-6.6} />
     </>
   )
 }
