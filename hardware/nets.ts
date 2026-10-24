@@ -37,7 +37,6 @@ export const nets = {
     led: net("ONBOARD_LED"),
   },
   launcher: {
-    charge: net("LAUNCH_CHARGE"),
     fire: net("LAUNCH_FIRE"),
   },
 } as const

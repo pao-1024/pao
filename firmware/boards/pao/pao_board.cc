@@ -30,7 +30,7 @@ private:
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
     int64_t chassis_deadline_ = 0;
-    Launcher launcher_{LAUNCHER_GPIO_CHARGE, LAUNCHER_GPIO_FIRE};
+    Launcher launcher_{LAUNCHER_GPIO_FIRE};
     i2c_master_bus_handle_t display_i2c_bus_ = nullptr;
     esp_lcd_panel_io_handle_t display_panel_io_ = nullptr;
     esp_lcd_panel_handle_t display_panel_ = nullptr;

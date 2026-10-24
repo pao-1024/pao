@@ -79,7 +79,6 @@ test("编译产物包含全部模块，且没有电路错误", () => {
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
-      "RELAY_CHARGE",
       "RELAY_FIRE",
       "BUCK_3V3",
       "LAUNCHER",
@@ -111,7 +110,7 @@ test("编译产物包含全部模块，且没有电路错误", () => {
   )
 })
 
-test("14 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
+test("13 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
   // 独立记录接线要求，不从电路源码导入预期值。
   const connections: [number, string][] = [
     [4, "MIC.WS"],
@@ -126,7 +125,6 @@ test("14 路外接 GPIO 与接线要求一致，每路只连接对应模块信�
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
     [14, "MX1508.IN4"],
-    [17, "RELAY_CHARGE.IN"],
     [18, "RELAY_FIRE.IN"],
   ]
   for (const [gpio, signal] of connections) {
@@ -179,13 +177,8 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.SD_MODE",
     "OLED.VCC",
   ])
-  // 发射器专用 3.3V：降压输出只供两路线圈与 CH1 触点。
-  assertNetwork([
-    "BUCK_3V3.VOUT_PLUS",
-    "RELAY_CHARGE.VCC",
-    "RELAY_CHARGE.COM",
-    "RELAY_FIRE.VCC",
-  ])
+  // 发射器专用 3.3V：降压输出供继电器线圈与发射器本身，发射器常供电持续充能。
+  assertNetwork(["BUCK_3V3.VOUT_PLUS", "RELAY_FIRE.VCC", "LAUNCHER.VCC"])
   assertNetwork([
     "CHARGER_1S.OUT_MINUS",
     "BOOST_5V.VIN_MINUS",
@@ -197,7 +190,6 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GAIN",
     "OLED.GND",
     "MX1508.GND",
-    "RELAY_CHARGE.GND",
     "RELAY_FIRE.GND",
     "RELAY_FIRE.COM",
     "LAUNCHER.GND",
@@ -226,9 +218,22 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
 })
 
 test("发射器按黑盒模块接线，对外只有供电、发射与地三根线", () => {
-  // CH1 触点把 3.3V 送到发射器供电脚，通电即开始充能。
-  assertNetwork(["RELAY_CHARGE.NO", "LAUNCHER.VCC"])
-  // CH2 触点把发射按钮短接到地，等同于按下发射键。
+  // 发射器由专用 3.3V 常供电，充能不受继电器控制。
+  const vccKey = connectivity.getNetConnectedToId(
+    port("LAUNCHER.VCC").source_port_id,
+  )
+  const vccMembers = ports
+    .filter(
+      (item) =>
+        connectivity.getNetConnectedToId(item.source_port_id) === vccKey,
+    )
+    .map(portName)
+  assert.ok(vccKey, "LAUNCHER.VCC 应接到专用 3.3V")
+  assert.ok(
+    vccMembers.every((name) => !/^RELAY_\w+\.(NO|NC|COM)$/.test(name)),
+    "发射器供电不得经过继电器触点",
+  )
+  // 发射继电器触点把发射按钮短接到地，等同于按下发射键。
   assertNetwork(["RELAY_FIRE.NO", "LAUNCHER.FIRE"])
 
   // 内部升压、储能与放电开关不展开，模块引脚固定为三个。
@@ -241,8 +246,8 @@ test("发射器按黑盒模块接线，对外只有供电、发射与地三根�
   )
 })
 
-test("三脚开关的 OFF 脚及两路继电器的常闭触点明确悬空", () => {
-  for (const name of ["POWER_SWITCH.OFF", "RELAY_CHARGE.NC", "RELAY_FIRE.NC"]) {
+test("三脚开关的 OFF 脚及发射继电器的常闭触点明确悬空", () => {
+  for (const name of ["POWER_SWITCH.OFF", "RELAY_FIRE.NC"]) {
     const unused = port(name)
     assert.equal(unused.do_not_connect, true)
     assert.equal(unused.subcircuit_connectivity_map_key, undefined)
