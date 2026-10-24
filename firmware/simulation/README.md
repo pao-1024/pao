@@ -1,10 +1,36 @@
 # 固件仿真验证
 
-仿真使用固定版本的 [PAO esp32sim fork](https://github.com/pao-1024/esp32sim)，
+仿真通过本仓库的 `pao-sim` Rust 扩展，调用固定版本的
+[esp32sim 内核](https://github.com/pao-1024/esp32sim)，
 从芯片 ROM 启动 `task firmware:build` 生成的正式 PAO 镜像。
 板型、I2S Codec、WakeNet、Opus 和灵矽协议均复用仓库固件。
 `pao` 模拟板将 GPIO41/42 上 SSD1306 的真实 I2C 写入渲染为图像，并显示 GPIO48 状态灯。
-麦克风由主机 PCM 输入，扬声器输出保存为 WAV。
+交互模式使用电脑麦克风和扬声器；自动验证使用 PCM 文件并保存 WAV。
+
+板型与 SSD1306 模型在 `pao-sim/src/`，网页与 AudioWorklet 在 `web/`。
+内核 fork 只维护通用 CPU、网络、Flash、I2S 支持和库入口，不包含 PAO 板型或页面。
+启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
+`BoardModel` 接口挂载本地板型；不依赖动态插件 ABI。
+
+`esp32sim.json` 固定内核 commit；安装脚本将其检出到 `tmp/esp32sim/`，
+再由本地 crate 的 path 依赖链接该源码缓存。`Cargo.lock` 固定 crate 依赖关系。
+构建产物为 `tmp/esp32sim-build/release/pao-sim`，网页由本仓库直接维护和提供。
+
+## 网页语音交互
+
+完成一次下方的完整流程后，启动已配网、已激活的同一测试设备：
+
+```sh
+task firmware:sim:run -- \
+  --rom '<ESP32-S3 ROM ELF 的绝对路径>' \
+  --mac '<已激活测试设备的 MAC>'
+```
+
+打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，
+说“你好小智”后直接提问。网页同时显示 OLED、状态灯和 BOOT 按键。
+无需 `--wake-input` 或 `--pcm-input`。建议戴耳机避免扬声器声音再次进入麦克风。
+终端按 Ctrl+C 退出并保存独立的 `interactive.bin`，不会覆盖自动验证的 Flash。
+更新模拟器版本后先运行 `task firmware:sim:install`。
 
 ## 环境与输入
 

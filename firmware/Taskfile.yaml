@@ -6,8 +6,12 @@ env:
   PYTHONPYCACHEPREFIX: '{{.ROOT_DIR}}/tmp/pycache'
 
 tasks:
+  sim:run:
+    desc: 启动网页交互，使用电脑麦克风、扬声器和 BOOT 按键
+    cmds:
+      - python3 simulation/run-esp32sim.py {{.CLI_ARGS}}
   sim:install:
-    desc: 构建固定版本的 PAO esp32sim fork（需要 Rust 工具链）
+    desc: 获取固定版本的 esp32sim 内核并构建本地 PAO 扩展（需要 Rust 工具链）
     cmds:
       - python3 simulation/build-esp32sim.py
   sim:build:

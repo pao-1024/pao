@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the pinned PAO esp32sim fork."""
+"""Fetch the pinned esp32sim core and build the local PAO extension."""
 import json
 import os
 from pathlib import Path
@@ -30,8 +30,9 @@ def main():
         raise RuntimeError(f"esp32sim source has local changes: {source}")
     run("git", "fetch", "--depth=1", "origin", config["ref"], cwd=source)
     run("git", "checkout", "--detach", config["ref"], cwd=source)
-    run("cargo", "build", "--locked", "--release", "--bin", "esp32sim", cwd=source)
-    print(target / "release/esp32sim")
+    run("cargo", "build", "--locked", "--release", "--manifest-path",
+        ROOT / "firmware/simulation/pao-sim/Cargo.toml")
+    print(target / "release/pao-sim")
 
 
 if __name__ == "__main__":

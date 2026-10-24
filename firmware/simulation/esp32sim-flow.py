@@ -41,7 +41,7 @@ def flash_image(build, destination, nvs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build", type=Path)
-    parser.add_argument("--emulator", type=Path, default=ROOT / "tmp/esp32sim-build/release/esp32sim")
+    parser.add_argument("--emulator", type=Path, default=ROOT / "tmp/esp32sim-build/release/pao-sim")
     parser.add_argument("--rom", type=Path, required=True)
     parser.add_argument("--mac", required=True)
     parser.add_argument("--device-uuid", type=uuid.UUID, required=True)
