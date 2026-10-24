@@ -7,6 +7,8 @@ export const nets = {
   power: {
     v5: net("V5"),
     v3v3: net("V3V3"),
+    // 由 5V 单独降压得到，只供继电器线圈与发射器，不接入主控 3V3。
+    v3v3Aux: net("V3V3_AUX"),
     gnd: net("GND"),
   },
   microphone: {
@@ -28,5 +30,14 @@ export const nets = {
     in2: net("MOTOR_IN2"),
     in3: net("MOTOR_IN3"),
     in4: net("MOTOR_IN4"),
+  },
+  // 开发板自带的按键与状态灯，只在主控引脚上标注，不接外部器件。
+  onboard: {
+    boot: net("ONBOARD_BOOT"),
+    led: net("ONBOARD_LED"),
+  },
+  launcher: {
+    charge: net("LAUNCH_CHARGE"),
+    fire: net("LAUNCH_FIRE"),
   },
 } as const

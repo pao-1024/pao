@@ -30,11 +30,22 @@ worktree 必须放在仓库根目录的 `.worktrees/` 下，该目录由 `.gitig
 
 ## 提交与 PR
 
-新增功能必须使用独立分支并创建 PR。PR 标题必须采用 `type(scope): <中文描述>` 格式，`scope` 表示改动模块，例如：
+新增功能必须使用独立分支并创建 PR。PR 标题必须采用 `type(顶层模块/子模块): <中文描述>` 格式；子模块可省略，省略时采用 `type(顶层模块): <中文描述>`。
 
-- `feat(voice): 新增语音指令识别`
-- `fix(control): 修复小车转向异常`
-- `docs(guide): 完善协作指南`
+- `type` 表示改动性质：`feat`（新增功能）、`fix`（修复问题）、`refactor`（重构）、`docs`（文档）、`test`（测试）、`build`（构建与依赖）、`ci`（持续集成）、`chore`（其他维护）。
+- 顶层模块使用 `firmware`、`hardware`；仓库公共事项使用 `repo`。
+- 子模块使用稳定的模块名，小写英文、连字符分词，优先沿用现有目录或功能区名称，不要求与完整文件路径一致。
+- scope 最多两层；涉及同一顶层模块下的多个子模块时，省略子模块，例如 `refactor(hardware): 统一器件接口命名`。
+- 固件与硬件联动时使用 `repo`，例如 `fix(repo): 统一电机接线与固件引脚配置`，具体范围在 PR 描述中说明。
+
+示例：
+
+- `feat(firmware/pao): 新增电机控制接口`
+- `fix(firmware/boards): 修正板型引脚配置`
+- `fix(hardware/power-supply): 修正升压模块接线`
+- `refactor(hardware/motor-drive): 简化电机驱动连接`
+- `ci(firmware/build): 调整固件构建缓存`
+- `docs(repo): 完善仓库协作指南`
 
 提交保持单次改动聚焦，使用 `git commit -s` 签署提交。
 

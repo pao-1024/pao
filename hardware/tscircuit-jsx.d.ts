@@ -3,12 +3,14 @@ import type {
   BoardProps,
   BatteryProps,
   ChipProps,
+  LedProps,
   NetLabelProps,
   SchematicSheetProps,
   SchematicSectionProps,
   SchematicSymbolProps,
   SchematicTextProps,
   PinHeaderProps,
+  ResistorProps,
 } from "@tscircuit/props"
 import "react/jsx-runtime"
 
@@ -18,12 +20,14 @@ declare module "react/jsx-runtime" {
       board: BoardProps
       battery: BatteryProps
       chip: ChipProps
+      led: LedProps
       netlabel: NetLabelProps
       schematicsheet: SchematicSheetProps
       schematicsection: SchematicSectionProps
       schematicsymbol: SchematicSymbolProps
       schematictext: SchematicTextProps
       pinheader: PinHeaderProps
+      resistor: ResistorProps
     }
   }
 }
