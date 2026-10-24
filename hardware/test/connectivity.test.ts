@@ -79,7 +79,8 @@ test("编译产物包含全部模块，且没有电路错误", () => {
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
-      "RELAY_DEMO",
+      "RELAY_DEMO1",
+      "RELAY_DEMO2",
       "R_DEMO1",
       "R_DEMO2",
       "LED_DEMO1",
@@ -127,8 +128,8 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
     [14, "MX1508.IN4"],
-    [17, "RELAY_DEMO.CH1"],
-    [18, "RELAY_DEMO.CH2"],
+    [17, "RELAY_DEMO1.IN"],
+    [18, "RELAY_DEMO2.IN"],
   ]
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
@@ -151,9 +152,8 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "BOOST_5V.VOUT_PLUS",
     "ESP32_S3.5V",
     "MX1508.VCC",
-    "RELAY_DEMO.VCC",
-    "RELAY_DEMO.COM1",
-    "RELAY_DEMO.COM2",
+    "RELAY_DEMO1.COM",
+    "RELAY_DEMO2.COM",
   ])
   assertNetwork([
     "ESP32_S3.3V3",
@@ -161,6 +161,8 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.VIN",
     "AMP.SD_MODE",
     "OLED.VCC",
+    "RELAY_DEMO1.VCC",
+    "RELAY_DEMO2.VCC",
   ])
   assertNetwork([
     "CHARGER_1S.OUT_MINUS",
@@ -173,7 +175,8 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GAIN",
     "OLED.GND",
     "MX1508.GND",
-    "RELAY_DEMO.GND",
+    "RELAY_DEMO1.GND",
+    "RELAY_DEMO2.GND",
     "LED_DEMO1.pin2",
     "LED_DEMO2.pin2",
   ])
@@ -200,7 +203,7 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
 
 test("每路继电器常开触点只连接独立的限流电阻和 LED", () => {
   for (const channel of [1, 2]) {
-    assertNetwork([`RELAY_DEMO.NO${channel}`, `R_DEMO${channel}.pin1`])
+    assertNetwork([`RELAY_DEMO${channel}.NO`, `R_DEMO${channel}.pin1`])
     assertNetwork([`R_DEMO${channel}.pin2`, `LED_DEMO${channel}.pin1`])
     const resistor = components.find((item) => item.name === `R_DEMO${channel}`)
     assert.ok(resistor?.ftype === "simple_resistor")
@@ -209,7 +212,7 @@ test("每路继电器常开触点只连接独立的限流电阻和 LED", () => {
 })
 
 test("三脚开关的 OFF 脚及继电器的常闭触点明确悬空", () => {
-  for (const name of ["POWER_SWITCH.OFF", "RELAY_DEMO.NC1", "RELAY_DEMO.NC2"]) {
+  for (const name of ["POWER_SWITCH.OFF", "RELAY_DEMO1.NC", "RELAY_DEMO2.NC"]) {
     const unused = port(name)
     assert.equal(unused.do_not_connect, true)
     assert.equal(unused.subcircuit_connectivity_map_key, undefined)

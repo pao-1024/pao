@@ -13,28 +13,35 @@ export function RelayDemo() {
         schY={-4.5}
         fontSize={0.18}
       />
-      <RelayDemoModule
-        doNotPlace
-        name="RELAY_DEMO"
-        schSectionName="RelayDemo"
-        schX={-10}
-        schY={-6}
-        noConnect={["NC1", "NC2"]}
-        connections={{
-          VCC: nets.power.v5.selector,
-          GND: nets.power.gnd.selector,
-          CH1: nets.relayDemo.ch1.selector,
-          CH2: nets.relayDemo.ch2.selector,
-          COM1: nets.power.v5.selector,
-          NO1: "R_DEMO1.pin1",
-          COM2: nets.power.v5.selector,
-          NO2: "R_DEMO2.pin1",
-        }}
-      />
       {[1, 2].map((channel) => {
-        const x = channel === 1 ? -6.5 : -3.5
+        const x = channel === 1 ? -8 : -3
         return (
           <Fragment key={channel}>
+            <RelayDemoModule
+              doNotPlace
+              name={`RELAY_DEMO${channel}`}
+              schSectionName="RelayDemo"
+              schX={x - 2}
+              schY={-6}
+              noConnect={["NC"]}
+              connections={{
+                VCC: nets.power.v3v3.selector,
+                GND: nets.power.gnd.selector,
+                IN:
+                  channel === 1
+                    ? nets.relayDemo.ch1.selector
+                    : nets.relayDemo.ch2.selector,
+                COM: nets.power.v5.selector,
+                NO: `R_DEMO${channel}.pin1`,
+              }}
+            />
+            <netlabel
+              net={nets.power.gnd.name}
+              connection={`RELAY_DEMO${channel}.GND`}
+              schX={x - 3.5}
+              schY={-6}
+              anchorSide="right"
+            />
             <resistor
               doNotPlace
               name={`R_DEMO${channel}`}
