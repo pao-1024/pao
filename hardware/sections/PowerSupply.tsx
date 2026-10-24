@@ -1,5 +1,6 @@
 import { nets } from "../nets"
 import { Boost5VModule } from "../components/Boost5V"
+import { Buck3V3Module } from "../components/Buck3V3"
 import { PowerSwitch } from "../components/PowerSwitch"
 import { Tp4056Protection } from "../components/Tp4056"
 
@@ -66,6 +67,21 @@ export function PowerSupply() {
         schX={5.1}
         schY={6.1}
         anchorSide="top"
+      />
+      {/* 发射器与继电器专用 3.3V：从 5V 降压，不并入主控 3V3。 */}
+      <Buck3V3Module
+        doNotPlace
+        name="BUCK_3V3"
+        displayName="发射器 3.3V 降压"
+        schSectionName="Power"
+        schX={7.6}
+        schY={7}
+        connections={{
+          VIN_PLUS: nets.power.v5.selector,
+          VIN_MINUS: nets.power.gnd.selector,
+          VOUT_PLUS: nets.power.v3v3Aux.selector,
+          VOUT_MINUS: nets.power.gnd.selector,
+        }}
       />
     </>
   )

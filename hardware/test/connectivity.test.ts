@@ -63,7 +63,7 @@ function assertNetwork(expected: readonly string[]): void {
   )
 }
 
-test("编译产物包含全部 12 个模块，且没有电路错误", () => {
+test("编译产物包含全部模块，且没有电路错误", () => {
   assert.deepEqual(
     components.map((component) => component.name).sort(),
     [
@@ -79,6 +79,10 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
+      "RELAY_CHARGE",
+      "RELAY_FIRE",
+      "BUCK_3V3",
+      "LAUNCHER",
     ].sort(),
   )
   const mcuPorts = ports.filter((item) =>
@@ -107,8 +111,8 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
   )
 })
 
-test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", () => {
-  // 独立记录用户已确认的接线要求，不从电路源码导入预期值。
+test("14 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
+  // 独立记录接线要求，不从电路源码导入预期值。
   const connections: [number, string][] = [
     [4, "MIC.WS"],
     [5, "MIC.SCK"],
@@ -122,10 +126,13 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
     [14, "MX1508.IN4"],
+    [17, "RELAY_CHARGE.IN"],
+    [18, "RELAY_FIRE.IN"],
   ]
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
   }
+  // 板载 BOOT 与状态灯只挂标签，不接外部器件，因此不进上面的成对断言。
   assert.deepEqual(
     ports
       .filter(
@@ -135,18 +142,49 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
       )
       .map(portName)
       .sort(),
-    connections.map(([gpio]) => `ESP32_S3.GPIO${gpio}`).sort(),
+    [
+      ...connections.map(([gpio]) => `ESP32_S3.GPIO${gpio}`),
+      "ESP32_S3.GPIO0",
+      "ESP32_S3.GPIO48",
+    ].sort(),
   )
 })
 
+test("板载 BOOT 按键与 WS2812 状态灯已标出，且不引外部接线", () => {
+  for (const name of ["ESP32_S3.GPIO0", "ESP32_S3.GPIO48"]) {
+    const pin = port(name)
+    const key = connectivity.getNetConnectedToId(pin.source_port_id)
+    assert.ok(key, `${name} 应有网络标签`)
+    const members = ports
+      .filter(
+        (item) => connectivity.getNetConnectedToId(item.source_port_id) === key,
+      )
+      .map(portName)
+    assert.deepEqual(members, [name], `${name} 只应有板载标签`)
+  }
+})
+
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.5V", "MX1508.VCC"])
+  assertNetwork([
+    "BOOST_5V.VOUT_PLUS",
+    "ESP32_S3.5V",
+    "MX1508.VCC",
+    "BUCK_3V3.VIN_PLUS",
+  ])
+  // 主控 3V3 不再挂继电器与发射器，避免充能脉冲拉塌开发板稳压器。
   assertNetwork([
     "ESP32_S3.3V3",
     "MIC.VDD",
     "AMP.VIN",
     "AMP.SD_MODE",
     "OLED.VCC",
+  ])
+  // 发射器专用 3.3V：降压输出只供两路线圈与 CH1 触点。
+  assertNetwork([
+    "BUCK_3V3.VOUT_PLUS",
+    "RELAY_CHARGE.VCC",
+    "RELAY_CHARGE.COM",
+    "RELAY_FIRE.VCC",
   ])
   assertNetwork([
     "CHARGER_1S.OUT_MINUS",
@@ -159,6 +197,12 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GAIN",
     "OLED.GND",
     "MX1508.GND",
+    "RELAY_CHARGE.GND",
+    "RELAY_FIRE.GND",
+    "RELAY_FIRE.COM",
+    "LAUNCHER.GND",
+    "BUCK_3V3.VIN_MINUS",
+    "BUCK_3V3.VOUT_MINUS",
   ])
 })
 
@@ -181,17 +225,35 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
   outputs.forEach(assertNetwork)
 })
 
-test("三脚开关的 OFF 脚明确悬空", () => {
-  const unused = port("POWER_SWITCH.OFF")
-  assert.equal(unused.do_not_connect, true)
-  assert.equal(unused.subcircuit_connectivity_map_key, undefined)
-  assert.ok(
-    traces.every(
-      (trace) =>
-        !trace.connected_source_port_ids.includes(unused.source_port_id),
-    ),
-    "OFF 脚不得出现导线",
+test("发射器按黑盒模块接线，对外只有供电、发射与地三根线", () => {
+  // CH1 触点把 3.3V 送到发射器供电脚，通电即开始充能。
+  assertNetwork(["RELAY_CHARGE.NO", "LAUNCHER.VCC"])
+  // CH2 触点把发射按钮短接到地，等同于按下发射键。
+  assertNetwork(["RELAY_FIRE.NO", "LAUNCHER.FIRE"])
+
+  // 内部升压、储能与放电开关不展开，模块引脚固定为三个。
+  assert.deepEqual(
+    ports
+      .filter((item) => portName(item).startsWith("LAUNCHER."))
+      .map(portName)
+      .sort(),
+    ["LAUNCHER.FIRE", "LAUNCHER.GND", "LAUNCHER.VCC"],
   )
+})
+
+test("三脚开关的 OFF 脚及两路继电器的常闭触点明确悬空", () => {
+  for (const name of ["POWER_SWITCH.OFF", "RELAY_CHARGE.NC", "RELAY_FIRE.NC"]) {
+    const unused = port(name)
+    assert.equal(unused.do_not_connect, true)
+    assert.equal(unused.subcircuit_connectivity_map_key, undefined)
+    assert.ok(
+      traces.every(
+        (trace) =>
+          !trace.connected_source_port_ids.includes(unused.source_port_id),
+      ),
+      `${name} 不得出现导线`,
+    )
+  }
 })
 
 test("原理图标注完整，所有内容均在图纸内", () => {
