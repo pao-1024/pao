@@ -63,7 +63,7 @@ function assertNetwork(expected: readonly string[]): void {
   )
 }
 
-test("编译产物包含全部 12 个模块，且没有电路错误", () => {
+test("编译产物包含全部模块，且没有电路错误", () => {
   assert.deepEqual(
     components.map((component) => component.name).sort(),
     [
@@ -79,6 +79,11 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
+      "RELAY_DEMO",
+      "R_DEMO1",
+      "R_DEMO2",
+      "LED_DEMO1",
+      "LED_DEMO2",
     ].sort(),
   )
   const mcuPorts = ports.filter((item) =>
@@ -107,8 +112,8 @@ test("编译产物包含全部 12 个模块，且没有电路错误", () => {
   )
 })
 
-test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", () => {
-  // 独立记录用户已确认的接线要求，不从电路源码导入预期值。
+test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
+  // 独立记录接线要求，不从电路源码导入预期值。
   const connections: [number, string][] = [
     [4, "MIC.WS"],
     [5, "MIC.SCK"],
@@ -122,6 +127,8 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
     [14, "MX1508.IN4"],
+    [17, "RELAY_DEMO.CH1"],
+    [18, "RELAY_DEMO.CH2"],
   ]
   for (const [gpio, signal] of connections) {
     assertNetwork([`ESP32_S3.GPIO${gpio}`, signal])
@@ -140,7 +147,14 @@ test("12 路 GPIO 与用户附件一致，每路只连接对应模块信号", ()
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.5V", "MX1508.VCC"])
+  assertNetwork([
+    "BOOST_5V.VOUT_PLUS",
+    "ESP32_S3.5V",
+    "MX1508.VCC",
+    "RELAY_DEMO.VCC",
+    "RELAY_DEMO.COM1",
+    "RELAY_DEMO.COM2",
+  ])
   assertNetwork([
     "ESP32_S3.3V3",
     "MIC.VDD",
@@ -159,6 +173,9 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GAIN",
     "OLED.GND",
     "MX1508.GND",
+    "RELAY_DEMO.GND",
+    "LED_DEMO1.pin2",
+    "LED_DEMO2.pin2",
   ])
 })
 
@@ -181,17 +198,29 @@ test("扬声器与两组电机的输出各自独立，不接电源或地", () =>
   outputs.forEach(assertNetwork)
 })
 
-test("三脚开关的 OFF 脚明确悬空", () => {
-  const unused = port("POWER_SWITCH.OFF")
-  assert.equal(unused.do_not_connect, true)
-  assert.equal(unused.subcircuit_connectivity_map_key, undefined)
-  assert.ok(
-    traces.every(
-      (trace) =>
-        !trace.connected_source_port_ids.includes(unused.source_port_id),
-    ),
-    "OFF 脚不得出现导线",
-  )
+test("每路继电器常开触点只连接独立的限流电阻和 LED", () => {
+  for (const channel of [1, 2]) {
+    assertNetwork([`RELAY_DEMO.NO${channel}`, `R_DEMO${channel}.pin1`])
+    assertNetwork([`R_DEMO${channel}.pin2`, `LED_DEMO${channel}.pin1`])
+    const resistor = components.find((item) => item.name === `R_DEMO${channel}`)
+    assert.ok(resistor?.ftype === "simple_resistor")
+    assert.equal(resistor.resistance, 1000)
+  }
+})
+
+test("三脚开关的 OFF 脚及继电器的常闭触点明确悬空", () => {
+  for (const name of ["POWER_SWITCH.OFF", "RELAY_DEMO.NC1", "RELAY_DEMO.NC2"]) {
+    const unused = port(name)
+    assert.equal(unused.do_not_connect, true)
+    assert.equal(unused.subcircuit_connectivity_map_key, undefined)
+    assert.ok(
+      traces.every(
+        (trace) =>
+          !trace.connected_source_port_ids.includes(unused.source_port_id),
+      ),
+      `${name} 不得出现导线`,
+    )
+  }
 })
 
 test("原理图标注完整，所有内容均在图纸内", () => {

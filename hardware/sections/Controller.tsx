@@ -27,6 +27,8 @@ export function Controller() {
           GPIO12: nets.motorDrive.in2.selector,
           GPIO13: nets.motorDrive.in3.selector,
           GPIO14: nets.motorDrive.in4.selector,
+          GPIO17: nets.relayDemo.ch1.selector,
+          GPIO18: nets.relayDemo.ch2.selector,
         }}
       />
     </>
