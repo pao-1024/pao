@@ -7,6 +7,7 @@
 #include "display/oled_display.h"
 #include "launcher.h"
 #include "led/single_led.h"
+#include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
 
@@ -14,6 +15,8 @@
 #include <esp_check.h>
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
+#include <esp_timer.h>
+#include <mutex>
 
 #define TAG "PaoBoard"
 
@@ -21,13 +24,72 @@ class PaoBoard : public WifiBoard {
 private:
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
-    Motor left_motor_{MOTOR_GPIO_IN3, MOTOR_GPIO_IN4};
+    // 左轮安装方向与右轮相反，交换输入使正速度均表示车体前进。
+    Motor left_motor_{MOTOR_GPIO_IN4, MOTOR_GPIO_IN3};
     Chassis chassis_{left_motor_, right_motor_};
+    esp_timer_handle_t chassis_timer_ = nullptr;
+    std::mutex chassis_mutex_;
+    int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_CHARGE, LAUNCHER_GPIO_FIRE};
     i2c_master_bus_handle_t display_i2c_bus_ = nullptr;
     esp_lcd_panel_io_handle_t display_panel_io_ = nullptr;
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
+
+    void DriveChassis(int forward, int turn, int duration_ms) {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        chassis_.drive(0, 0);
+        chassis_deadline_ = 0;
+        const auto error = esp_timer_stop(chassis_timer_);
+        if (error != ESP_ERR_INVALID_STATE) {
+            ESP_ERROR_CHECK(error);
+        }
+        if (forward != 0 || turn != 0) {
+            const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
+            chassis_deadline_ = esp_timer_get_time() + duration_us;
+            ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
+            chassis_.drive(forward / 100.0f, turn / 100.0f);
+        }
+        ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
+    }
+
+    void InitializeChassisTools() {
+        esp_timer_create_args_t timer = {};
+        timer.arg = this;
+        timer.name = "chassis_stop";
+        timer.callback = [](void* arg) {
+            auto* board = static_cast<PaoBoard*>(arg);
+            std::lock_guard<std::mutex> lock(board->chassis_mutex_);
+            // 已排队的旧定时回调不能中断刚收到的新运动指令。
+            if (board->chassis_deadline_ != 0 && esp_timer_get_time() >= board->chassis_deadline_) {
+                board->chassis_.drive(0, 0);
+                board->chassis_deadline_ = 0;
+                ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
+            }
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
+
+        auto& mcp = McpServer::GetInstance();
+        mcp.AddTool("self.chassis.drive",
+            "控制小车底盘前进、后退、转弯或原地旋转。forward 和 turn 为 -100 到 100 的百分比："
+            "forward 正数前进、负数后退；turn 正数左转、负数右转；两者为 0 立即停止。"
+            "duration_ms 为行驶时长（100 到 15000 毫秒，默认 1000），单次最多 15 秒；"
+            "超过 15 秒直接报错且不执行，不截短时长。到时自动停止；新指令替换当前运动。"
+            "速度是电机占空比，不代表距离或角度。",
+            PropertyList({Property("forward", kPropertyTypeInteger, -100, 100),
+                          Property("turn", kPropertyTypeInteger, -100, 100),
+                          Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
+            [this](const PropertyList& properties) -> ReturnValue {
+                DriveChassis(properties["forward"].value<int>(), properties["turn"].value<int>(),
+                             properties["duration_ms"].value<int>());
+                return true;
+            });
+        mcp.AddTool("self.chassis.stop", "立即停止小车底盘，取消当前运动。", PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                DriveChassis(0, 0, 0);
+                return true;
+            });
+    }
 
     esp_err_t InitializeDisplay() {
         i2c_master_bus_config_t bus_config = {};
@@ -87,6 +149,7 @@ public:
                 i2c_del_master_bus(display_i2c_bus_);
             }
         }
+        InitializeChassisTools();
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateStarting) {
