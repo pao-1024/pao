@@ -3,9 +3,9 @@ name: Simulator
 on:
   push:
     branches: [main]
-    paths: ['simulator/**', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+    paths: ['simulator/**', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
   pull_request:
-    paths: ['simulator/**', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+    paths: ['simulator/**', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
 
 permissions:
   contents: read

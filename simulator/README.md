@@ -12,9 +12,15 @@
 启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
 `BoardModel` 接口挂载本地板型；不依赖动态插件 ABI。
 
-`esp32sim.json` 固定内核 commit；安装脚本将其检出到 `tmp/esp32sim/`，
-再由本地 crate 的 path 依赖链接该源码缓存。`Cargo.lock` 固定 crate 依赖关系。
+`simulator/esp32sim/` 是 [pao-1024/esp32sim](https://github.com/pao-1024/esp32sim)
+的 Git submodule，跟踪组织维护的 `pao` 分支，由父仓库的 gitlink 固定具体 commit。
+内核改动经 PR 合入 `pao`，`main` 保持上游基线；本地 crate 直接依赖子模块源码。
+`Cargo.lock` 固定 crate 依赖关系。
 构建产物为 `tmp/esp32sim-build/release/pao-sim`，React 网页构建到 `tmp/simulator-web/`。
+
+首次检出可运行 `git submodule update --init --recursive`；`task simulator:install` 也会初始化子模块。
+安装始终使用父仓库记录的 commit，不会自动追随远端分支。内核升级时通过 PAO 的 PR
+更新 gitlink；若子模块有本地改动，安装会停止而不覆盖。
 
 ## 网页语音交互
 
@@ -92,7 +98,7 @@ Python 入口使用已构建的模拟器和正式固件，按顺序验证：
 - `provision-oled.png`、`oled.png`：两轮运行的屏幕画面。
 - Flash/NVS：含测试设备配置，仅供本地复跑。
 
-模拟器版本由 `esp32sim.json` 固定。`task simulator:install` 单独构建模拟器，
+模拟器版本由子模块 gitlink 固定。`task simulator:install` 单独构建模拟器和网页，
 `task firmware:build` 单独构建正式固件。
 已有构建时，可直接执行 `python3 simulator/esp32sim-flow.py` 并传入相同参数；
 `--build`、`--emulator` 分别指定已有固件构建目录和模拟器。

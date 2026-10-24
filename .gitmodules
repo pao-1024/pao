@@ -1,0 +1,4 @@
+[submodule "simulator/esp32sim"]
+	path = simulator/esp32sim
+	url = https://github.com/pao-1024/esp32sim.git
+	branch = pao
