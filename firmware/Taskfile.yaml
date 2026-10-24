@@ -3,6 +3,7 @@ version: '3'
 env:
   PAO_BASE_REF: '{{.REF | default ""}}'
   PAO_BUILD_ACTION: '{{.ACTION | default "build"}}'
+  PYTHONPYCACHEPREFIX: '{{.ROOT_DIR}}/tmp/pycache'
 
 tasks:
   build:

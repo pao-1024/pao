@@ -1,0 +1,117 @@
+:root {
+  color-scheme: dark;
+  --bg: #0a0d12; --panel: #10151c; --raised: #161d26; --line: #222c38; --grid: #1c2530;
+  --text: #d8e2ec; --muted: #7c8a99; --dim: #3a4654;
+  --ok: #4fd18b; --bad: #ff6b6b; --warn: #f3c04f;
+  --i2c: #4cc2ff; --i2s: #b48cff; --i2s-in: #ff8fd1; --pwm: #ffa94d; --gpio: #5fd38d; --uart: #8fb3d0;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+#root { max-width: 1480px; margin: 0 auto; padding: 16px; }
+button { font: inherit; color: var(--text); background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: #1d3a5c; border-color: #2c5a8c; }
+button.primary.on { background: #5c1d2a; border-color: #8c2c3f; }
+button.small { padding: 2px 10px; font-size: 12px; }
+input[type=search] { font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; width: 180px; }
+:focus-visible { outline: 2px solid var(--i2c); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.brand h1 { margin: 0; font-size: 20px; letter-spacing: .02em; }
+.brand .sub { color: var(--muted); font-size: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+.chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+.chip b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+.chip.ok { color: var(--ok); border-color: #1f4d35; }
+.chip.bad { color: var(--bad); border-color: #5a2626; }
+.actions { display: flex; gap: 8px; }
+.hint { color: var(--muted); margin: 8px 0 12px; font-size: 13px; }
+
+.grid { display: grid; gap: 12px; grid-template-columns: 360px minmax(0, 1fr); grid-template-areas: "device wiring" "audio events" "log log"; }
+.device { grid-area: device; } .wiring { grid-area: wiring; } .events { grid-area: events; } .audio { grid-area: audio; } .log { grid-area: log; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
+.panel h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: .04em; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.panel h2 .tools { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 400; }
+.muted { color: var(--muted); font-weight: 400; }
+
+.screen { background: #050608; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.screen canvas { display: block; width: 100%; aspect-ratio: 2 / 1; image-rendering: pixelated; background: #000; border-radius: 4px; }
+.screen-meta { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.led-row { display: inline-flex; align-items: center; gap: 6px; }
+.led { width: 12px; height: 12px; border-radius: 50%; background: #2a2f36; border: 1px solid #000; }
+.led.lit { background: var(--led); box-shadow: 0 0 10px var(--led); }
+
+.car { display: block; width: 100%; max-width: 300px; margin: 10px auto 0; }
+.car .body { fill: var(--raised); stroke: var(--line); stroke-width: 2; }
+.car .tyre { fill: #0b0f14; stroke: #2e3a48; stroke-width: 2; }
+.car .drive.fwd, .car .arrow.fwd { fill: var(--ok); }
+.car .drive.rev, .car .arrow.rev { fill: var(--pwm); }
+.car .launcher { fill: #1a222c; stroke: var(--line); stroke-width: 1.5; transition: fill .15s; }
+.car .launcher.charge { fill: #4d3d12; stroke: var(--warn); }
+.car .launcher.fire { fill: #5c1d1d; stroke: var(--bad); }
+.car .label { fill: var(--text); font-size: 12px; text-anchor: middle; font-family: var(--mono); }
+.car .label.small { font-size: 10px; }
+.car .label.muted { fill: var(--muted); }
+.car .motion line { stroke: var(--i2c); stroke-width: 4; stroke-linecap: round; }
+.car .motion path { fill: var(--i2c); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 13px; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+
+.legend { display: inline-flex; gap: 8px; font-weight: 400; }
+.key::before { content: ""; display: inline-block; width: 10px; height: 3px; margin-right: 4px; vertical-align: middle; background: var(--bus); border-radius: 2px; }
+.bus-i2c { --bus: var(--i2c); } .bus-i2s { --bus: var(--i2s); } .bus-pwm { --bus: var(--pwm); } .bus-gpio { --bus: var(--gpio); } .bus-uart { --bus: var(--uart); }
+.wiring-svg { display: block; width: 100%; height: auto; font-family: var(--mono); }
+.chip-body { fill: #121a24; stroke: #2e3a48; stroke-width: 2; }
+.chip-name { fill: var(--text); font-size: 18px; font-weight: 700; text-anchor: middle; }
+.chip-sub { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+.module { fill: var(--raised); stroke: var(--line); transition: stroke .2s; }
+.module.busy { stroke: var(--muted); }
+.module-name { fill: var(--text); font-size: 12px; font-weight: 600; font-family: system-ui, sans-serif; }
+.module-part { fill: var(--muted); font-size: 10px; font-family: system-ui, sans-serif; }
+.wire { stroke: var(--dim); stroke-width: 2; transition: stroke .2s; }
+.pad { fill: var(--dim); }
+.signal, .gpio { fill: var(--muted); font-size: 10px; }
+.signal.left, .gpio.right, .module-name.right, .module-part.right { text-anchor: end; }
+.value { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+.wire-group.on .wire { stroke: var(--bus); stroke-dasharray: 7 5; animation: flow .5s linear infinite; }
+.wire-group.on .wire.in { animation-direction: reverse; }
+.wire-group.on .pad { fill: var(--bus); }
+.wire-group.on .value, .wire-group.on .gpio { fill: var(--bus); }
+@keyframes flow { to { stroke-dashoffset: -12; } }
+
+.toggle { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--bus); cursor: pointer; }
+.toggle input { accent-color: var(--bus); margin: 0; }
+.table { height: 420px; overflow: auto; font-size: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.thead, .tr { display: grid; grid-template-columns: 64px 52px minmax(140px, 220px) minmax(0, 1fr); gap: 8px; padding: 4px 10px; align-items: start; }
+.thead { position: sticky; top: 0; background: var(--raised); color: var(--muted); border-bottom: 1px solid var(--line); }
+.tr { border-bottom: 1px solid #151c25; }
+.tr:hover { background: #131a23; }
+.time { font-family: var(--mono); color: var(--muted); }
+.tag { font-family: var(--mono); font-size: 11px; color: var(--bus); }
+.pins { color: var(--muted); overflow-wrap: anywhere; }
+.text { overflow-wrap: anywhere; }
+.text code { display: block; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
+.empty { color: var(--muted); padding: 16px; margin: 0; }
+
+.audio figure { margin: 0 0 12px; }
+.audio figcaption { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+.audio canvas { display: block; width: 100%; height: 110px; background: #07090c; border: 1px solid var(--line); border-radius: 8px; --grid: #1c2530; }
+
+.console { height: 320px; overflow: auto; background: #07090c; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.line.level-W { color: var(--warn); }
+.line.level-E { color: var(--bad); }
+.line.level-I { color: #b9c6d3; }
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "device" "wiring" "events" "audio" "log"; }
+  .car { max-width: 260px; }
+}
+@media (max-width: 640px) {
+  #root { padding: 12px; }
+  .thead, .tr { grid-template-columns: 56px 44px minmax(0, 1fr); }
+  .thead span:nth-child(3), .tr .pins { display: none; }
+  .table { height: 360px; }
+}

@@ -10,8 +10,8 @@ I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、两块单路�
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
 板级初始化创建左右电机、两轮底盘和电磁发射器，上电保持停止与断开；
 业务组件初始化仅输出日志，尚未接入上层运动指令或发射指令。
-默认 OTA 网关指向灵矽，
-但未验证设备绑定及语音连接。
+默认 OTA 网关指向灵矽，实机设备绑定及语音连接仍需板上验证；
+模拟器单独维护在仓库根目录的 `simulator/`，使用方法见[模拟器说明](../simulator/README.md)。
 
 ## 环境
 
@@ -172,7 +172,7 @@ if (launcher.fire() == ESP_ERR_INVALID_STATE) {
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
 仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
-并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao/`
+并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/`
 进行 C/C++ 静态分析。
 
 PR 仅运行静态检查。推送到 `main` 或在 `main` 上手动触发时，静态检查通过后，
