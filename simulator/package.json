@@ -6,7 +6,7 @@
   "engines": { "node": ">=24" },
   "scripts": {
     "build": "vite build",
-    "check": "tsc --noEmit && node pao-sim/microphone-check.mjs"
+    "check": "tsc --noEmit && node pao-sim/microphone-check.mjs && node web/protocol-check.ts"
   },
   "dependencies": {
     "react": "19.3.1",

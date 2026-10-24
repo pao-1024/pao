@@ -1,5 +1,6 @@
 use esp_soc::board::BoardModel;
 use crate::ssd1306::{Ssd1306, Ssd1306State};
+use crate::trace::{Trace, TracedI2c};
 use std::sync::{Arc, Mutex};
 
 /// PAO voice board: SSD1306 on I2C0 SDA41/SCL42, status LED on GPIO48.
@@ -7,16 +8,21 @@ use std::sync::{Arc, Mutex};
 pub struct Pao {
     display: Arc<Mutex<Ssd1306State>>,
     led: [[u8; 3]; 1], updates: u64, edges: u64,
+    pub trace: Arc<Mutex<Trace>>,
 }
 impl BoardModel for Pao {
     fn name(&self) -> &'static str { "pao" }
     fn gpio_changes(&mut self, changes: &[(u8, bool)]) {
         self.edges += changes.len() as u64;
-        for &(pin, high) in changes { if pin == 48 { self.led[0] = [if high { 255 } else { 0 }; 3]; self.updates += 1; } }
+        let mut trace = self.trace.lock().unwrap();
+        for &(pin, high) in changes {
+            trace.gpio(pin, high);
+            if pin == 48 { self.led[0] = [if high { 255 } else { 0 }; 3]; self.updates += 1; }
+        }
     }
     fn gpio_events(&self) -> u64 { self.edges }
     fn i2c_devices(&mut self) -> Vec<(u8, u8, Box<dyn esp_periph::i2c::I2cDevice>)> {
-        vec![(0, 0x3c, Box::new(Ssd1306::new(self.display.clone(), (41, 42))))]
+        vec![(0, 0x3c, Box::new(TracedI2c::new(Ssd1306::new(self.display.clone(), (41, 42)), 0x3c, self.trace.clone())))]
     }
     fn display(&self) -> Option<(u32, u32, Vec<u16>, u64)> {
         let state = self.display.lock().unwrap();
