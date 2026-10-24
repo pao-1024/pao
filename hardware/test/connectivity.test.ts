@@ -81,6 +81,7 @@ test("编译产物包含全部模块，且没有电路错误", () => {
       "MOTOR_LEFT",
       "RELAY_CHARGE",
       "RELAY_FIRE",
+      "BUCK_3V3",
       "LAUNCHER",
     ].sort(),
   )
@@ -145,13 +146,23 @@ test("14 路 GPIO 与接线要求一致，每路只连接对应模块信号", ()
 })
 
 test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增益", () => {
-  assertNetwork(["BOOST_5V.VOUT_PLUS", "ESP32_S3.5V", "MX1508.VCC"])
+  assertNetwork([
+    "BOOST_5V.VOUT_PLUS",
+    "ESP32_S3.5V",
+    "MX1508.VCC",
+    "BUCK_3V3.VIN_PLUS",
+  ])
+  // 主控 3V3 不再挂继电器与发射器，避免充能脉冲拉塌开发板稳压器。
   assertNetwork([
     "ESP32_S3.3V3",
     "MIC.VDD",
     "AMP.VIN",
     "AMP.SD_MODE",
     "OLED.VCC",
+  ])
+  // 发射器专用 3.3V：降压输出只供两路线圈与 CH1 触点。
+  assertNetwork([
+    "BUCK_3V3.VOUT_PLUS",
     "RELAY_CHARGE.VCC",
     "RELAY_CHARGE.COM",
     "RELAY_FIRE.VCC",
@@ -171,6 +182,8 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "RELAY_FIRE.GND",
     "RELAY_FIRE.COM",
     "LAUNCHER.GND",
+    "BUCK_3V3.VIN_MINUS",
+    "BUCK_3V3.VOUT_MINUS",
   ])
 })
 

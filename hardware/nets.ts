@@ -7,6 +7,8 @@ export const nets = {
   power: {
     v5: net("V5"),
     v3v3: net("V3V3"),
+    // 由 5V 单独降压得到，只供继电器线圈与发射器，不接入主控 3V3。
+    v3v3Aux: net("V3V3_AUX"),
     gnd: net("GND"),
   },
   microphone: {
