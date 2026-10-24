@@ -19,13 +19,12 @@ export const MODULES: Module[] = [
     wires: [wire(11, "IN1", "pwm"), wire(12, "IN2", "pwm")] },
   { id: "motor-l", name: "左电机", part: "MX1508 B 路", side: "right",
     wires: [wire(13, "IN3", "pwm"), wire(14, "IN4", "pwm")] },
-  { id: "relay1", name: "继电器 CH1", part: "发射器供电 · 低电平吸合", side: "right", wires: [wire(17, "IN", "gpio")] },
-  { id: "relay2", name: "继电器 CH2", part: "发射按钮 · 低电平吸合", side: "right", wires: [wire(18, "IN", "gpio")] },
+  { id: "relay", name: "继电器", part: "发射按钮 · 低电平吸合", side: "right", wires: [wire(18, "IN", "gpio")] },
   { id: "led", name: "状态灯", part: "GPIO48 指示", side: "right", wires: [wire(48, "DIN", "gpio")] },
 ];
 
 export const PIN_LABEL = new Map(MODULES.flatMap(m => m.wires.map(w => [w.pin, `${m.name} ${w.signal}`] as const)));
-export const RELAY_PINS = new Set([17, 18]);
+export const RELAY_PINS = new Set([18]);
 export const hex2 = (byte: number) => byte.toString(16).padStart(2, "0").toUpperCase();
 
 // SSD1306 Rev 1.1 section 10: [name, parameter bytes].
@@ -96,6 +95,29 @@ export function motion(left: number, right: number) {
   const direction = forward > 0 ? "前进" : "后退";
   if (Math.abs(turn) < 0.02) return direction;
   return `${direction}并${turn > 0 ? "左" : "右"}转`;
+}
+
+/** Car pose in scene units (the car is about 1.7 long); heading 0 faces +Z and grows turning left. */
+export type Pose = { x: number; z: number; heading: number };
+// ponytail: duty maps linearly to speed with no inertia or stall; calibrate against the real car if the view must match distances.
+export const MAX_SPEED = 3, TRACK = 1.56;
+
+/** Differential drive: integrates signed wheel duties in [-1, 1] over `dt` seconds. */
+export function stepPose(pose: Pose, left: number, right: number, dt: number): Pose {
+  const speed = (left + right) / 2 * MAX_SPEED, turn = (right - left) * MAX_SPEED / TRACK;
+  const heading = pose.heading + turn * dt / 2;
+  return { x: pose.x + Math.sin(heading) * speed * dt, z: pose.z + Math.cos(heading) * speed * dt, heading: pose.heading + turn * dt };
+}
+
+/** Simulated launcher energy: the module is always powered and charging; a relay (GPIO18) pull-in spends it. */
+export type Launcher = { energy: number; shots: number; lastShot: number | null };
+// ponytail: linear charge over the HU-064 no-load figure (about 10 s); replace with the measured curve once the module is characterised.
+export const FULL_CHARGE_S = 10;
+
+/** Advances the launcher by `dt` seconds of charging, then applies a pull-in seen in the same interval. */
+export function stepLauncher(state: Launcher, dt: number, fired: boolean): Launcher {
+  const energy = Math.min(1, state.energy + dt / FULL_CHARGE_S);
+  return fired ? { energy: 0, shots: state.shots + 1, lastShot: energy } : { ...state, energy };
 }
 
 const STATES: Record<string, string> = {

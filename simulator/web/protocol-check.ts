@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { decodeSsd1306, motion, wheels } from "./protocol.ts";
+import { decodeSsd1306, FULL_CHARGE_S, MAX_SPEED, motion, stepLauncher, stepPose, wheels } from "./protocol.ts";
 
 assert.equal(decodeSsd1306([0x00, 0xae, 0x20, 0x00, 0x21, 0, 127, 0xb3], 8),
   "AE 显示关 · 20 寻址模式 00 · 21 列地址 0–127 · B3 页 3");
@@ -15,4 +15,20 @@ assert.equal(motion(0.3, 0.3), "前进");
 assert.equal(motion(0.5, -0.5), "原地右转");
 assert.equal(motion(-0.2, -0.6), "后退并右转");
 assert.equal(motion(0, 0), "停止");
-console.log("PASS: SSD1306 decoding and chassis motion");
+let launcher = { energy: 0, shots: 0, lastShot: null as number | null };
+launcher = stepLauncher(launcher, FULL_CHARGE_S / 2, false);
+assert.equal(launcher.energy, 0.5);
+launcher = stepLauncher(launcher, FULL_CHARGE_S, false);
+assert.equal(launcher.energy, 1, "energy saturates when full");
+launcher = stepLauncher(launcher, 0.05, true);
+assert.deepEqual(launcher, { energy: 0, shots: 1, lastShot: 1 });
+assert.equal(stepLauncher(launcher, FULL_CHARGE_S / 10, true).lastShot, 0.1, "a quick follow-up shot is weak");
+const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+const straight = stepPose({ x: 0, z: 0, heading: 0 }, 1, 1, 1);
+near(straight.z, MAX_SPEED); near(straight.x, 0); near(straight.heading, 0);
+const spin = stepPose({ x: 0, z: 0, heading: 0 }, -0.5, 0.5, 1);
+near(spin.x, 0); near(spin.z, 0); assert.ok(spin.heading > 0, "right wheel faster turns left");
+let arc = { x: 0, z: 0, heading: 0 };
+for (let i = 0; i < 1000; i++) arc = stepPose(arc, 0.5, 1, 0.01);
+assert.ok(arc.x > 0 && arc.heading > 0, "left arc drifts to +X");
+console.log("PASS: SSD1306 decoding, chassis motion, car pose and launcher charge");

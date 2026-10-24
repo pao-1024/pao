@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
-import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, wheels } from "./protocol.ts";
-import type { Bus, Module, Wire } from "./protocol.ts";
+import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, stepLauncher, wheels } from "./protocol.ts";
+import type { Bus, Launcher, Module, Wire } from "./protocol.ts";
+import { Car3D } from "./car3d.tsx";
 import "./style.css";
 
 type Microphone = {
@@ -35,6 +36,7 @@ function App() {
   const microphone = useRef<Microphone | null>(null);
   const speaker = useRef<AudioContext | null>(null);
   const playHead = useRef(0);
+  const playLead = useRef(0.06);
   const active = useRef(new Map<number, number>());
   const nextRow = useRef(0);
   const simTime = useRef(0);
@@ -43,7 +45,7 @@ function App() {
   const paused = useRef(false);
   const [connected, setConnected] = useState(false);
   const [stat, setStat] = useState({ time: 0, speed: null as number | null, insns: 0 });
-  const [hint, setHint] = useState("授权麦克风后说“你好小智”。建议使用耳机。");
+  const [hint, setHint] = useState("授权麦克风后说“小炮小炮”。建议使用耳机。");
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [led, setLed] = useState("rgb(0,0,0)");
@@ -55,6 +57,8 @@ function App() {
   const [logFilter, setLogFilter] = useState("");
   const [device, setDevice] = useState("未知");
   const [command, setCommand] = useState<Command>(null);
+  const [launcher, setLauncher] = useState<Launcher>({ energy: 0, shots: 0, lastShot: null });
+  const launcherTime = useRef(0);
   const [uartBytes, setUartBytes] = useState(0);
   const [audio, setAudio] = useState({ speaker: { rate: 0, peak: 0 }, microphone: { rate: 0, peak: 0 } });
   const [now, setNow] = useState(performance.now());
@@ -105,7 +109,12 @@ function App() {
       audio.getChannelData(0).set(samples);
       const source = context.createBufferSource();
       source.buffer = audio; source.connect(context.destination);
-      playHead.current = Math.max(playHead.current, context.currentTime + 0.06);
+      // Emulation can fall below real time; every underrun grows the jitter buffer so playback
+      // pauses less often, trading up to 0.5 s of extra latency for smoother speech.
+      if (playHead.current < context.currentTime) {
+        if (playHead.current > 0) playLead.current = Math.min(0.5, playLead.current + 0.05);
+        playHead.current = context.currentTime + playLead.current;
+      }
       source.start(playHead.current); playHead.current += audio.duration;
     }
   }
@@ -127,8 +136,14 @@ function App() {
 
   function trace(message: { time: number; levels: string; known: string; pwm: [number, number][]; i2c: [number, number]; dropped: number; events: TraceEvent[] }) {
     simTime.current = message.time;
+    // The interval charges first; a relay pull-in reported in the same batch fires after.
+    const fired = message.events.some(event => event.k === "gpio" && event.pin === 18 && !event.v);
+    const dt = Math.max(0, message.time - launcherTime.current);
+    launcherTime.current = message.time;
+    setLauncher(state => stepLauncher(state, dt, fired));
+    const levels = BigInt(`0x${message.levels}`), known = BigInt(`0x${message.known}`);
     setPins(previous => ({
-      ...previous, levels: BigInt(`0x${message.levels}`), known: BigInt(`0x${message.known}`),
+      ...previous, levels, known,
       pwm: new Map(message.pwm), i2c: message.i2c,
     }));
     const list: Omit<Row, "id" | "time">[] = [];
@@ -161,7 +176,10 @@ function App() {
     function connect() {
       const connection = new WebSocket(`ws://${location.host}/ws`);
       connection.binaryType = "arraybuffer"; socket.current = connection;
-      connection.onopen = () => setConnected(true);
+      connection.onopen = () => {
+        setConnected(true);
+        if (microphone.current) setHint("正在收音，说“小炮小炮”");
+      };
       connection.onmessage = event => {
         if (event.data instanceof ArrayBuffer) { binary(event.data); return; }
         const message = JSON.parse(event.data);
@@ -173,12 +191,14 @@ function App() {
           const input = BigInt(`0x${message.gpio_in}`);
           setPins(previous => previous.input === input ? previous : { ...previous, input });
         } else if (message.t === "microphone-error") {
-          void stopMicrophone(); setHint(message.message);
+          // The simulator bounds its own backlog; this reports a full queue or a missing I2S port.
+          setHint(`麦克风数据未送达设备：${message.message}`);
         }
       };
       connection.onclose = () => {
         if (disposed) return;
-        void stopMicrophone(); setConnected(false);
+        // The microphone and speaker stay open; audio resumes on the next connection.
+        setConnected(false);
         retry = setTimeout(connect, 1000);
       };
     }
@@ -226,8 +246,9 @@ function App() {
       const source = context.createMediaStreamSource(stream);
       const node = new AudioWorkletNode(context, "pao-microphone");
       node.port.onmessage = event => {
-        if (connection.readyState !== WebSocket.OPEN) return;
-        connection.send(event.data);
+        const current = socket.current;
+        if (!current || current.readyState !== WebSocket.OPEN) return;
+        current.send(event.data);
         // [5][port][PCM16] at the 1/16 slot gain of pao-microphone.js.
         const data = new DataView(event.data as ArrayBuffer), samples = new Float32Array((data.byteLength - 2) / 2);
         for (let i = 0; i < samples.length; i++) samples[i] = data.getInt16(2 + i * 2, true) / 2048;
@@ -239,7 +260,7 @@ function App() {
         throw Error("模拟器连接已断开");
       }
       microphone.current = {stream, context, source, node};
-      setRecording(true); setHint("正在收音，说“你好小智”");
+      setRecording(true); setHint("正在收音，说“小炮小炮”");
     } catch (error) {
       stream?.getTracks().forEach(track => track.stop());
       if (context) await context.close();
@@ -261,7 +282,7 @@ function App() {
   const high = (pin: number) => bit(pins.levels, pin);
   const known = (pin: number) => bit(pins.known, pin);
   const { left, right } = wheels(pins.pwm, high);
-  const charging = known(17) && !high(17), firing = known(18) && !high(18);
+  const firing = known(18) && !high(18), charging = !firing && launcher.energy < 1;
   const isActive = (pin: number) => now - (active.current.get(pin) ?? -1e9) < ACTIVE_MS;
 
   function value(wire: Wire): string {
@@ -295,10 +316,12 @@ function App() {
         <span className="chip">指令 <b>{(stat.insns / 1e6).toFixed(0)} M</b></span>
       </div>
       <div className="actions">
-        <button className={recording ? "primary on" : "primary"} disabled={!connected || busy} onClick={() => void toggleMicrophone()}>
+        <button className={recording ? "primary on" : "primary"} disabled={busy || (!connected && !recording)} onClick={() => void toggleMicrophone()}>
           {recording ? "关闭麦克风" : "启用麦克风和扬声器"}
         </button>
         <button disabled={!connected} onClick={pressBoot}>BOOT</button>
+        {/* 固件内置遥控页，由 run-esp32sim.py 的 --hostfwd 转发到本机 8081。 */}
+        <a className="button" href="http://127.0.0.1:8081/" target="_blank" rel="noreferrer">遥控</a>
       </div>
     </header>
     <p className="hint" role="status">{hint}</p>
@@ -313,11 +336,12 @@ function App() {
             <span className="led-row"><span className={`led ${led === "rgb(0,0,0)" ? "" : "lit"}`} style={{ "--led": led } as CSSProperties} aria-label={led === "rgb(0,0,0)" ? "状态灯 灭" : "状态灯 亮"} /> GPIO48</span>
           </div>
         </div>
-        <Car left={left} right={right} charging={charging} firing={firing} />
+        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} />
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
           <dt>固件指令</dt><dd>{command ? `drive forward=${command.forward} turn=${command.turn} · ${command.duration} ms` : "无进行中的运动"}</dd>
-          <dt>发射器</dt><dd>{firing ? "发射中（CH2 吸合）" : charging ? "充能中（CH1 吸合）" : known(17) ? "断电" : "未初始化"}</dd>
+          <dt>发射器</dt><dd>{firing ? "发射中（继电器吸合）" : charging ? "充能中" : "已充满"} · 电量 {percent(launcher.energy)}</dd>
+          <dt>发射记录</dt><dd>{launcher.shots ? `共 ${launcher.shots} 发 · 上一发能量 ${percent(launcher.lastShot ?? 0)}${launcher.lastShot ? "" : "（空发）"}` : "尚未发射"}</dd>
         </dl>
       </section>
 
@@ -396,35 +420,6 @@ function record(stream: Stream, samples: Float32Array, rate: number, scope: HTML
     if (x) context.lineTo(x, y); else context.moveTo(x, y);
   }
   context.stroke();
-}
-
-function Car({ left, right, charging, firing }: { left: number; right: number; charging: boolean; firing: boolean }) {
-  const wheel = (x: number, speed: number, name: string) => {
-    const fill = Math.min(1, Math.abs(speed)) * 38, cx = x + 13;
-    return <g>
-      <rect x={x} y={40} width={26} height={84} rx={6} className="tyre" />
-      <rect x={x + 4} y={speed >= 0 ? 82 - fill : 82} width={18} height={fill} rx={3} className={speed >= 0 ? "drive fwd" : "drive rev"} />
-      {speed > 0.01 && <path d={`M${cx} 24 l-7 10 h14 z`} className="arrow fwd" />}
-      {speed < -0.01 && <path d={`M${cx} 140 l-7 -10 h14 z`} className="arrow rev" />}
-      <text x={cx} y={160} className="label">{name} {Math.round(speed * 100)}%</text>
-    </g>;
-  };
-  const forward = (left + right) / 2, turn = (right - left) / 2;
-  const moving = Math.abs(left) > 0.01 || Math.abs(right) > 0.01;
-  return <svg viewBox="0 0 240 172" className="car" role="img" aria-label={`底盘：${motion(left, right)}`}>
-    <rect x={62} y={30} width={116} height={116} rx={18} className="body" />
-    <rect x={92} y={16} width={56} height={24} rx={6} className={`launcher ${firing ? "fire" : charging ? "charge" : ""}`} />
-    <text x={120} y={32} className="label small">{firing ? "发射" : charging ? "充能" : "发射器"}</text>
-    <text x={120} y={60} className="label muted">前</text>
-    {wheel(30, left, "左")}
-    {wheel(184, right, "右")}
-    {moving
-      ? <g className="motion" transform={`rotate(${-turn * 60} 120 96)`}>
-          <line x1={120} y1={forward >= 0 ? 118 : 74} x2={120} y2={forward >= 0 ? 80 : 112} />
-          <path d={forward >= 0 ? "M120 70 l-8 12 h16 z" : "M120 122 l-8 -12 h16 z"} />
-        </g>
-      : <text x={120} y={100} className="label muted">停止</text>}
-  </svg>;
 }
 
 function Wiring({ value, isActive }: { value: (wire: Wire) => string; isActive: (pin: number) => boolean }) {

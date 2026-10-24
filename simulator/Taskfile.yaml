@@ -23,8 +23,9 @@ tasks:
       - python3 build-esp32sim.py
       - pnpm run build
   check:
-    desc: 检查 Python、React 类型和浏览器音频封包
+    desc: 检查启动身份、Python、React 类型和浏览器音频封包
     cmds:
       - task: setup
       - python3 -m py_compile *.py
+      - python3 -m unittest discover -s . -p 'test_*.py'
       - pnpm run check

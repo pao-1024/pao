@@ -196,9 +196,10 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 - `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘和发射器驱动，不依赖小智私有类。
 - `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘、发射器和 OLED 初始化，
   调用 `pao_initialize()`。屏幕复用小智 `OledDisplay`，未连接或驱动初始化失败时回退到 `NoDisplay`。
-- `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
+- `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`；
+  并让 MultiNet 唤醒词只在 AFE 的 VAD 判定为语音及其后 1 s 内运行，降低待机 CPU 占用。
 - `EXTRA_COMPONENT_DIRS`：直接引用本仓库组件，不复制源码。
-- `firmware/sdkconfig.defaults`：板型、语言和灵矽 OTA 网关配置。
+- `firmware/sdkconfig.defaults`：板型、语言、唤醒词和灵矽 OTA 网关配置。
 
 后续注册 MCP 工具时，在适配层连接小智工具回调与业务组件；真实板型应使用
 独立标识及正确的引脚、Flash 和 PSRAM 配置，避免被参考板固件更新覆盖。

@@ -39,5 +39,6 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ github.workspace }}/tmp/pycache
         run: |
           python3 -m py_compile simulator/*.py
+          python3 -m unittest discover -s simulator -p 'test_*.py'
           node --check simulator/web/pao-microphone.js
           pnpm --dir simulator run check
