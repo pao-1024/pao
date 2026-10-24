@@ -51,7 +51,8 @@ bool Launcher::isCharging() const {
 
 esp_err_t Launcher::fire() {
     std::lock_guard<std::mutex> lock(mutex_);
-    // 充能期间升压仍在向储能电容灌电流，此时触发会把能量直接泄进 SCR 与线圈。
+    // 供电中说明发射器仍在充能：此时触发的能量取决于已充入的电量，
+    // 且模块在充能过程中收到按键信号的行为未定义，直接拒绝。
     if (charging_) {
         return ESP_ERR_INVALID_STATE;
     }
