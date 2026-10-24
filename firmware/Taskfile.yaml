@@ -17,7 +17,7 @@ tasks:
     cmds:
       - bash scripts/build.sh
   sim:full:
-    desc: 用正式固件验证首次配网、冷启动重连、真实唤醒及云端对话（使用 -- 传入参数）
+    desc: 用正式固件验证配网、OLED、唤醒、语音及按键（使用 -- 传入参数）
     cmds:
       - task: sim:install
       - task: sim:build

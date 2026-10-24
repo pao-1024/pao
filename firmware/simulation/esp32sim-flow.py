@@ -76,7 +76,7 @@ def run(args, build, output):
                     str(output / "nvs.bin"), "0x4000"], check=True, env=environment)
     flash_image(build, output / "fresh.bin", output / "nvs.bin")
     firmware_hash = hashlib.sha256((build / "xiaozhi.bin").read_bytes()).hexdigest()
-    common = [str(args.emulator.resolve()), "--board", "none", "--boot", "rom",
+    common = [str(args.emulator.resolve()), "--board", "pao", "--boot", "rom",
               "--mac", args.mac, "--rom", str(args.rom.resolve()),
               "--flash-mb", "16", "--psram-mb", "8", "--elf", str(build / "xiaozhi.elf"),
               "--wifi", f"ssid={SSID},psk={PASSWORD}", "--realtime", "--console", "uart0", "--no-dump"]
@@ -94,7 +94,8 @@ def run(args, build, output):
     with (output / "provision.log").open("w") as log:
         command = common + ["--flash-image", str(output / "fresh.bin"),
                             "--wifi-join", "", "--hostfwd", f"tcp:127.0.0.1:{port}-192.168.4.1:80",
-                            "--max-seconds", "30", "--flash-out", str(output / "saved.bin")]
+                            "--max-seconds", "30", "--flash-out", str(output / "saved.bin"),
+                            "--tft-png", str(output / "provision-oled.png")]
         process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=environment)
         try:
             deadline = time.monotonic() + args.timeout
@@ -122,6 +123,7 @@ def run(args, build, output):
                 process.wait(timeout=15)
     text = (output / "provision.log").read_text(errors="replace")
     assert "State: activating -> idle" in text, f"Device activation incomplete; inspect {output / 'provision.log'}"
+    assert "OledDisplay: Adding OLED display" in text and "OLED unavailable" not in text
     # A 32-bit digital microphone slot is shifted by 12 in the production codec.
     # esp32sim left-aligns PCM16 by 16, so compensate the host samples by 16.
     for name, source in [("wake", args.wake_input), ("question", args.pcm_input)]:
@@ -129,14 +131,18 @@ def run(args, build, output):
         normalized = b"".join(struct.pack("<h", sample // 16) for (sample,) in struct.iter_unpack("<h", data))
         (output / f"{name}.pcm").write_bytes(b"\0" * 16000 + normalized + b"\0" * 16000)
     wake_duration = args.wake_input.stat().st_size / 32000 + 2
+    question_done = wake_duration + 2.5 + args.pcm_input.stat().st_size / 32000
     (output / "voice.script").write_text(
         "0 release 0\n0 waituart0 60 Startup wake word hint:\n"
         f"1 i2spcm 1 {output / 'wake.pcm'} 16000\n"
         f"{wake_duration + 1} waituart0 60 State: speaking -> listening\n"
-        f"{wake_duration + 1.5} i2spcm 1 {output / 'question.pcm'} 16000\n")
+        f"{wake_duration + 1.5} i2spcm 1 {output / 'question.pcm'} 16000\n"
+        f"{question_done} waituart0 60 State: speaking -> listening\n"
+        f"{question_done + .2} press 0 100\n")
     with (output / "voice.log").open("w") as log:
         subprocess.run(common + ["--flash-image", str(output / "saved.bin"), "--max-seconds", "60",
-                                "--script", str(output / "voice.script"), "--wav", str(output / "speaker.wav")],
+                                "--script", str(output / "voice.script"), "--wav", str(output / "speaker.wav"),
+                                "--tft-png", str(output / "oled.png")],
                        stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                        env=environment, timeout=args.timeout, check=True)
     text = (output / "voice.log").read_text(errors="replace")
@@ -144,11 +150,14 @@ def run(args, build, output):
                      "State: connecting -> listening", "State: listening -> speaking"]:
         assert required in text, f"Missing {required!r}; inspect {output / 'voice.log'}"
     assert "State: starting -> wifi_configuring" not in text
+    assert "OledDisplay: Adding OLED display" in text and "OLED unavailable" not in text
     assert "I2S1 input overflow" not in text and "wait uart0 timeout" not in text
     assert "Guru Meditation Error" not in text and "task_wdt: Task watchdog got triggered" not in text
     asr = re.findall(r"Application: >> (.*)", text)
     assert any(args.expected_asr in line for line in asr), f"Unexpected ASR: {asr}"
     assert text.count("State: speaking -> listening") >= 2, "Greeting and response must both finish"
+    button = text.find("Gpio(0, false)")
+    assert button >= 0 and "State: listening -> idle" in text[button:], "BOOT click did not close the conversation"
     greeting_end = re.search(r"I \((\d+)\) StateMachine: State: speaking -> listening", text)
     assert greeting_end, "Missing greeting completion time"
     with wave.open(str(output / "speaker.wav"), "rb") as wav:
@@ -165,6 +174,8 @@ def run(args, build, output):
     assert hashlib.sha256((build / "xiaozhi.bin").read_bytes()).hexdigest() == firmware_hash
     result = {"backend": "esp32sim", "firmware_sha256": firmware_hash, "production_firmware": True,
               "first_provisioning": True, "saved_wifi_cold_boot": True, "real_wakenet": True,
+              "oled_initialized": True,
+              "boot_button_closed_conversation": True,
               "question_asr": asr, "tts_returned_to_listening": True, "i2s_output": audio}
     (output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(result, ensure_ascii=False))

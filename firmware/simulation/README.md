@@ -9,8 +9,8 @@ QEMU 使用相同 `PaoBoard`、I2S Codec、音频处理、Opus 和服务协议�
 这仍是不同配置编译的镜像，不能视为正式 Wi-Fi 镜像在 QEMU 原样跑通。
 
 固定版本的 [PAO QEMU fork](https://github.com/pao-1024/qemu) 提供 ESP32-S3
-I2S/GDMA、GPIO0、GPIO48 和 MCPWM 功能模型。正式 PAO 固件没有启用屏幕；
-SSD1306 OLED 仅由独立外设探针验证。
+I2S/GDMA、GPIO0、GPIO48 和 MCPWM 功能模型。正式 PAO 固件接入 SSD1306 OLED；
+esp32sim 的 `pao` 板型将其真实 I2C 写入渲染为图像，QEMU 另有独立外设探针。
 左右电机通过实际 GPIO/MCPWM 输出验证方向和占空比；另有一个仅供仿真显示亮灭的虚拟小灯。
 
 esp32sim 从芯片 ROM 启动同一个正式镜像，处理真实 Wi-Fi 协议、I2S/GDMA、
@@ -90,7 +90,7 @@ task firmware:qemu:run -- \
 设备尚未激活时，需要在 `tmp/qemu-voice/uart.log` 中查看激活码并完成服务端激活。
 
 结果在 `tmp/qemu-voice/result.json`，完整音频在 `speaker.wav`，ASR 完成后的回复音频在
-`reply.wav`。正式 PAO 固件没有屏幕，OLED 画面仅由外设探针生成。
+`reply.wav`。QEMU 的 OLED 寄存器与像素行为由外设探针单独检查。
 脚本单独检查 ASR 后的非静音输出，防止将启动提示音
 误认为 TTS 播放。仿真使用 Flash/eFuse 的临时写入层，不改写输入
 镜像；运行中从 OTA 获得的服务配置不会保存回输入文件。
@@ -118,20 +118,22 @@ task firmware:sim:full -- \
 
 命令构建固定版本的 esp32sim 和正式 PAO 固件，按顺序验证：
 
-1. 新建不含 SSID 的 NVS，从 ROM 启动正式固件自己的 SoftAP。
+1. 新建不含 SSID 的 NVS，从 ROM 启动正式固件，初始化 OLED 并开启自己的 SoftAP。
 2. 虚拟客户端加入热点，经 DHCP 获取地址，访问真实配置页并扫描虚拟 AP。
 3. 提交 WPA2 凭据，检查保存列表、取得 IP 和灵矽激活完成。
 4. 保存 Flash 后冷启动同一个镜像，检查凭据自动重连。
 5. 经真实 I2S/GDMA 注入唤醒词和提问，检查 WakeNet、指定提问的 ASR、
    欢迎语及回答播放完成、非静音 I2S 输出和返回 listening。
+6. 在回答播放结束后模拟 GPIO0 的真实短按，确认按键回调关闭会话并返回 idle。
 
 每轮模拟器默认主机超时 300 秒。真实服务要求设备身份已激活，
 自动验证使用专用测试设备的 MAC 和 UUID。测试产生的 Flash/NVS
 含设备配置，只保存在忽略的 `tmp/` 下。重复运行重新开始配网并覆盖上次结果；
 同一 worktree 的运行锁阻止多个流程同时写入证据目录。
 
-结果为 `tmp/esp32sim-full-flow/result.json`，配网日志、冷启动语音日志和
-`speaker.wav` 在同一目录。结果记录两轮使用的正式固件 SHA-256 和实际 ASR。
+结果为 `tmp/esp32sim-full-flow/result.json`，配网日志、冷启动语音日志、
+`speaker.wav`、`provision-oled.png` 和 `oled.png` 在同一目录。
+结果记录两轮使用的正式固件 SHA-256、OLED 初始化及实际 ASR。
 已有构建时可直接执行 `python3 firmware/simulation/esp32sim-flow.py` 并传入相同参数。
 `--build` 和 `--emulator` 可指定已有构建目录和模拟器。
 默认固件启用“你好小智” WakeNet；旧构建目录保留旧 sdkconfig 时需通过
