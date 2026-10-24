@@ -19,3 +19,7 @@
 #define MOTOR_GPIO_IN2 GPIO_NUM_12
 #define MOTOR_GPIO_IN3 GPIO_NUM_13
 #define MOTOR_GPIO_IN4 GPIO_NUM_14
+
+// 双路继电器模块：CH1 控制升压使能（充能），CH2 触发 SCR 门极（发射），均为低电平吸合。
+#define LAUNCHER_GPIO_CHARGE GPIO_NUM_17
+#define LAUNCHER_GPIO_FIRE GPIO_NUM_18
