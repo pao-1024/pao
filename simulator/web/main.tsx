@@ -57,9 +57,8 @@ function App() {
   const [logFilter, setLogFilter] = useState("");
   const [device, setDevice] = useState("未知");
   const [command, setCommand] = useState<Command>(null);
-  const [launcherCommand, setLauncherCommand] = useState<string | null>(null);
   const [launcher, setLauncher] = useState<Launcher>({ energy: 0, shots: 0, lastShot: null });
-  const charge = useRef({ time: 0, charging: false });
+  const launcherTime = useRef(0);
   const [uartBytes, setUartBytes] = useState(0);
   const [audio, setAudio] = useState({ speaker: { rate: 0, peak: 0 }, microphone: { rate: 0, peak: 0 } });
   const [now, setNow] = useState(performance.now());
@@ -131,23 +130,18 @@ function App() {
       const drive = line.match(/Chassis drive: forward=(-?\d+) turn=(-?\d+) duration_ms=(\d+)/);
       if (drive) setCommand({ forward: +drive[1], turn: +drive[2], duration: +drive[3] });
       if (line.includes("Chassis stopped")) setCommand(null);
-      const launch = line.match(/Launcher charge: duration_ms=(\d+) fire_after=(\d)/);
-      if (launch) setLauncherCommand(+launch[1] ? `充能 ${launch[1]} ms${+launch[2] ? " 后发射" : ""}` : "断电");
-      if (line.includes("Launcher charge stopped")) setLauncherCommand("充能到时，自动断电");
-      if (line.includes("Launcher fired")) setLauncherCommand("发射");
-      if (line.includes("Launcher fire rejected")) setLauncherCommand("发射被拒绝：充能中");
     }
     if (lines.length) setLogLines(previous => [...previous, ...lines].slice(-LOG_LINES));
   }
 
   function trace(message: { time: number; levels: string; known: string; pwm: [number, number][]; i2c: [number, number]; dropped: number; events: TraceEvent[] }) {
     simTime.current = message.time;
-    // CH1 as it stood during this interval charges first; a CH2 pull-in reported in the same batch fires after.
+    // The interval charges first; a relay pull-in reported in the same batch fires after.
     const fired = message.events.some(event => event.k === "gpio" && event.pin === 18 && !event.v);
-    const dt = Math.max(0, message.time - charge.current.time);
-    setLauncher(state => stepLauncher(state, dt, charge.current.charging, fired));
+    const dt = Math.max(0, message.time - launcherTime.current);
+    launcherTime.current = message.time;
+    setLauncher(state => stepLauncher(state, dt, fired));
     const levels = BigInt(`0x${message.levels}`), known = BigInt(`0x${message.known}`);
-    charge.current = { time: message.time, charging: (known >> 17n & 1n) === 1n && (levels >> 17n & 1n) === 0n };
     setPins(previous => ({
       ...previous, levels, known,
       pwm: new Map(message.pwm), i2c: message.i2c,
@@ -288,7 +282,7 @@ function App() {
   const high = (pin: number) => bit(pins.levels, pin);
   const known = (pin: number) => bit(pins.known, pin);
   const { left, right } = wheels(pins.pwm, high);
-  const charging = known(17) && !high(17), firing = known(18) && !high(18);
+  const firing = known(18) && !high(18), charging = !firing && launcher.energy < 1;
   const isActive = (pin: number) => now - (active.current.get(pin) ?? -1e9) < ACTIVE_MS;
 
   function value(wire: Wire): string {
@@ -346,9 +340,8 @@ function App() {
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
           <dt>固件指令</dt><dd>{command ? `drive forward=${command.forward} turn=${command.turn} · ${command.duration} ms` : "无进行中的运动"}</dd>
-          <dt>发射器</dt><dd>{firing ? "发射中（CH2 吸合）" : charging ? "充能中（CH1 吸合）" : known(17) ? "断电" : "未初始化"} · 电量 {percent(launcher.energy)}</dd>
+          <dt>发射器</dt><dd>{firing ? "发射中（继电器吸合）" : charging ? "充能中" : "已充满"} · 电量 {percent(launcher.energy)}</dd>
           <dt>发射记录</dt><dd>{launcher.shots ? `共 ${launcher.shots} 发 · 上一发能量 ${percent(launcher.lastShot ?? 0)}${launcher.lastShot ? "" : "（空发）"}` : "尚未发射"}</dd>
-          <dt>发射器指令</dt><dd>{launcherCommand ?? "无"}</dd>
         </dl>
       </section>
 

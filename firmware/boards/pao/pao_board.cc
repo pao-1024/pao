@@ -20,9 +20,7 @@
 #include <esp_timer.h>
 #include <wifi_manager.h>
 
-#include <algorithm>
 #include <atomic>
-#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 
@@ -38,12 +36,7 @@ private:
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
     int64_t chassis_deadline_ = 0;
-    Launcher launcher_{LAUNCHER_GPIO_CHARGE, LAUNCHER_GPIO_FIRE};
-    esp_timer_handle_t launcher_timer_ = nullptr;
-    std::mutex launcher_mutex_;
-    int64_t launcher_deadline_ = 0;
-    bool launcher_fire_after_charge_ = false;
-    std::mutex launcher_fire_mutex_;
+    Launcher launcher_{LAUNCHER_GPIO_FIRE};
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
@@ -121,100 +114,23 @@ private:
             });
     }
 
-    // duration_ms 为 0 时断开供电，否则供电并在到时后自动断开；fire_after 为真时断电后发射一次。
-    void ChargeLauncher(int duration_ms, bool fire_after = false) {
-        std::lock_guard<std::mutex> lock(launcher_mutex_);
-        launcher_deadline_ = 0;
-        launcher_fire_after_charge_ = duration_ms > 0 && fire_after;
-        const auto error = esp_timer_stop(launcher_timer_);
-        if (error != ESP_ERR_INVALID_STATE) {
-            ESP_ERROR_CHECK(error);
-        }
-        if (duration_ms > 0) {
-            const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
-            launcher_deadline_ = esp_timer_get_time() + duration_us;
-            ESP_ERROR_CHECK(esp_timer_start_once(launcher_timer_, duration_us));
-        }
-        launcher_.setCharging(duration_ms > 0);
-        ESP_LOGI(TAG, "Launcher charge: duration_ms=%d fire_after=%d", duration_ms,
-                 launcher_fire_after_charge_);
-    }
-
-    ToolResult FireLauncher() {
-        // 语音工具和网页遥控在不同任务里调用，串行化继电器脉冲。
-        std::lock_guard<std::mutex> lock(launcher_fire_mutex_);
-        if (launcher_.fire() != ESP_OK) {
-            ESP_LOGW(TAG, "Launcher fire rejected: charging");
-            return std::unexpected(std::string("Launcher is charging; wait or call self.launcher.stop first"));
-        }
+    // 语音工具和网页遥控在不同任务里调用，Launcher 自身串行化继电器脉冲。
+    void FireLauncher() {
+        launcher_.fire();
         ESP_LOGI(TAG, "Launcher fired");
-        return true;
     }
 
     void InitializeLauncherTools() {
-        esp_timer_create_args_t timer = {};
-        timer.arg = this;
-        timer.name = "launcher_charge";
-        timer.callback = [](void* arg) {
-            auto* board = static_cast<PaoBoard*>(arg);
-            std::lock_guard<std::mutex> lock(board->launcher_mutex_);
-            // 已排队的旧定时回调不能截断刚收到的新充能指令。
-            if (board->launcher_deadline_ != 0 && esp_timer_get_time() >= board->launcher_deadline_) {
-                board->launcher_.setCharging(false);
-                board->launcher_deadline_ = 0;
-                ESP_LOGI(TAG, "Launcher charge stopped: duration elapsed");
-                if (board->launcher_fire_after_charge_) {
-                    board->launcher_fire_after_charge_ = false;
-                    // fire() 阻塞约 100 ms，交给主任务执行，不占用 esp_timer 任务。
-                    Application::GetInstance().Schedule([board]() { board->FireLauncher(); });
-                }
-            }
-        };
-        ESP_ERROR_CHECK(esp_timer_create(&timer, &launcher_timer_));
-
-        auto& mcp = McpServer::GetInstance();
-        mcp.AddTool("self.launcher.charge",
-            "是什么：小车上的电磁炮（电磁发射器），由继电器控制供电（充能）和发射按钮。\n"
-            "能做什么：只给电磁炮预先充能，不发射；供电指定时长后自动断电，电量保留到下次发射。"
-            "仅当用户明确说先充能、蓄力、准备但还不发射时调用；用户要开炮请直接调用 self.launcher.fire，"
-            "不要先调用本工具。重复调用会重新计时，并取消尚未执行的自动发射。\n"
-            "参数：\n"
-            "- duration_ms（可选，整数 1000 到 30000，默认 5000）：充能毫秒数。\n"
-            "返回：true 表示已开始充能（调用立即返回，不等充能结束）。",
-            PropertyList({Property("duration_ms", kPropertyTypeInteger, 5000, 1000, 30000)}),
-            [this](const PropertyList& properties) -> ReturnValue {
-                ChargeLauncher(properties["duration_ms"].value<int>());
-                return true;
-            });
-        mcp.AddTool("self.launcher.fire",
-            "是什么：小车上的电磁炮（电磁发射器），由继电器控制供电（充能）和发射按钮。\n"
-            "能做什么：开炮，发射一次。用户说开炮、开火、发射、射击、打一发、biu 一下时调用，"
-            "一次调用即可完成充能和发射，不需要先调用其他工具。要连续开多炮就调用多次，"
-            "每次等上一炮完成后再调用。\n"
-            "参数：\n"
-            "- charge_ms（可选，整数 0 到 30000，默认 5000）：发射前的充能毫秒数。"
-            "大于 0 时先充能，到时自动断电再发射，所以炮弹在约 charge_ms 毫秒后才射出；"
-            "用户要求威力大一点可以加长，要求立刻发射且之前已用 self.launcher.charge 充好能时传 0。"
-            "传 0 时如果电磁炮正在充能会返回错误，不发射。\n"
-            "返回：true 表示已接受指令（charge_ms 大于 0 时调用立即返回，充能结束后自动发射）。",
-            PropertyList({Property("charge_ms", kPropertyTypeInteger, 5000, 0, 30000)}),
-            [this](const PropertyList& properties) -> ToolResult {
-                const int charge_ms = properties["charge_ms"].value<int>();
-                if (charge_ms > 0) {
-                    ChargeLauncher(charge_ms, true);
-                    return true;
-                }
-                return FireLauncher();
-            });
-        mcp.AddTool("self.launcher.stop",
-            "是什么：小车电磁炮（电磁发射器）的安全停止。\n"
-            "能做什么：立刻断开电磁炮供电，取消正在进行的充能和还没执行的自动发射。"
-            "用户说别打了、取消开炮、停止充能、关掉电磁炮时调用。\n"
+        McpServer::GetInstance().AddTool("self.launcher.fire",
+            "是什么：小车上的电磁炮（电磁发射器），常供电并自动充能，固件只能按下它的发射按钮。\n"
+            "能做什么：开炮，立即发射一次。用户说开炮、开火、发射、射击、打一发、biu 一下时调用。"
+            "发射后电磁炮需要约 10 秒重新充满，间隔太短的一发威力不足甚至打空；"
+            "要连续开多炮就调用多次，每次间隔约 10 秒。固件无法得知是否已充满，也没有充能或断电工具。\n"
             "参数：无。\n"
-            "返回：true 表示已断电。",
+            "返回：true 表示已发射。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
-                ChargeLauncher(0);
+                FireLauncher();
                 return true;
             });
     }
@@ -333,18 +249,7 @@ private:
                 return Reply(req, "200 OK", "text/html; charset=utf-8", kControlPage);
             }, this},
             {"/api/status", HTTP_GET, [](httpd_req_t* req) {
-                auto* board = Self(req);
-                int64_t remaining_ms = 0;
-                {
-                    std::lock_guard<std::mutex> lock(board->launcher_mutex_);
-                    if (board->launcher_deadline_ != 0) {
-                        remaining_ms = std::max<int64_t>(0, (board->launcher_deadline_ - esp_timer_get_time()) / 1000);
-                    }
-                }
-                char body[96];
-                std::snprintf(body, sizeof(body), "{\"charging\":%s,\"charge_remaining_ms\":%lld}",
-                              board->launcher_.isCharging() ? "true" : "false", static_cast<long long>(remaining_ms));
-                return Reply(req, "200 OK", "application/json", body);
+                return Reply(req, "200 OK", "application/json", "{}");
             }, this},
             {"/api/drive", HTTP_POST, [](httpd_req_t* req) {
                 int forward, turn, duration_ms;
@@ -359,28 +264,8 @@ private:
                 Self(req)->DriveChassis(0, 0, 0);
                 return Ok(req);
             }, this},
-            {"/api/launcher/charge", HTTP_POST, [](httpd_req_t* req) {
-                int duration_ms;
-                if (!QueryInt(req, "duration_ms", 5000, 1000, 30000, duration_ms)) {
-                    return BadRequest(req, "duration_ms 取 1000..30000");
-                }
-                Self(req)->ChargeLauncher(duration_ms);
-                return Ok(req);
-            }, this},
             {"/api/launcher/fire", HTTP_POST, [](httpd_req_t* req) {
-                int charge_ms;
-                if (!QueryInt(req, "charge_ms", 5000, 0, 30000, charge_ms)) {
-                    return BadRequest(req, "charge_ms 取 0..30000");
-                }
-                if (charge_ms > 0) {
-                    Self(req)->ChargeLauncher(charge_ms, true);
-                    return Ok(req);
-                }
-                return Self(req)->FireLauncher() ? Ok(req)
-                    : Reply(req, "409 Conflict", "text/plain; charset=utf-8", "正在充能，等充能结束或先断电");
-            }, this},
-            {"/api/launcher/stop", HTTP_POST, [](httpd_req_t* req) {
-                Self(req)->ChargeLauncher(0);
+                Self(req)->FireLauncher();
                 return Ok(req);
             }, this},
         };

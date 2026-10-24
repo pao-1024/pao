@@ -2,13 +2,13 @@
 
 // 板载控制页，由 GET / 返回。摇杆按住期间每 150 ms 续发一次 400 ms 的运动指令，
 // 松手、切页或断网后指令自然到期停车，不依赖页面发出停止请求。
-// 开炮键按住充能、松手发射；充能有 15 s 上限，页面失联时固件到期自动断电且不发射。
+// 发射器常供电自动充能，开炮键按下即发射一次。
 inline constexpr char kControlPage[] = R"PAO(<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>PAO 遥控</title>
 <style>
-:root{color-scheme:dark;--bg:#0a0d12;--panel:#10151c;--line:#222c38;--text:#d8e2ec;--muted:#7c8a99;--accent:#4cc2ff;--warn:#ffa63d;--bad:#ff6b6b}
+:root{color-scheme:dark;--bg:#0a0d12;--panel:#10151c;--line:#222c38;--text:#d8e2ec;--muted:#7c8a99;--accent:#4cc2ff;--bad:#ff6b6b}
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 html,body{overscroll-behavior:none}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"PingFang SC",sans-serif}
@@ -33,10 +33,7 @@ button{font:inherit;color:var(--text);background:#161d26;border:1px solid var(--
 .fire{position:relative;overflow:hidden;width:180px;height:180px;border-radius:50%;font-size:20px;font-weight:700;letter-spacing:.1em;
   background:#2b1e0e;border:2px solid #7a5420;box-shadow:0 6px 18px #0008}
 .fire span{position:relative;z-index:1}.fire small{display:block;font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0}
-.fire .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(0deg,#b8733388,#ffa63dcc)}
-.fire.charging{border-color:var(--warn);box-shadow:0 0 24px #ffa63d66}
 .fire.flash{animation:flash .35s}@keyframes flash{from{background:#ffd9a0}to{background:#2b1e0e}}
-.disarm{padding:8px 18px;background:#3a1820;border-color:#6b2a35;font-size:13px}
 p.hint{margin:0;font-size:12px;color:var(--muted)}
 @media (max-width:600px){main{grid-template-columns:1fr}}
 </style></head><body><main>
@@ -49,10 +46,9 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>加速时间<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
 </section>
 <section><h2>电磁炮</h2>
-<button class="fire" id="fire"><div class="fill" id="fill"></div><span>开炮<small id="fireHint">按住充能 · 松手发射</small></span></button>
-<button class="disarm" id="disarm">断电</button>
+<button class="fire" id="fire"><span>开炮<small>发射后约 10 s 充满</small></span></button>
 </section>
-<p class="hint">摇杆往前推前进、左右推转向，越久越快；松手立即停车。键盘：WASD / 方向键驾驶，按住空格充能、松开开炮。</p>
+<p class="hint">摇杆往前推前进、左右推转向，越久越快；松手立即停车。键盘：WASD / 方向键驾驶，空格开炮。</p>
 </main><script>
 const $=id=>document.getElementById(id),statusEl=$("status");
 function setStatus(text,cls){statusEl.textContent=text;statusEl.className="status "+(cls||"")}
@@ -94,24 +90,13 @@ const keys={KeyW:[1,0],ArrowUp:[1,0],KeyS:[-1,0],ArrowDown:[-1,0],KeyA:[0,1],Arr
 function fromKeys(){if(active)return;let f=0,t=0;for(const k of down){f+=keys[k][0];t+=keys[k][1]}
   f=Math.sign(f);t=Math.sign(t);setKnob(-t*.7,-f*.7);f||t?target={f,t}:(setKnob(0,0),release())}
 
-// 开炮键：按下开始充能（15 s 上限），松手先断电再立即发射。
-const fire=$("fire"),fill=$("fill"),hint=$("fireHint"),MAX_CHARGE=15000;let chargeAt=0;
-async function startCharge(){if(chargeAt)return;chargeAt=performance.now();fire.classList.add("charging");
-  await call("/api/launcher/charge",{duration_ms:MAX_CHARGE})}
-async function releaseFire(){if(!chargeAt)return;const held=performance.now()-chargeAt;chargeAt=0;fire.classList.remove("charging");
-  fill.style.height="0";hint.textContent="按住充能 · 松手发射";
-  await call("/api/launcher/stop");
-  if(held>=MAX_CHARGE){setStatus("充能超时已断电，未发射","bad");return}
-  if(await call("/api/launcher/fire",{charge_ms:0})!==null){fire.classList.remove("flash");void fire.offsetWidth;fire.classList.add("flash")}}
-(function chargeLoop(){requestAnimationFrame(chargeLoop);if(!chargeAt)return;const held=performance.now()-chargeAt;
-  fill.style.height=Math.min(100,held/MAX_CHARGE*100)+"%";hint.textContent=(held/1000).toFixed(1)+" s"})();
-fire.onpointerdown=e=>{startCharge();fire.setPointerCapture(e.pointerId)};
-fire.onpointerup=fire.onpointercancel=releaseFire;
-$("disarm").onclick=()=>{chargeAt=0;fire.classList.remove("charging");fill.style.height="0";hint.textContent="按住充能 · 松手发射";call("/api/launcher/stop")};
+const fire=$("fire");
+async function shoot(){if(await call("/api/launcher/fire")!==null){fire.classList.remove("flash");void fire.offsetWidth;fire.classList.add("flash")}}
+fire.onclick=shoot;
 
-addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();if(!e.repeat)startCharge();return}
+addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();if(!e.repeat)shoot();return}
   if(keys[e.code]){e.preventDefault();down.add(e.code);fromKeys()}});
-addEventListener("keyup",e=>{if(e.code==="Space"){releaseFire();return}if(keys[e.code]){down.delete(e.code);fromKeys()}});
+addEventListener("keyup",e=>{if(keys[e.code]){down.delete(e.code);fromKeys()}});
 addEventListener("blur",()=>{down.clear();if(!active){setKnob(0,0);release()}});
 
 async function poll(){try{await(await fetch("/api/status")).json();setStatus("已连接","ok")}catch(e){setStatus("连接断开","bad")}}
