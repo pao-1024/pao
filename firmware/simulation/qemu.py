@@ -120,6 +120,7 @@ def main():
     qmp = None
     indicator_events = []
     motor_events = []
+    pwm_events = []
     with (output / "qemu.log").open("w") as log:
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                    env=dict(os.environ, TMPDIR=str(temp)))
@@ -187,8 +188,28 @@ def main():
                         wait_for(lambda: text().count(f"MOTOR_ACK value={stage};") == cycle + 1,
                                  "motor stage acknowledgement")
                         qmp.set("gpio-inputs", 0xffffffffffffffff)
+                    expected = ((0, 0), (.25, -.5), (-.75, .125), (1, -1), (-1, 1),
+                                (1, -1), (0, 0), (.001, -.999), (0, 0),
+                                (1, 1), (-1, -1), (1, -1), (.75, .25), (1, 0), (0, 0), (0, 0))
+                    for stage, (right, left) in enumerate(expected):
+                        wait_for(lambda: text().count(f"PWM_STAGE value={stage};") == cycle + 1,
+                                 f"motor driver stage {stage}")
+                        duty = json.loads(qmp.get("pin-duty"))[11:15]
+                        assert all(v is not None for v in duty), f"Unsupported motor PWM: {duty}"
+                        assert duty[0] * duty[1] == duty[2] * duty[3] == 0, f"Both directions active: {duty}"
+                        actual = (duty[0] - duty[1], duty[2] - duty[3])
+                        assert all(abs(a - b) < 1e-6 for a, b in zip(actual, (right, left))), (
+                            f"Motor duty mismatch at {stage}: {actual} != {(right, left)}")
+                        event = {"cycle": cycle + 1, "stage": stage, "right": actual[0], "left": actual[1]}
+                        pwm_events.append(event)
+                        print(f"PWM_EVENT {json.dumps(event)}", flush=True)
+                        qmp.set("gpio-inputs", 0xfffffffffffffffe)
+                        wait_for(lambda: text().count(f"PWM_ACK value={stage};") == cycle + 1,
+                                 "PWM stage acknowledgement")
+                        qmp.set("gpio-inputs", 0xffffffffffffffff)
                     wait_for(lambda: text().count("PROBE_DONE") == cycle + 1, "probe complete")
                     assert (qmp.get("gpio-outputs") >> 11) & 15 == 0, "Motor outputs not disabled"
+                    assert json.loads(qmp.get("pin-duty"))[11:15] == [0] * 4, "Motor destructor left outputs active"
                 assert "AUDIO_CONTENT_PASS" in text(), "I2S input content mismatch"
                 assert text().count("FPU_WAKE_PRIMITIVES_PASS") == 2, "WakeNet floating-point regression"
                 assert text().count("NVS_ROUNDTRIP_PASS") == 2, "Flash persistence failed"
@@ -237,6 +258,7 @@ def main():
                 result["boot_cycles"] = 2
                 result["virtual_indicator_events"] = indicator_events
                 result["motor_events"] = motor_events
+                result["pwm_events"] = pwm_events
             elif args.mode != "wake-negative":
                 result["asr"] = next(line.split("Application: >> ", 1)[1] for line in
                                      reversed(text().splitlines()) if "Application: >> " in line)
@@ -271,7 +293,7 @@ def main():
                        f'Cycle {event["cycle"]}: {state}</text>')
         svg.append('</svg>')
         (output / "indicator.svg").write_text("\n".join(svg) + "\n")
-        height = 60 + len(motor_events) * 30
+        height = 90 + (len(motor_events) + len(pwm_events)) * 30
         svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="680" height="{height}" viewBox="0 0 680 {height}">',
                '<style>text {font:16px sans-serif}</style>',
                f'<rect width="680" height="{height}" fill="#fff"/>',
@@ -285,6 +307,13 @@ def main():
                 state = event[side]
                 svg.append(f'<circle cx="{x}" cy="{y - 5}" r="8" fill="{colors[state]}"/>')
                 svg.append(f'<text x="{x + 20}" y="{y}">{state}</text>')
+        y = 65 + len(motor_events) * 30
+        svg.append(f'<text x="20" y="{y}">Real Motor / Chassis: signed duty</text>')
+        for index, event in enumerate(pwm_events):
+            y = 95 + (len(motor_events) + index) * 30
+            svg.append(f'<text x="20" y="{y}">{event["cycle"]} / PWM {event["stage"]}</text>')
+            for x, side in ((250, "right"), (470, "left")):
+                svg.append(f'<text x="{x}" y="{y}">{event[side]:+.1%}</text>')
         svg.append('</svg>')
         (output / "motors.svg").write_text("\n".join(svg) + "\n")
     elif args.mode != "wake-negative":

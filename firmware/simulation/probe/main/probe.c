@@ -177,6 +177,8 @@ static void motors(void) {
     ESP_LOGI("PROBE", "MOTOR_OUTPUTS_DISABLED");
 }
 
+void motor_driver_probe(void);
+
 void app_main(void) {
     floating_point();
     storage();
@@ -185,5 +187,6 @@ void app_main(void) {
     audio();
     button();
     motors();
+    motor_driver_probe();
     ESP_LOGI("PROBE", "PROBE_DONE");
 }
