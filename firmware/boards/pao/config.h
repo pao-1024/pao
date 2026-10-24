@@ -14,6 +14,15 @@
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
 #define BUILTIN_LED_GPIO GPIO_NUM_48
 
+// SSD1306 I2C OLED, powered by 3V3.
+#define DISPLAY_SDA_PIN GPIO_NUM_41
+#define DISPLAY_SCL_PIN GPIO_NUM_42
+#define DISPLAY_I2C_ADDRESS 0x3C
+#define DISPLAY_WIDTH 128
+#define DISPLAY_HEIGHT 64
+#define DISPLAY_MIRROR_X true
+#define DISPLAY_MIRROR_Y true
+
 // MX1508: IN1/IN2 drive the right motor, IN3/IN4 drive the left motor.
 #define MOTOR_GPIO_IN1 GPIO_NUM_11
 #define MOTOR_GPIO_IN2 GPIO_NUM_12
