@@ -59,8 +59,9 @@ def prepare_source(config, ref):
     patched = run("git", "apply", "--reverse", "--check", PATCH, cwd=SOURCE, capture=True, check=False)
     if patched.returncode == 0:
         run("git", "apply", "--reverse", PATCH, cwd=SOURCE)
-    board = SOURCE / "main" / "boards" / "pao-minimal"
-    linked = board.is_symlink() and board.resolve() == FIRMWARE / "boards" / "pao-minimal"
+    board_dir = FIRMWARE / "boards" / config["board_name"]
+    board = SOURCE / "main" / "boards" / config["board_name"]
+    linked = board.is_symlink() and board.resolve() == board_dir
     if linked:
         board.unlink()
     dirty = run("git", "status", "--porcelain", "--untracked-files=normal", cwd=SOURCE, capture=True).stdout
@@ -68,7 +69,7 @@ def prepare_source(config, ref):
         if patched.returncode == 0:
             run("git", "apply", PATCH, cwd=SOURCE)
         if linked:
-            board.symlink_to(FIRMWARE / "boards" / "pao-minimal", target_is_directory=True)
+            board.symlink_to(board_dir, target_is_directory=True)
         raise RuntimeError(f"Upstream checkout has local changes; preserve them before retrying:\n{dirty}")
     run("git", "checkout", "--detach", revision, cwd=SOURCE)
     compatible = run("git", "apply", "--check", PATCH, cwd=SOURCE, capture=True, check=False)
@@ -77,7 +78,7 @@ def prepare_source(config, ref):
     run("git", "apply", PATCH, cwd=SOURCE)
     if board.exists() or board.is_symlink():
         raise RuntimeError(f"Refusing to replace existing board path: {board}")
-    board.symlink_to(FIRMWARE / "boards" / "pao-minimal", target_is_directory=True)
+    board.symlink_to(board_dir, target_is_directory=True)
     (ROOT / "tmp" / "base-revision.json").write_text(json.dumps({
         "repository": repository, "ref": ref, "commit": revision,
     }, indent=2) + "\n")

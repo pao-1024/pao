@@ -5,12 +5,13 @@
 产物均放在仓库根目录 Git 忽略的 `tmp/` 下，不提交上游源码。ESP-IDF 及工具链
 由用户通过 EIM 安装和管理。
 
-当前板型为 `pao-minimal`：ESP32-S3、16 MB Flash、八线 PSRAM，只有
-I2S 麦克风、I2S 功放、BOOT 按键和状态灯，不需要屏幕。GPIO 暂沿用小智
-面包板配置，详见[板型与接线](boards/pao-minimal/README.md)。
-业务组件初始化仅输出日志，没有电机或发射控制逻辑。默认 OTA 网关指向灵矽，
-实机设备绑定和语音连接仍需板上验证；QEMU 专用配置和验证入口见
-[QEMU 语音板验证](simulation/README.md)。
+当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
+I2S 功放、BOOT 按键、状态灯和 MX1508 双路电机驱动，不需要屏幕。
+GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
+板级初始化创建左右电机和两轮底盘，上电保持停止；业务组件初始化仅输出日志，
+尚未接入上层运动指令或发射控制。
+默认 OTA 网关指向灵矽，实机设备绑定及语音连接仍需板上验证；
+仿真验证入口见[固件仿真验证](simulation/README.md)。
 
 ## 环境
 
@@ -74,11 +75,65 @@ python3 firmware/scripts/build.py prepare --ref main
 
 脚本不会 reset 或清理上游的用户修改；发现额外改动就停止。
 `tmp/xiaozhi` 是脚本管理的源码目录，业务代码始终编辑 `firmware/components/pao/`；
-板型始终编辑 `firmware/boards/pao-minimal/`，构建脚本使用符号链接接入，不复制源码。
+板型始终编辑 `firmware/boards/pao/`，构建脚本使用符号链接接入，不复制源码。
 不同 base commit 的构建目录隔离在 `tmp/build/<commit>/`，其中包含
 `xiaozhi.bin`、`xiaozhi.elf`、`sdkconfig` 和 `flasher_args.json`。
 切换构建参数或修改 defaults 后，已有 `sdkconfig` 的值优先；应在对应构建目录
 使用 `idf.py menuconfig` 修改，或移走该构建目录后重新配置。
+
+## 电机驱动
+
+`components/pao/include/motor.h` 提供 C++ `Motor` 类，每个实例控制 MX1508 的一路电机。
+构造时传入两根不同、支持输出的 GPIO，内部使用 MCPWM 产生 1 kHz PWM；构造后保持停止，
+析构时停止并释放 PWM 资源。SDK 初始化或资源申请失败时通过 `ESP_ERROR_CHECK` 终止。
+
+```cpp
+#include "motor.h"
+
+Motor right(GPIO_NUM_11, GPIO_NUM_12);
+Motor left(GPIO_NUM_13, GPIO_NUM_14);
+
+right.setSpeed(0.5f);   // 正向，50% 占空比
+left.setSpeed(-0.5f);   // 反向，50% 占空比
+right.setSpeed(0.0f);   // 两根输入均为低电平，滑行停止
+left.setSpeed(0.0f);
+```
+
+`setSpeed(float speed)` 接受 `[-1, 1]`，绝对值表示占空比，实际转速随电机、供电和负载变化。
+正负方向由 GPIO 顺序及电机接线决定。有限越界值限幅，NaN 和无穷值按停止处理；
+同一实例的调用串行执行，换向先关闭原方向输出。请从普通任务调用，不支持 ISR。
+以上 GPIO 与板级电机配置一致。
+
+真实 PWM 波形和带载效果仍需实机验证。
+MCPWM API 见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/mcpwm.html)。
+
+## 两轮底盘
+
+`components/pao/include/chassis.h` 提供开环差速底盘 `Chassis`，将前进、转向指令转换为
+两个 `Motor` 的输出。将上例中已创建的左右电机传入：
+
+```cpp
+#include "chassis.h"
+
+Chassis chassis(left, right);
+chassis.drive(0.5f, 0.0f);   // 前进
+chassis.drive(-0.5f, 0.0f);  // 后退
+chassis.drive(0.0f, 0.5f);   // 原地左转
+chassis.drive(0.5f, -0.2f);  // 前进并右转
+chassis.drive(0.0f, 0.0f);   // 滑行停止
+```
+
+`drive(float forward, float turn)` 的两个参数均为 `[-1, 1]` 的归一化控制量：
+`forward` 正负分别表示前进、后退，`turn` 正负分别表示向左、向右旋转。
+有限越界参数先限幅，混合后的两轮输出超限时一起按比例缩小；任一参数为 NaN 或无穷值时停止两轮。
+
+左右电机必须是不同实例，并且都以带动车体前进为正方向；通过 `Motor` 的 GPIO 顺序适配接线。
+电机生命周期必须覆盖底盘，同一对电机交由一个底盘统一控制，使用期间通过底盘下发运动指令。
+构造和析构时均停止两轮，调用 `drive(0, 0)` 滑行停止。
+指令保持到下一次 `drive()` 或析构；底盘命令串行执行，请从普通任务调用。
+
+该底盘面向无编码器电机，实际速度和行驶轨迹需上车调校，相同输出也可能跑偏。
+板型已创建底盘实例，等待上层运动指令。
 
 ## CI
 
@@ -88,7 +143,8 @@ Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本
 并使用 Cppcheck 对本仓库的 `firmware/components/pao/`、`firmware/boards/` 和
 `firmware/simulation/probe/main/` 进行 C/C++ 静态分析。
 
-静态检查通过后，`Firmware build` 任务使用乐鑫官方
+PR 仅运行静态检查。推送到 `main` 或在 `main` 上手动触发时，静态检查通过后，
+`Firmware build` 任务使用乐鑫官方
 [install-esp-idf-action](https://github.com/espressif/install-esp-idf-action)
 通过 EIM v0.20.1 自动安装 ESP-IDF v6.0.1 和工具链，再运行同一构建脚本获取
 默认小智版本并编译固件。Action 固定到完整 commit SHA，环境安装与构建总超时为 45 分钟。
@@ -101,13 +157,16 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 每次运行可恢复同一系统、架构和 IDF 版本的最近缓存，由 `ccache` 校验编译器、源码、
 头文件和编译参数后复用结果；构建日志会输出本轮命中率。
 
-CI 不上传构建产物。板上烧录、语音连接或 GPIO 行为仍需实机验证。
+编译成功后，在该次工作流运行页面的 **Artifacts** 中下载 `pao-firmware-<commit SHA>`。
+产物包含构建目录中的 `.bin`、`.elf`、`flash_args`、`flasher_args.json`、`sdkconfig`，
+以及记录小智源码版本的 `base-revision.json`；保留目录结构，保存期限遵循仓库配置。
+板上烧录、语音连接或 GPIO 行为仍需实机验证。
 
 ## 接入位置
 
-- `firmware/components/pao/`：业务组件及公开 C 接口，不依赖小智私有类。
-- `firmware/boards/pao-minimal/`：独立板型、引脚、音频 Codec 和按键初始化，调用
-  `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
+- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机和底盘驱动，不依赖小智私有类。
+- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机和底盘初始化，
+  调用 `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
 - `EXTRA_COMPONENT_DIRS`：直接引用本仓库组件，不复制源码。
 - `firmware/sdkconfig.defaults`：板型、语言和灵矽 OTA 网关配置。

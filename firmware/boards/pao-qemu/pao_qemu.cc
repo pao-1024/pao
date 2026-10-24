@@ -2,7 +2,9 @@
 #include "application.h"
 #include "button.h"
 #include "codecs/no_audio_codec.h"
-#include "../pao-minimal/config.h"
+#include "../pao/config.h"
+#include "chassis.h"
+#include "motor.h"
 #include "display/oled_display.h"
 #include "led/single_led.h"
 #include "system_info.h"
@@ -18,6 +20,9 @@
 
 class PaoQemuBoard : public Board {
     Button boot_button_{BOOT_BUTTON_GPIO};
+    Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
+    Motor left_motor_{MOTOR_GPIO_IN3, MOTOR_GPIO_IN4};
+    Chassis chassis_{left_motor_, right_motor_};
     OledDisplay* display_ = nullptr;
     NetworkEventCallback callback_;
     bool connected_ = false;
@@ -83,7 +88,7 @@ public:
     void SetPowerSaveLevel(PowerSaveLevel) override {}
     std::string GetDeviceStatusJson() override { return connected_ ? "{\"network\":\"connected\"}" : "{\"network\":\"disconnected\"}"; }
     std::string GetBoardJson() override {
-        return "{\"type\":\"pao-minimal\",\"name\":\"pao-qemu\",\"mac\":\"" + SystemInfo::GetMacAddress() + "\"}";
+        return "{\"type\":\"pao\",\"name\":\"pao-qemu\",\"mac\":\"" + SystemInfo::GetMacAddress() + "\"}";
     }
     void StartNetwork() override {
         ESP_ERROR_CHECK(esp_netif_init());

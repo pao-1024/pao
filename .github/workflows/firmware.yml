@@ -48,11 +48,12 @@ jobs:
       - name: Check C and C++ code
         run: |
           cppcheck --enable=warning,performance,portability --error-exitcode=1 \
-            -Ifirmware/components/pao/include -Ifirmware/boards/pao-minimal \
+            -Ifirmware/components/pao/include -Ifirmware/boards/pao \
             firmware/components/pao firmware/boards firmware/simulation/probe/main
 
   firmware:
     name: Firmware build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -119,6 +120,19 @@ jobs:
             source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
             exec bash firmware/scripts/build.sh
           '
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pao-firmware-${{ github.sha }}
+          path: |
+            tmp/build/**/*.bin
+            tmp/build/**/*.elf
+            tmp/build/**/flash_args
+            tmp/build/**/flasher_args.json
+            tmp/build/**/sdkconfig
+            tmp/base-revision.json
+          if-no-files-found: error
 
       - name: Show compiler cache statistics
         if: always() && steps.ccache.outcome == 'success'
