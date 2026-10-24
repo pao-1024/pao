@@ -6,7 +6,7 @@
 由用户通过 EIM 安装和管理。
 
 当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
-I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动和两块单路继电器发射模块，不需要屏幕。
+I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、两块单路继电器发射模块和 SSD1306 128×64 OLED。
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
 板级初始化创建左右电机、两轮底盘和电磁发射器，上电保持停止与断开；
 业务组件初始化仅输出日志，尚未接入上层运动指令或发射指令。
@@ -197,8 +197,8 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 ## 接入位置
 
 - `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘和发射器驱动，不依赖小智私有类。
-- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘和发射器初始化，
-  调用 `pao_initialize()`。无屏幕实现复用小智默认的 `NoDisplay`。
+- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘、发射器和 OLED 初始化，
+  调用 `pao_initialize()`。屏幕复用小智 `OledDisplay`，未连接或驱动初始化失败时回退到 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
 - `EXTRA_COMPONENT_DIRS`：直接引用本仓库组件，不复制源码。
 - `firmware/sdkconfig.defaults`：板型、语言和灵矽 OTA 网关配置。
