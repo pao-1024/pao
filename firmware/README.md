@@ -6,7 +6,7 @@
 由用户通过 EIM 安装和管理。
 
 当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
-I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、单路继电器发射控制模块和 SSD1306 128×64 OLED。
+I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、单路继电器发射控制模块、SSD1306 128×64 OLED 和 3.3V 版 HC-SR04 超声波模块。
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
 板级初始化创建左右电机、两轮底盘和电磁发射器，上电保持停止与断开；
 业务组件初始化仅输出日志，尚未接入上层运动指令或发射指令。
@@ -164,6 +164,39 @@ launcher.safeOff();   // 立即释放，可重复调用
 
 继电器极性、吸合电压与充能时间需要板上核对；当前逻辑与时序未经实物验证。
 
+## 超声波测距
+
+`components/pao/include/hc_sr04.h` 提供 `HcSr04`，Trig 接 GPIO8，Echo 接 GPIO9。
+模块由主控 3V3 供电，必须支持 3.3V 供电及信号电平。
+板型已创建驱动实例，初始化后 Trig 保持低电平，按需调用同步测距接口：
+
+```cpp
+#include "hc_sr04.h"
+
+HcSr04 sensor(GPIO_NUM_8, GPIO_NUM_9);
+float distance_cm = 0;
+const esp_err_t error = sensor.readDistanceCm(distance_cm);
+if (error == ESP_OK) {
+    // distance_cm 为本次测量的厘米值。
+}
+```
+
+示例用于独立调用；同一组 GPIO 仅由一个驱动实例管理，不要与板型实例重复创建。
+驱动输出至少 10µs 的 Trig 脉冲，以 1µs 分辨率通过 RMT 捕获 Echo，按回波时间 / 58 换算厘米。
+连续触发自动间隔至少 60ms，同一实例的测量串行执行；接收阶段最多等待约 80ms，
+等待期间让出 CPU。只能从普通任务调用，不能用于 ISR。
+
+成功返回 `ESP_OK`，结果范围为 2–400cm；失败时保留传入的距离值，调用方必须检查返回码：
+
+- `ESP_ERR_TIMEOUT`：超时或未收到回波；模块未连接时同样可能返回此错误。
+- `ESP_ERR_INVALID_RESPONSE`：回波脉冲异常、接收缓冲区已满或距离超出范围。
+- `ESP_ERR_INVALID_STATE`：触发前 Echo 未恢复低电平，或 RMT 状态异常。
+
+构造时检查 GPIO 并申请 RMT 和队列资源，初始化失败通过 `ESP_ERROR_CHECK` 终止；
+析构释放资源。当前未接入自动避障、MCP 工具或网页遥控，实际量程和测距精度仍需实机验证。
+时序依据 [HC-SR04-33 数据手册](https://cdn.sparkfun.com/assets/a/8/9/c/a/HC-SR04-33_Datasheet.pdf)，
+RMT 接口见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/rmt.html)。
+
 ## CI
 
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
@@ -193,8 +226,8 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 
 ## 接入位置
 
-- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘和发射器驱动，不依赖小智私有类。
-- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘、发射器和 OLED 初始化，
+- `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘、发射器和超声波驱动，不依赖小智私有类。
+- `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘、发射器、超声波和 OLED 初始化，
   调用 `pao_initialize()`。屏幕复用小智 `OledDisplay`，未连接或驱动初始化失败时回退到 `NoDisplay`。
 - `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`；
   并让 MultiNet 唤醒词只在 AFE 的 VAD 判定为语音及其后 1 s 内运行，降低待机 CPU 占用。

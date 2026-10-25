@@ -4,7 +4,8 @@ import { OledModule } from "../components/Oled"
 export function Display() {
   return (
     <>
-      <schematicsection name="Display" displayName="OLED 屏幕" />
+      <schematicsection name="Display" />
+      <schematictext text="OLED 屏幕" schX={-11} schY={-2} fontSize={0.18} />
       <OledModule
         doNotPlace
         name="OLED"

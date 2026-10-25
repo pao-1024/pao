@@ -6,6 +6,7 @@
 #include "config.h"
 #include "control_page.h"
 #include "display/oled_display.h"
+#include "hc_sr04.h"
 #include "launcher.h"
 #include "led/single_led.h"
 #include "mcp_server.h"
@@ -37,6 +38,7 @@ private:
     std::mutex chassis_mutex_;
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
+    HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};

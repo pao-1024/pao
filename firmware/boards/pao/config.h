@@ -23,6 +23,10 @@
 #define DISPLAY_MIRROR_X true
 #define DISPLAY_MIRROR_Y true
 
+// HC-SR04，选用 3.3V 供电及信号电平版本。
+#define ULTRASONIC_GPIO_TRIG GPIO_NUM_8
+#define ULTRASONIC_GPIO_ECHO GPIO_NUM_9
+
 // MX1508: IN1/IN2 drive the right motor, IN3/IN4 drive the left motor.
 #define MOTOR_GPIO_IN1 GPIO_NUM_11
 #define MOTOR_GPIO_IN2 GPIO_NUM_12
