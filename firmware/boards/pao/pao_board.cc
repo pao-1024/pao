@@ -6,6 +6,7 @@
 #include "config.h"
 #include "control_page.h"
 #include "display/oled_display.h"
+#include "forward_distance_mover.h"
 #include "hc_sr04.h"
 #include "launcher.h"
 #include "led/single_led.h"
@@ -23,6 +24,7 @@
 #include <nvs.h>
 #include <wifi_manager.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -36,12 +38,23 @@
 namespace {
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
+constexpr char kMotionOutputKey[] = "motion_output";
 constexpr uint32_t kMotionConfigVersion = 1;
 
 struct StoredMotionConfig {
     uint32_t version;
     ChassisConfig config;
 };
+
+struct MotionOutputConfig {
+    uint8_t move_output = 80;
+    uint8_t rotate_output = 80;
+};
+
+bool ValidMotionOutput(const MotionOutputConfig& config) {
+    return config.move_output >= 20 && config.move_output <= 100 &&
+           config.rotate_output >= 20 && config.rotate_output <= 100;
+}
 }  // namespace
 
 extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
@@ -59,16 +72,13 @@ private:
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
     std::mutex motion_config_mutex_;
+    MotionOutputConfig motion_output_;
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
+    ForwardDistanceMover distance_mover_{ultrasonic_, chassis_};
     TaskHandle_t distance_task_ = nullptr;
     uint32_t chassis_generation_ = 0;
-    bool distance_active_ = false;
-    float start_distance_cm_ = 0;
-    float moved_cm_ = 0;
-    int requested_cm_ = 0;
-    const char* motion_status_ = "idle";
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
@@ -82,9 +92,10 @@ private:
     // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
     void ResetMotionLocked(const char* status) {
         chassis_deadline_ = 0;
-        distance_active_ = false;
         ++chassis_generation_;
-        motion_status_ = status;
+        if (status != nullptr) {
+            distance_mover_.cancel(status);
+        }
         const auto error = esp_timer_stop(chassis_timer_);
         if (error != ESP_ERR_INVALID_STATE) {
             ESP_ERROR_CHECK(error);
@@ -92,28 +103,47 @@ private:
     }
 
     void StopChassisLocked(const char* status) {
-        chassis_.stop();
+        chassis_.emergencyStop();
         ResetMotionLocked(status);
     }
 
     uint32_t StopChassis() {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+        StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
         return chassis_generation_;
+    }
+
+    int ConfiguredOutput(MotionCommand motion) {
+        std::lock_guard<std::mutex> lock(motion_config_mutex_);
+        return motion == MotionCommand::Move ? motion_output_.move_output : motion_output_.rotate_output;
     }
 
     void RunChassis(MotionCommand motion, int speed, int duration_ms) {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
+        ResetMotionLocked(distance_mover_.status().active ? "cancelled" : "idle");
+        if (speed == 0) {
+            chassis_.stop();
+            return;
+        }
+        const int max_output = ConfiguredOutput(motion);
+        speed = std::clamp(speed, -max_output, max_output);
         if (duration_ms > 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
         }
         if (motion == MotionCommand::Move) {
-            chassis_.move(speed / 100.0f);
+            if (speed > 0) {
+                chassis_.forward(speed / 100.0f);
+            } else {
+                chassis_.backward(-speed / 100.0f);
+            }
         } else {
-            chassis_.rotate(speed / 100.0f);
+            if (speed > 0) {
+                chassis_.turnLeft(speed / 100.0f);
+            } else {
+                chassis_.turnRight(-speed / 100.0f);
+            }
         }
         ESP_LOGI(TAG, "Chassis %s: speed=%d duration_ms=%d",
                  motion == MotionCommand::Move ? "move" : "rotate", speed, duration_ms);
@@ -132,24 +162,33 @@ private:
         StoredMotionConfig saved = {};
         size_t size = sizeof(saved);
         const auto error = nvs_get_blob(handle, kMotionKey, &saved, &size);
-        nvs_close(handle);
-        if (error == ESP_ERR_NVS_NOT_FOUND) {
-            return;
-        }
-        if (error != ESP_OK || size != sizeof(saved) ||
-            saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
+        if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGW(TAG, "Invalid motion config; using defaults");
+        } else if (error == ESP_OK && (size != sizeof(saved) ||
+                   saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config))) {
             ESP_LOGW(TAG, "Invalid motion config; using defaults");
         }
+        MotionOutputConfig motion_output;
+        size = sizeof(motion_output);
+        const auto output_error = nvs_get_blob(handle, kMotionOutputKey, &motion_output, &size);
+        if (output_error == ESP_OK && size == sizeof(motion_output) && ValidMotionOutput(motion_output)) {
+            motion_output_ = motion_output;
+        } else if (output_error != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGW(TAG, "Invalid motion output config; using defaults");
+        }
+        nvs_close(handle);
     }
 
-    esp_err_t SaveMotionConfig(const ChassisConfig& config) {
-        if (!Chassis::validConfig(config)) {
+    esp_err_t SaveMotionConfig(const ChassisConfig& config, const MotionOutputConfig& motion_output) {
+        if (!Chassis::validConfig(config) || !ValidMotionOutput(motion_output)) {
             return ESP_ERR_INVALID_ARG;
         }
         std::lock_guard<std::mutex> lock(motion_config_mutex_);
         const auto current = chassis_.config();
         if (current.ramp_time_ms == config.ramp_time_ms &&
-            current.left_scale == config.left_scale && current.right_scale == config.right_scale) {
+            current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
+            motion_output_.move_output == motion_output.move_output &&
+            motion_output_.rotate_output == motion_output.rotate_output) {
             return ESP_OK;
         }
         nvs_handle_t handle;
@@ -160,11 +199,15 @@ private:
         const StoredMotionConfig saved = {kMotionConfigVersion, config};
         error = nvs_set_blob(handle, kMotionKey, &saved, sizeof(saved));
         if (error == ESP_OK) {
+            error = nvs_set_blob(handle, kMotionOutputKey, &motion_output, sizeof(motion_output));
+        }
+        if (error == ESP_OK) {
             error = nvs_commit(handle);
         }
         nvs_close(handle);
         if (error == ESP_OK) {
             chassis_.setConfig(config);
+            motion_output_ = motion_output;
         }
         return error;
     }
@@ -172,29 +215,23 @@ private:
     ToolResult MoveForward(int distance_cm, int speed) {
         const auto generation = StopChassis();
         float initial_cm = 0;
-        const auto error = ultrasonic_.readDistanceCm(initial_cm);
+        const auto error = distance_mover_.readDistanceCm(initial_cm);
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         if (generation != chassis_generation_) {
             return std::unexpected("运动已被新的底盘指令取消");
         }
         if (error != ESP_OK) {
-            motion_status_ = "sensor_error";
+            distance_mover_.cancel("sensor_error");
             return std::unexpected(std::string("起始测距失败，未启动电机：") + esp_err_to_name(error));
         }
-        if (initial_cm - distance_cm < 10.0f) {
-            motion_status_ = "obstacle";
+        const int capped_speed = std::min(speed, ConfiguredOutput(MotionCommand::Move));
+        if (!distance_mover_.forwardCm(distance_cm, capped_speed / 100.0f, initial_cm)) {
             return std::unexpected("前方空间不足：目标位置须保留至少 10cm 距离，未启动电机");
         }
-        start_distance_cm_ = initial_cm;
-        requested_cm_ = distance_cm;
-        moved_cm_ = 0;
-        distance_active_ = true;
-        motion_status_ = "moving";
         chassis_deadline_ = esp_timer_get_time() + 15000000;
         ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
-        chassis_.move(speed / 100.0f);
         xTaskNotifyGive(distance_task_);
-        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, speed);
+        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, capped_speed);
         return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
     }
 
@@ -205,28 +242,25 @@ private:
                 uint32_t generation;
                 {
                     std::lock_guard<std::mutex> lock(chassis_mutex_);
-                    if (!distance_active_) {
+                    if (!distance_mover_.status().active) {
                         break;
                     }
                     generation = chassis_generation_;
                 }
                 float current_cm = 0;
                 // 驱动负责 >=60ms 采样间隔；等待回波时不能持有底盘锁，急停仍可立即执行。
-                const auto error = ultrasonic_.readDistanceCm(current_cm);
+                const auto error = distance_mover_.readDistanceCm(current_cm);
                 {
                     std::lock_guard<std::mutex> lock(chassis_mutex_);
-                    if (generation != chassis_generation_ || !distance_active_) {
+                    if (generation != chassis_generation_ || !distance_mover_.status().active) {
                         continue;
                     }
-                    if (error != ESP_OK) {
-                        StopChassisLocked("sensor_error");
-                        ESP_LOGW(TAG, "Distance move stopped: %s", esp_err_to_name(error));
-                        continue;
-                    }
-                    moved_cm_ = start_distance_cm_ - current_cm;
-                    if (current_cm <= 10.0f || moved_cm_ >= requested_cm_) {
-                        StopChassisLocked(moved_cm_ >= requested_cm_ ? "reached" : "obstacle");
-                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm", motion_status_, moved_cm_, requested_cm_);
+                    distance_mover_.update(error, current_cm);
+                    const auto state = distance_mover_.status();
+                    if (!state.active) {
+                        ResetMotionLocked(nullptr);
+                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm",
+                                 state.motion_status, state.moved_cm, state.requested_cm);
                     }
                 }
                 // 测距锁释放后让出一个 tick，避免连续重抢导致进度查询一直等到运动结束。
@@ -244,7 +278,7 @@ private:
             std::lock_guard<std::mutex> lock(board->chassis_mutex_);
             // 已排队的旧定时回调不能中断刚收到的新运动指令。
             if (board->chassis_deadline_ != 0 && esp_timer_get_time() >= board->chassis_deadline_) {
-                board->StopChassisLocked(board->distance_active_ ? "timeout" : "idle");
+                board->StopChassisLocked(board->distance_mover_.status().active ? "timeout" : "idle");
                 ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
             }
         };
@@ -257,61 +291,49 @@ private:
         }
 
         auto& mcp = McpServer::GetInstance();
-        mcp.AddTool("self.chassis.move",
-            "是什么：小车的两轮底盘，左右各一个直流电机。\n"
-            "能做什么：让小车前进或后退，指定时长后自动停下。用户说走、前进、后退、倒车时调用。"
-            "新指令替换正在执行的运动；速度是 PWM 占空比，不能保证直线或准确距离。\n"
-            "参数：\n"
-            "- speed（必填，整数 -100 到 100）：正数前进，负数后退，0 平滑停车。\n"
-            "- duration_ms（可选，整数 100 到 15000，默认 1000）：行驶毫秒数，到时自动停止；"
-            "超过 15000 会报错且不执行。按厘米前进请使用 self.chassis.move_forward。\n"
-            "返回：true 表示已接受指令。",
-            PropertyList({Property("speed", kPropertyTypeInteger, -100, 100),
+        // MCP Property 目前没有 enum schema，回调严格校验六种 action 值。
+        mcp.AddTool("self.chassis.control",
+            "控制两轮底盘。action 必填，只能是 forward（前进）、backward（后退）、"
+            "turn_left（逆时针左转）、turn_right（顺时针右转）、stop（按渐变时间减速）、"
+            "emergency_stop（立即清零输出）之一。"
+            "四个方向动作使用设备保存的对应最大输出；duration_ms 可选，100..15000 毫秒，"
+            "默认 1000，到时立即停；两个停止动作忽略 duration_ms。"
+            "输出不是实测速度，不能保证准确距离或角度。"
+            "新动作取消原有定时或按距离运动。前进指定厘米数请用 self.chassis.move_forward。",
+            PropertyList({Property("action", kPropertyTypeString).SetMaxLength(14),
                           Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
-            [this](const PropertyList& properties) -> ReturnValue {
-                RunChassis(MotionCommand::Move, properties["speed"].value<int>(),
-                           properties["duration_ms"].value<int>());
-                return true;
-            });
-        mcp.AddTool("self.chassis.rotate",
-            "是什么：小车的两轮底盘。\n"
-            "能做什么：让小车原地旋转，指定时长后自动停下。用户说左转、右转、掉头、转圈时调用。"
-            "新指令替换正在执行的运动；旋转速度是 PWM 占空比，不代表准确角度。\n"
-            "参数：\n"
-            "- speed（必填，整数 -100 到 100）：俯视小车时，正数逆时针、负数顺时针，0 平滑停车。\n"
-            "- duration_ms（可选，整数 100 到 15000，默认 1000）：旋转毫秒数，到时自动停止。\n"
-            "返回：true 表示已接受指令。",
-            PropertyList({Property("speed", kPropertyTypeInteger, -100, 100),
-                          Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
-            [this](const PropertyList& properties) -> ReturnValue {
-                RunChassis(MotionCommand::Rotate, properties["speed"].value<int>(),
-                           properties["duration_ms"].value<int>());
-                return true;
-            });
-        mcp.AddTool("self.chassis.stop",
-            "是什么：小车两轮底盘的急停。\n"
-            "能做什么：立刻让两个电机停转，并取消当前定时或按距离运动。"
-            "用户说停、停下、别动、刹车时调用。\n"
-            "参数：无。\n"
-            "返回：true 表示已停止。",
-            PropertyList(),
-            [this](const PropertyList&) -> ReturnValue {
-                StopChassis();
+            [this](const PropertyList& properties) -> ToolResult {
+                const auto& action = properties["action"].value<std::string>();
+                const int duration_ms = properties["duration_ms"].value<int>();
+                if (action == "forward") {
+                    RunChassis(MotionCommand::Move, ConfiguredOutput(MotionCommand::Move), duration_ms);
+                } else if (action == "backward") {
+                    RunChassis(MotionCommand::Move, -ConfiguredOutput(MotionCommand::Move), duration_ms);
+                } else if (action == "turn_left") {
+                    RunChassis(MotionCommand::Rotate, ConfiguredOutput(MotionCommand::Rotate), duration_ms);
+                } else if (action == "turn_right") {
+                    RunChassis(MotionCommand::Rotate, -ConfiguredOutput(MotionCommand::Rotate), duration_ms);
+                } else if (action == "stop") {
+                    RunChassis(MotionCommand::Move, 0, 0);
+                } else if (action == "emergency_stop") {
+                    StopChassis();
+                } else {
+                    return std::unexpected("action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop");
+                }
                 return true;
             });
         mcp.AddTool("self.chassis.move_forward",
             "是什么：通过前方超声波距离变化反馈控制小车直行。用户要求前进多少厘米时调用。\n"
-            "参数：distance_cm 必填整数 1..390；speed 可选整数 1..100，默认 50，为前进占空比百分比。\n"
+            "参数：distance_cm 必填整数 1..390；使用设备保存的前进最大输出。\n"
             "以前方同一静止反射物的起始距离减当前距离估算前进量，到达后停车；"
             "必须有稳定反射物，不支持空旷环境里程测量、倒退或转弯。"
             "目标位置必须保留至少 10cm；空间不足或起始测距失败直接报错且不启动。"
             "新底盘指令会替换旧运动；途中无回波、测距错误、前方不足 10cm 或超过 15 秒立即停止。"
             "受采样间隔和惯性影响，不能保证厘米级精度。\n"
             "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询进度及停止原因。",
-            PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390),
-                          Property("speed", kPropertyTypeInteger, 50, 1, 100)}),
+            PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390)}),
             [this](const PropertyList& properties) -> ToolResult {
-                return MoveForward(properties["distance_cm"].value<int>(), properties["speed"].value<int>());
+                return MoveForward(properties["distance_cm"].value<int>(), ConfiguredOutput(MotionCommand::Move));
             });
         mcp.AddTool("self.ultrasonic.get_distance",
             "是什么：读取小车前方 HC-SR04 超声波距离，单位厘米，量程 2..400cm。\n"
@@ -328,7 +350,7 @@ private:
 
     cJSON* ReadDistance() {
         float distance_cm = 0;
-        const auto error = ultrasonic_.readDistanceCm(distance_cm);
+        const auto error = distance_mover_.readDistanceCm(distance_cm);
         auto* result = cJSON_CreateObject();
         if (error == ESP_OK) {
             cJSON_AddNumberToObject(result, "distance_cm", distance_cm);
@@ -338,9 +360,10 @@ private:
             cJSON_AddStringToObject(result, "error", esp_err_to_name(error));
         }
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        cJSON_AddStringToObject(result, "motion_status", motion_status_);
-        cJSON_AddNumberToObject(result, "requested_cm", requested_cm_);
-        cJSON_AddNumberToObject(result, "moved_cm", moved_cm_);
+        const auto state = distance_mover_.status();
+        cJSON_AddStringToObject(result, "motion_status", state.motion_status);
+        cJSON_AddNumberToObject(result, "requested_cm", state.requested_cm);
+        cJSON_AddNumberToObject(result, "moved_cm", state.moved_cm);
         return result;
     }
 
@@ -502,7 +525,7 @@ private:
 
     // HTTP 和 WebSocket 共用指令校验与执行，避免两个入口的运动约束发生偏差。
     CommandResult ControlCommand(const std::string& path, const char* query) {
-        int duration_ms, distance_cm, speed, ramp_time_ms;
+        int duration_ms, distance_cm, speed, ramp_time_ms, move_output, rotate_output;
         if (path == "/api/move" || path == "/api/rotate") {
             if (!QueryInt(query, "speed", -101, -100, 100, speed) || speed == -101 ||
                 !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
@@ -513,13 +536,22 @@ private:
             StopChassis();
         } else if (path == "/api/motion-config") {
             ChassisConfig config;
+            MotionOutputConfig motion_output;
+            {
+                std::lock_guard<std::mutex> lock(motion_config_mutex_);
+                motion_output = motion_output_;
+            }
             if (!QueryInt(query, "ramp_time_ms", -1, 0, 3000, ramp_time_ms) || ramp_time_ms < 0 ||
                 !QueryFloat(query, "left_scale", config.left_scale) ||
-                !QueryFloat(query, "right_scale", config.right_scale)) {
-                return {"参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1"};
+                !QueryFloat(query, "right_scale", config.right_scale) ||
+                !QueryInt(query, "move_output", motion_output.move_output, 20, 100, move_output) ||
+                !QueryInt(query, "rotate_output", motion_output.rotate_output, 20, 100, rotate_output)) {
+                return {"参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100"};
             }
             config.ramp_time_ms = ramp_time_ms;
-            const auto saved = SaveMotionConfig(config);
+            motion_output.move_output = move_output;
+            motion_output.rotate_output = rotate_output;
+            const auto saved = SaveMotionConfig(config, motion_output);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
                 return {"运动配置保存失败，请重试", true};
@@ -551,11 +583,14 @@ private:
     }
 
     cJSON* ReadMotionConfig() {
+        std::lock_guard<std::mutex> lock(motion_config_mutex_);
         const auto config = chassis_.config();
         auto* result = cJSON_CreateObject();
         cJSON_AddNumberToObject(result, "ramp_time_ms", config.ramp_time_ms);
         cJSON_AddNumberToObject(result, "left_scale", config.left_scale);
         cJSON_AddNumberToObject(result, "right_scale", config.right_scale);
+        cJSON_AddNumberToObject(result, "move_output", motion_output_.move_output);
+        cJSON_AddNumberToObject(result, "rotate_output", motion_output_.rotate_output);
         return result;
     }
 

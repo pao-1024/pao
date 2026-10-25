@@ -24,12 +24,15 @@ public:
     Chassis(const Chassis&) = delete;
     Chassis& operator=(const Chassis&) = delete;
 
-    // 正值前进或逆时针，负值后退或顺时针；0 平滑停车。
-    // 有限越界值限幅，非有限值按 0 处理。不能在 ISR 中调用。
-    void move(float speed);
-    void rotate(float speed);
-    // 立即清零两轮输出和当前运动目标。
+    // 输出为非负值，超过 1 时限幅；无效值按 0 处理。不能在 ISR 中调用。
+    void forward(float output);
+    void backward(float output);
+    void turnLeft(float output);
+    void turnRight(float output);
+    // 按配置的渐变时间减速停车。
     void stop();
+    // 立即清零两轮输出和当前运动目标。
+    void emergencyStop();
 
     // 修改配置不会重置当前运动；无效配置保持原值。
     bool setConfig(const ChassisConfig& config);

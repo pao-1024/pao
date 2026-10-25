@@ -28,7 +28,7 @@ Chassis::Chassis(Motor& left, Motor& right) : left_(left), right_(right) {
 }
 
 Chassis::~Chassis() {
-    stop();
+    emergencyStop();
     {
         std::lock_guard<std::mutex> lock(mutex_);
         running_ = false;
@@ -75,15 +75,27 @@ void Chassis::setMotion(Motion motion, float speed) {
     xTaskNotifyGive(task_);
 }
 
-void Chassis::move(float speed) {
-    setMotion(Motion::Move, speed);
+void Chassis::forward(float output) {
+    setMotion(Motion::Move, std::max(0.0f, output));
 }
 
-void Chassis::rotate(float speed) {
-    setMotion(Motion::Rotate, speed);
+void Chassis::backward(float output) {
+    setMotion(Motion::Move, -std::max(0.0f, output));
+}
+
+void Chassis::turnLeft(float output) {
+    setMotion(Motion::Rotate, std::max(0.0f, output));
+}
+
+void Chassis::turnRight(float output) {
+    setMotion(Motion::Rotate, -std::max(0.0f, output));
 }
 
 void Chassis::stop() {
+    setMotion(Motion::Stopped, 0);
+}
+
+void Chassis::emergencyStop() {
     std::lock_guard<std::mutex> lock(mutex_);
     requested_ = Motion::Stopped;
     active_ = Motion::Stopped;

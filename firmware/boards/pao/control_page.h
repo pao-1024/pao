@@ -46,18 +46,18 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <button class="direction right" data-dir="right" aria-label="按住顺时针旋转">↷<small>顺时针</small></button>
 <button class="direction down" data-dir="backward" aria-label="按住后退">↓<small>后退</small></button>
 </div>
-<label>前进／后退最大输出<input id="movePower" type="range" min="20" max="100" value="80"><output id="movePowerOut">80%</output></label>
-<label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80"><output id="rotatePowerOut">80%</output></label>
+<label>前进／后退最大输出<input id="movePower" type="range" min="20" max="100" value="80" disabled><output id="movePowerOut">80%</output></label>
+<label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80" disabled><output id="rotatePowerOut">80%</output></label>
 </section>
 <section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>充能请看模块指示灯</small></button></section>
-<section class="settings"><h2>运动校准</h2>
+<section class="settings"><h2>运动设置</h2>
 <fieldset id="configFields" disabled>
 <label>输出渐变<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
 <label>左轮比例<input id="leftScale" type="range" min="0" max="1" step="0.01" value="1"><output id="leftScaleOut">1.00</output></label>
 <label>右轮比例<input id="rightScale" type="range" min="0" max="1" step="0.01" value="1"><output id="rightScaleOut">1.00</output></label>
 </fieldset><div class="config-line"><span id="configStatus" class="status" role="status">读取配置中</span><button id="retry" hidden>重试保存</button></div>
 </section>
-<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。校准值在调节结束后保存到设备。</p>
+<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。运动设置在调节结束后保存到设备，并影响语音动作。</p>
 </main><script>
 const $=id=>document.getElementById(id);
 const statusEl=$("status"),configStatus=$("configStatus");
@@ -109,30 +109,37 @@ for(const button of document.querySelectorAll(".direction")){
   button.onpointerup=button.onpointercancel=()=>{if(pointerDir===button.dataset.dir){pointerDir=null;syncMotion(true)}};
 }
 $("stop").onclick=emergencyStop;
-for(const id of ["movePower","rotatePower"]){$(id).oninput=()=>{$(id+"Out").textContent=$(id).value+"%";syncMotion(true)}}
 setInterval(()=>syncMotion(),50);
 
 function showConfig(){ $("rampOut").textContent=(Number($("ramp").value)/1000).toFixed(1)+" s";
   $("leftScaleOut").textContent=Number($("leftScale").value).toFixed(2);
-  $("rightScaleOut").textContent=Number($("rightScale").value).toFixed(2)}
+  $("rightScaleOut").textContent=Number($("rightScale").value).toFixed(2);
+  $("movePowerOut").textContent=$("movePower").value+"%";
+  $("rotatePowerOut").textContent=$("rotatePower").value+"%"}
+function currentConfig(){return {ramp_time_ms:$("ramp").value,left_scale:$("leftScale").value,
+  right_scale:$("rightScale").value,move_output:$("movePower").value,rotate_output:$("rotatePower").value}}
 async function loadConfig(){try{const config=await call("/api/motion-config");
   if(!configDirty){$("ramp").value=config.ramp_time_ms;
     $("leftScale").value=config.left_scale;$("rightScale").value=config.right_scale;
+    $("movePower").value=config.move_output;$("rotatePower").value=config.rotate_output;
     showConfig();setConfigStatus("已从设备加载","ok");$("retry").hidden=true}
-  $("configFields").disabled=false}
+  $("configFields").disabled=false;$("movePower").disabled=false;$("rotatePower").disabled=false}
   catch(e){setConfigStatus("读取配置失败，请刷新页面","bad")}}
 let configDirty=false,pendingSave=false,saving=false;
 async function saveConfig(){pendingSave=true;if(saving)return;saving=true;
   while(pendingSave){pendingSave=false;
-    const config={ramp_time_ms:$("ramp").value,left_scale:$("leftScale").value,right_scale:$("rightScale").value};
+    const config=currentConfig();
     setConfigStatus("保存中");$("retry").hidden=true;
     try{await call("/api/motion-config",config);
-      const shown={ramp_time_ms:$("ramp").value,left_scale:$("leftScale").value,right_scale:$("rightScale").value};
+      const shown=currentConfig();
       if(!pendingSave){const same=JSON.stringify(shown)===JSON.stringify(config);
         configDirty=!same;setConfigStatus(same?"已保存到设备":"未保存",same?"ok":"")}}
     catch(e){setConfigStatus("保存失败，请重试","bad");$("retry").hidden=false}}
   saving=false}
-for(const id of ["ramp","leftScale","rightScale"]){$(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};$(id).onchange=saveConfig}
+for(const id of ["ramp","leftScale","rightScale","movePower","rotatePower"]){
+  $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存");
+    if(id==="movePower"||id==="rotatePower")syncMotion(true)};
+  $(id).onchange=saveConfig}
 $("retry").onclick=saveConfig;
 
 const fire=$("fire");fire.onclick=async()=>{try{await call("/api/launcher/fire");

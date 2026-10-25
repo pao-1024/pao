@@ -51,15 +51,18 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 随后创建 `Launcher`，上电保持两路继电器断开。
 左轮按 `IN4/IN3` 顺序创建 `Motor`，反转左侧安装极性，使两轮正速度均表示车体前进；
 右轮仍按 `IN1/IN2` 顺序。更换电机或接线后需重新核对方向。
+底盘内部提供前进、后退、左转、右转、常规停止和立即停止六个动作；
+常规停止按输出渐变时间减速，立即停止直接清零两轮输出。
+按厘米前进由独立的 `ForwardDistanceMover` 组合前向超声波与底盘实现，不提供按厘米后退。
 底盘通过小智的设备 MCP 协议向灵矽暴露以下工具，联网激活后随设备工具列表上报：
 
-- `self.chassis.move`：`speed` 必填，整数 `[-100, 100]`；正数前进，负数后退，零平滑停车。
-- `self.chassis.rotate`：`speed` 必填，整数 `[-100, 100]`；俯视时正数逆时针，负数顺时针，
-  零平滑停车。两个运动工具都支持 `duration_ms`：范围 `[100, 15000]`，默认 1000 毫秒，
-  到时立即清零输出。单次超过 15 秒直接返回参数错误，不执行运动。新指令替换当前运动及计时。
-- `self.chassis.stop`：无参数，立即停止并取消当前定时或按距离运动，返回 `true`。
-- `self.chassis.move_forward`：`distance_cm` 为必填整数 `[1, 390]`，`speed` 为可选整数 `[1, 100]`，
-  默认 50，表示前进占空比百分比。起步前读取前方距离，以起始距离减去持续测得的距离估算已前进的厘米数，
+- `self.chassis.control`：`action` 必填，只接受 `forward`（前进）、`backward`（后退）、
+  `turn_left`（逆时针左转）、`turn_right`（顺时针右转）、`stop`（按渐变时间减速）、
+  `emergency_stop`（立即清零）六种值。四个方向动作使用设备保存的相应最大输出，
+  可传 `duration_ms`，范围 `[100, 15000]`，默认 1000 毫秒，到时立即清零输出；
+  两种停止动作忽略该参数。新指令替换当前运动及计时。
+- `self.chassis.move_forward`：`distance_cm` 为必填整数 `[1, 390]`，使用设备保存的前进最大输出。
+  起步前读取前方距离，以起始距离减去持续测得的距离估算已前进的厘米数，
   达到目标后停止。目标位置须与反射物相隔至少 10cm，否则返回错误且不启动。
   必须朝向同一静止、稳定反射物；空旷环境或移动目标不能用于此种距离估算，它不是轮式里程计。
   运动在独立任务中执行，工具返回“已开始”而非“已完成”。最多执行 15 秒，超时、测距失败或前方
@@ -71,9 +74,10 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
   `sensor_error`（测距失败）、`timeout`（达到 15 秒上限）或 `cancelled`（被其他指令中断）。
   `moved_cm` 是距离变化估计值，可因目标变化而为负；只有 `reached` 表示按测距反馈达到目标。
 
-例如“以三成输出前进一秒”对应 `self.chassis.move` 参数
-`{"speed":30,"duration_ms":1000}`；“向右转圈”对应 `self.chassis.rotate` 的负 `speed`；
-“停止”对应 `self.chassis.stop`。
+例如“前进一秒”对应 `self.chassis.control` 参数
+`{"action":"forward","duration_ms":1000}`；“向右转圈”使用 `turn_right`，
+“停止”使用 `stop`，“立即停下”使用 `emergency_stop`。
+运动输出和校准参数通过网页设置，不提供 MCP 参数配置工具。
 参数由 MCP 层校验，超出范围或缺少必填参数时返回错误，不执行运动。
 输出量是占空比，不能据此承诺实际速度、距离、旋转角度或严格直线。
 按距离运动同样受采样间隔、超声波反射和停车惯性影响，停止后仍可能滑行，不能承诺厘米级精度；
@@ -106,11 +110,12 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 板上时长限制继续生效。
 
 前进／后退和旋转各有独立的最大输出滑块，范围均为 20%～100%，默认 80%；
-它们只控制网页按钮和键盘发出的指令，不限制语音、MCP 或 HTTP 指令。
+它们用于网页和语音动作，也约束 HTTP／WebSocket 的运动输出。
+两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
 底盘内部按实际时间渐变输出，
 渐变时间范围 0～3 s，默认 1 s；0 表示直接达到目标。
 左右轮比例均在 0～1 之间，默认 1，仅降低相应侧输出；改变比例时也平滑过渡。
-这三个参数可在网页运行时调整，每次调节结束后保存到 NVS，设备重启后恢复；
+这三个校准参数也可在网页运行时调整，每次调节结束后保存到 NVS，设备重启后恢复；
 页面打开时读取设备当前值，保存失败会提示重试。开环控制不能保证两轮实际转速相等，
 应在实车上调整比例；低占空比可能无法克服起步阻力。
 
@@ -125,10 +130,13 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 - `POST /api/move?speed=&duration_ms=`、`POST /api/rotate?speed=&duration_ms=`、`POST /api/stop`
 - `POST /api/move_forward?distance_cm=&speed=`：与按厘米运动工具共用控制逻辑，默认 20cm、50% 前进输出；
   参数错误、起始测距失败或空间不足返回 400，接受运动返回 `ok`。
+  所有带 `speed` 的 HTTP／WebSocket 运动请求仍接受原有范围，实际输出不超过对应设备最大输出。
 - `GET /api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
 - `POST /api/launcher/fire`
-- `GET /api/motion-config`、`GET /api/status`：返回 `ramp_time_ms`、`left_scale`、`right_scale`。
-- `POST /api/motion-config?ramp_time_ms=&left_scale=&right_scale=`：校验并保存完整配置，
+- `GET /api/motion-config`、`GET /api/status`：返回 `ramp_time_ms`、`left_scale`、`right_scale`、
+  `move_output`、`rotate_output`。
+- `POST /api/motion-config?ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=`：校验并保存配置；
+  `move_output` 和 `rotate_output` 可省略，此时保持设备当前值，
   NVS 提交成功后生效，保存失败返回 500。
 
 遥控页没有鉴权，同一网络内的任何人都能控制小车，只应在可信网络中使用。
