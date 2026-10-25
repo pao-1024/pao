@@ -29,3 +29,80 @@ diff --git a/main/CMakeLists.txt b/main/CMakeLists.txt
                          esp_pm
                          esp_psram
                          esp_netif
+diff --git a/main/audio/engines/afe_audio_engine.cc b/main/audio/engines/afe_audio_engine.cc
+index e245876..9e1566d 100644
+--- a/main/audio/engines/afe_audio_engine.cc
++++ b/main/audio/engines/afe_audio_engine.cc
+@@ -453,6 +453,26 @@ void AfeAudioEngine::ProcessingTask() {
+
+ void AfeAudioEngine::HandleWakeWordResult(const afe_fetch_result_t* result) {
+     if (wake_detector_ == WakeDetector::kMultiNet) {
++        // MultiNet costs several times more CPU than WakeNet, so only run it around speech.
++        // The VAD ends speech after 100 ms of silence, shorter than the pause between the
++        // words of a wake phrase, so recognition keeps running through a hangover and only
++        // then restarts from a clean state. The VAD cache restores the buffered onset.
++        constexpr int kMultiNetHangoverMs = 1000;
++        if (result->vad_state == VAD_SPEECH) {
++            multinet_silent_ms_ = 0;
++            if (!multinet_hearing_) {
++                multinet_hearing_ = true;
++                if (result->vad_cache_size > 0) {
++                    custom_wake_word_->FeedMono(result->vad_cache, result->vad_cache_size / sizeof(int16_t));
++                }
++            }
++        } else if (!multinet_hearing_) {
++            return;
++        } else if ((multinet_silent_ms_ += result->data_size / sizeof(int16_t) / 16) >= kMultiNetHangoverMs) {
++            multinet_hearing_ = false;
++            custom_wake_word_->Reset();
++            return;
++        }
+         custom_wake_word_->FeedMono(result->data, result->data_size / sizeof(int16_t));
+         return;
+     }
+diff --git a/main/audio/engines/afe_audio_engine.h b/main/audio/engines/afe_audio_engine.h
+index ad262b6..bd2fe95 100644
+--- a/main/audio/engines/afe_audio_engine.h
++++ b/main/audio/engines/afe_audio_engine.h
+@@ -83,6 +83,9 @@ private:
+     WakeDetector wake_detector_ = WakeDetector::kNone;
+
+     std::unique_ptr<CustomWakeWord> custom_wake_word_;
++    // MultiNet runs from a VAD speech onset until kMultiNetHangoverMs of continuous silence.
++    bool multinet_hearing_ = false;
++    int multinet_silent_ms_ = 0;
+     std::vector<std::string> wake_words_;
+     std::string last_detected_wake_word_;
+     std::vector<int16_t> input_buffer_;
+diff --git a/main/audio/wake_words/custom_wake_word.cc b/main/audio/wake_words/custom_wake_word.cc
+index 8759ef4..2fb8799 100644
+--- a/main/audio/wake_words/custom_wake_word.cc
++++ b/main/audio/wake_words/custom_wake_word.cc
+@@ -163,6 +163,14 @@ void CustomWakeWord::Stop() {
+     input_buffer_.clear();
+ }
+
++void CustomWakeWord::Reset() {
++    std::lock_guard<std::mutex> lock(input_buffer_mutex_);
++    input_buffer_.clear();
++    if (multinet_model_data_ != nullptr) {
++        multinet_->clean(multinet_model_data_);
++    }
++}
++
+ void CustomWakeWord::Feed(const std::vector<int16_t>& data) {
+     FeedSamples(data.data(), data.size(), false);
+ }
+diff --git a/main/audio/wake_words/custom_wake_word.h b/main/audio/wake_words/custom_wake_word.h
+index 9284cc4..446c256 100644
+--- a/main/audio/wake_words/custom_wake_word.h
++++ b/main/audio/wake_words/custom_wake_word.h
+@@ -31,6 +31,8 @@ public:
+     void OnWakeWordDetected(std::function<void(const std::string& wake_word)> callback);
+     void Start();
+     void Stop();
++    // Drop buffered audio and recognizer state between utterances.
++    void Reset();
+     size_t GetFeedSize();
+     void EncodeWakeWordData();
+     bool GetWakeWordOpus(std::vector<uint8_t>& opus);

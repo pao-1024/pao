@@ -38,6 +38,10 @@ PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕
 或进入 `firmware/` 后运行 `task build`。请先通过 EIM 安装并选择 ESP-IDF；
 构建时会自动准备小智源码。环境安装、上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
 
+模拟器代码、板型模型、网页和 Taskfile 独立放在 `simulator/`。
+在根目录使用 `task simulator:install`、`task simulator:run` 和 `task simulator:check`，
+完整配网与语音验证方法见[模拟器说明](simulator/README.md)。
+
 ## 项目 Skill
 
 先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本（含 npm/npx），然后在仓库目录执行：

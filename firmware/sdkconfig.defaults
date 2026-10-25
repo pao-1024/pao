@@ -2,3 +2,12 @@
 CONFIG_BOARD_TYPE_PAO=y
 CONFIG_LANGUAGE_ZH_CN=y
 CONFIG_OTA_URL="https://xrobo.qiniuapi.com/v1/ota/"
+# Wake word "小炮小炮" is a MultiNet command (pinyin with spaces); there is no pretrained WakeNet for it.
+# Threshold 1-99, lower is more sensitive.
+CONFIG_USE_CUSTOM_WAKE_WORD=y
+CONFIG_CUSTOM_WAKE_WORD="xiao pao xiao pao"
+CONFIG_CUSTOM_WAKE_WORD_DISPLAY="小炮小炮"
+CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20
+CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+# Keep wake word detection running while listening so the wake word can restart a turn at any time.
+CONFIG_WAKE_WORD_DETECTION_IN_LISTENING=y

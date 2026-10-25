@@ -89,11 +89,12 @@ def build_firmware(config, revision, action):
         raise RuntimeError("ESP-IDF is not active. Install/select ESP-IDF with EIM, then run task firmware:build (see firmware/README.md).")
     build = ROOT / "tmp" / "build" / revision
     build.mkdir(parents=True, exist_ok=True)
-    defaults = ";".join(str(path) for path in (
+    default_paths = [
         SOURCE / "sdkconfig.defaults",
         SOURCE / f"sdkconfig.defaults.{config['target']}",
         FIRMWARE / "sdkconfig.defaults",
-    ))
+    ]
+    defaults = ";".join(str(path) for path in default_paths)
     command = [
         sys.executable, Path(idf_path) / "tools" / "idf.py",
         "-C", SOURCE, "-B", build,

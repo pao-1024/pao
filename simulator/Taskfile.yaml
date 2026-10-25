@@ -1,0 +1,31 @@
+version: '3'
+
+env:
+  PYTHONPYCACHEPREFIX: '{{.TASKFILE_DIR}}/../tmp/pycache'
+  TMPDIR: '{{.TASKFILE_DIR}}/../tmp/temp'
+  PNPM_HOME: '{{.TASKFILE_DIR}}/../tmp/pnpm-home'
+
+tasks:
+  setup:
+    desc: 按锁文件安装 React 网页依赖
+    cmds:
+      - mkdir -p "$TMPDIR"
+      - pnpm install --frozen-lockfile --store-dir ../tmp/pnpm-store
+  run:
+    desc: 构建模拟器与网页，启动已有正式固件的语音交互（使用 -- 传入参数）
+    cmds:
+      - task: install
+      - python3 run-esp32sim.py {{.CLI_ARGS}}
+  install:
+    desc: 构建本地 PAO 扩展和 React 网页（需要 Rust 工具链）
+    cmds:
+      - task: setup
+      - python3 build-esp32sim.py
+      - pnpm run build
+  check:
+    desc: 检查启动身份、Python、React 类型和浏览器音频封包
+    cmds:
+      - task: setup
+      - python3 -m py_compile *.py
+      - python3 -m unittest discover -s . -p 'test_*.py'
+      - pnpm run check

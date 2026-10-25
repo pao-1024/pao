@@ -26,8 +26,11 @@ void Chassis::drive(float forward, float turn) {
     forward = std::clamp(forward, -1.0f, 1.0f);
     turn = std::clamp(turn, -1.0f, 1.0f);
 
-    const float left_speed = forward - turn;
-    const float right_speed = forward + turn;
+    // 差速量随前进速度减小：原地（forward=0）时为 turn，全速时减半，
+    // 使边走边转时内侧轮仍同向转动，而不是停住或反转。
+    const float steer = turn * (1.0f - 0.5f * std::fabs(forward));
+    const float left_speed = forward - steer;
+    const float right_speed = forward + steer;
     const float scale = std::max({1.0f, std::fabs(left_speed), std::fabs(right_speed)});
     left_.setSpeed(left_speed / scale);
     right_.setSpeed(right_speed / scale);

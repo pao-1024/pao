@@ -1,5 +1,6 @@
 #include "launcher.h"
 
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -20,14 +21,11 @@ void configureOutput(gpio_num_t pin, uint32_t level) {
 
 }  // namespace
 
-Launcher::Launcher(gpio_num_t charge_gpio, gpio_num_t fire_gpio)
-    : charge_gpio_(charge_gpio), fire_gpio_(fire_gpio) {
-    if (!GPIO_IS_VALID_OUTPUT_GPIO(charge_gpio) || !GPIO_IS_VALID_OUTPUT_GPIO(fire_gpio) ||
-        charge_gpio == fire_gpio) {
+Launcher::Launcher(gpio_num_t fire_gpio) : fire_gpio_(fire_gpio) {
+    if (!GPIO_IS_VALID_OUTPUT_GPIO(fire_gpio)) {
         ESP_ERROR_CHECK(ESP_ERR_INVALID_ARG);
     }
 
-    configureOutput(charge_gpio_, kInactiveLevel);
     configureOutput(fire_gpio_, kInactiveLevel);
 }
 
@@ -35,37 +33,14 @@ Launcher::~Launcher() {
     safeOff();
 }
 
-void Launcher::setCharging(bool on) {
+void Launcher::fire() {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (on == charging_) {
-        return;
-    }
-    ESP_ERROR_CHECK(gpio_set_level(charge_gpio_, on ? kActiveLevel : kInactiveLevel));
-    charging_ = on;
-}
-
-bool Launcher::isCharging() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return charging_;
-}
-
-esp_err_t Launcher::fire() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    // 供电中说明发射器仍在充能：此时触发的能量取决于已充入的电量，
-    // 且模块在充能过程中收到按键信号的行为未定义，直接拒绝。
-    if (charging_) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
     ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kActiveLevel));
     vTaskDelay(pdMS_TO_TICKS(kFirePulseMs));
     ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kInactiveLevel));
-    return ESP_OK;
 }
 
 void Launcher::safeOff() {
     std::lock_guard<std::mutex> lock(mutex_);
-    ESP_ERROR_CHECK(gpio_set_level(charge_gpio_, kInactiveLevel));
     ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kInactiveLevel));
-    charging_ = false;
 }

@@ -1,0 +1,17 @@
+[package]
+name = "pao-sim"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
+esp32sim = { path = "../esp32sim/cli" }
+esp-soc = { path = "../esp32sim/esp-soc" }
+esp-periph = { path = "../esp32sim/esp-periph" }
+
+[profile.release]
+opt-level = 3
+debug = 1
+lto = "fat"
+codegen-units = 1

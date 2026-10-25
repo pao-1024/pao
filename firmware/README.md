@@ -6,12 +6,12 @@
 由用户通过 EIM 安装和管理。
 
 当前板型为 `pao`：ESP32-S3、16 MB Flash、八线 PSRAM，接入 I2S 麦克风、
-I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、两块单路继电器发射模块和 SSD1306 128×64 OLED。
+I2S 功放、BOOT 按键、状态灯、MX1508 双路电机驱动、单路继电器发射控制模块和 SSD1306 128×64 OLED。
 GPIO 按硬件接线图配置，详见[板型与接线](boards/pao/README.md)。
 板级初始化创建左右电机、两轮底盘和电磁发射器，上电保持停止与断开；
 业务组件初始化仅输出日志，尚未接入上层运动指令或发射指令。
-默认 OTA 网关指向灵矽，
-但未验证设备绑定及语音连接。
+默认 OTA 网关指向灵矽，实机设备绑定及语音连接仍需板上验证；
+模拟器单独维护在仓库根目录的 `simulator/`，使用方法见[模拟器说明](../simulator/README.md)。
 
 ## 环境
 
@@ -137,42 +137,39 @@ chassis.drive(0.0f, 0.0f);   // 滑行停止
 
 ## 电磁发射器
 
-`components/pao/include/launcher.h` 提供 `Launcher`，用两个 GPIO 分别驱动一块 3.3V 单路继电器模块：
-CH1 把专用 3.3V 送到发射器的供电脚（通电即开始充能），CH2 短接发射器的发射按钮。
-两块模块的触发跳帽均设在 L 档，低电平吸合。
+`components/pao/include/launcher.h` 提供 `Launcher`，用一个 GPIO 驱动一块 3.3V 单路继电器模块，
+继电器触点短接发射器的发射按钮。模块触发跳帽设在 L 档，低电平吸合。
+
+发射器由硬件常供电并持续充能，PAO 不控制它的通断，因此驱动只有「发射」一个动作：
 
 ```cpp
 #include "launcher.h"
 
-Launcher launcher(GPIO_NUM_17, GPIO_NUM_18);
+Launcher launcher(GPIO_NUM_18);
 
-launcher.setCharging(true);   // 给发射器供电，开始充能
-launcher.setCharging(false);  // 断开供电
-launcher.isCharging();        // 当前供电状态
-
-if (launcher.fire() == ESP_ERR_INVALID_STATE) {
-    // 仍在供电充能，已拒绝发射，未产生按键信号
-}
+launcher.fire();      // 吸合 100 ms 再释放，等同于按一下发射键
+launcher.safeOff();   // 立即释放，可重复调用
 ```
 
 `fire()` 保持发射继电器吸合 `kFirePulseMs`（100 ms）后释放，覆盖触点抖动，
 足以让发射器识别为一次按下；调用期间独占驱动，其他调用排队等待。
-供电中调用直接返回 `ESP_ERR_INVALID_STATE`：此时模块仍在充能，触发得到的是未充满的一发，
-且模块在充能过程中收到按键信号的行为未定义。构造、析构和 `safeOff()` 均断开两路，上电不会误动作。
+构造、析构和 `safeOff()` 都保持断开，上电不会误按。
 
-发射器按**整体黑盒**处理，内部升压、储能与放电开关都不在固件侧展开。放电回路在模块内部，
-不经过任何继电器触点；CH1 触点承载的是发射器的工作电流（百毫安级），远低于继电器 10 A 的额定值。
+发射器按**整体黑盒**处理，内部升压、储能与放电开关都不在固件侧展开。
+放电回路在模块内部，不经过任何继电器触点；继电器触点只承载按钮信号，在毫安级。
 
-**必须实测确认断电后的储能是否保持。** 当前时序默认「先断开供电、再发射」；
-如果模块失去供电就泄放储能，这一发就会打空，需要改为保持供电发射后再断电。
-继电器极性、吸合电压、充能时间和放电波形同样需要板上核对；当前逻辑与时序未经实物验证。
+**发射器常供电即常武装。** 上电后它一直在充能，充满即保持，软件没有断电手段，
+只能靠断开整机电池开关卸能。因此每次 `fire()` 都会真的打出一发（前提是已充满），
+是否已经充满由调用方把握；当前没有充电完成反馈，建议实机测出充能时间后再加延时判断。
+
+继电器极性、吸合电压与充能时间需要板上核对；当前逻辑与时序未经实物验证。
 
 ## CI
 
 GitHub Actions 的 `Firmware` 工作流（`.github/workflows/firmware.yml`）在 PR 或推送到 `main` 时，
 仅当 `firmware/**`、根 `Taskfile.yaml` 或工作流自身变更才运行，也可手动触发。
 Ubuntu 24.04 runner 使用 ShellCheck 检查 Shell 脚本、检查 Python 脚本语法，
-并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/pao/`
+并使用 Cppcheck 对本仓库的 `firmware/components/pao/` 和 `firmware/boards/`
 进行 C/C++ 静态分析。
 
 PR 仅运行静态检查。推送到 `main` 或在 `main` 上手动触发时，静态检查通过后，
@@ -199,9 +196,10 @@ SDK、工具链、Python 环境和 EIM 激活配置通过 `actions/cache` 在多
 - `firmware/components/pao/`：业务组件、公开 C 接口及 C++ 电机、底盘和发射器驱动，不依赖小智私有类。
 - `firmware/boards/pao/`：项目板型、引脚、音频 Codec、按键及左右电机、底盘、发射器和 OLED 初始化，
   调用 `pao_initialize()`。屏幕复用小智 `OledDisplay`，未连接或驱动初始化失败时回退到 `NoDisplay`。
-- `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`。
+- `firmware/integration.patch`：注册板型的 Kconfig/CMake 选项，让小智主组件依赖 `pao`；
+  并让 MultiNet 唤醒词只在 AFE 的 VAD 判定为语音及其后 1 s 内运行，降低待机 CPU 占用。
 - `EXTRA_COMPONENT_DIRS`：直接引用本仓库组件，不复制源码。
-- `firmware/sdkconfig.defaults`：板型、语言和灵矽 OTA 网关配置。
+- `firmware/sdkconfig.defaults`：板型、语言、唤醒词和灵矽 OTA 网关配置。
 
 后续注册 MCP 工具时，在适配层连接小智工具回调与业务组件；真实板型应使用
 独立标识及正确的引脚、Flash 和 PSRAM 配置，避免被参考板固件更新覆盖。
