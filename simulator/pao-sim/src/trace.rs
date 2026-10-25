@@ -14,12 +14,17 @@ const I2C_BYTES: usize = 32;
 
 #[derive(Default)]
 pub struct Trace {
+    pub world: crate::world::World,
     events: Vec<String>, dropped: u64,
     levels: u64, known: u64,
     pwm: BTreeMap<u8, u32>,
     i2c: (u64, u64),
 }
 impl Trace {
+    pub fn advance(&mut self, seconds: f64) {
+        let duty = |pin| self.pwm.get(&pin).copied().unwrap_or_else(|| if self.levels & (1u64 << pin) != 0 { 1000 } else { 0 }) as f64 / 1000.0;
+        self.world.advance(seconds, duty(14) - duty(13), duty(11) - duty(12));
+    }
     fn event(&mut self, event: String) {
         if self.events.len() < EVENTS { self.events.push(event); } else { self.dropped += 1; }
     }
@@ -45,8 +50,9 @@ impl Trace {
     fn message(&mut self, seconds: f64) -> String {
         let pwm: Vec<String> = self.pwm.iter().map(|(pin, duty)| format!("[{pin},{duty}]")).collect();
         let message = format!(
-            "{{\"t\":\"pao\",\"time\":{seconds:.3},\"levels\":\"{:x}\",\"known\":\"{:x}\",\"pwm\":[{}],\"i2c\":[{},{}],\"dropped\":{},\"events\":[{}]}}",
-            self.levels, self.known, pwm.join(","), self.i2c.0, self.i2c.1, self.dropped, self.events.join(","));
+            "{{\"t\":\"pao\",\"time\":{seconds:.3},\"levels\":\"{:x}\",\"known\":\"{:x}\",\"pwm\":[{}],\"i2c\":[{},{}],\"dropped\":{},\"events\":[{}],\"world\":{{\"x\":{:.4},\"z\":{:.4},\"heading\":{:.6},\"distance_cm\":{:.2},\"width_cm\":{},\"depth_cm\":{}}}}}",
+            self.levels, self.known, pwm.join(","), self.i2c.0, self.i2c.1, self.dropped, self.events.join(","),
+            self.world.x, self.world.z, self.world.heading, self.world.distance_cm(), crate::world::WIDTH_CM, crate::world::DEPTH_CM);
         self.events.clear(); self.dropped = 0;
         message
     }
@@ -84,11 +90,11 @@ const PINS: usize = 49;
 /// timer empty and low on comparator A, or a continuous forced level.
 // ponytail: MCPWM1, comparator B and dead time are not decoded; add them when a driver uses them.
 pub struct Publisher {
-    trace: Arc<Mutex<Trace>>, web: WebServer, next: u64,
+    trace: Arc<Mutex<Trace>>, web: Option<WebServer>, next: u64,
     out_sel: [u32; PINS], period: [u32; 3], timer_of: u32, compare: [u32; 3], force: [u32; 3],
 }
 impl Publisher {
-    pub fn new(trace: Arc<Mutex<Trace>>, web: WebServer) -> Self {
+    pub fn new(trace: Arc<Mutex<Trace>>, web: Option<WebServer>) -> Self {
         Self { trace, web, next: 0, out_sel: [0; PINS], period: [256; 3], timer_of: 0, compare: [0; 3], force: [0; 3] }
     }
     fn register(&mut self, addr: u32, value: u32) {
@@ -123,15 +129,19 @@ impl Publisher {
     fn publish(&mut self, cx: &Ctx) {
         if cx.cycles < self.next { return; }
         self.next = cx.cycles + cx.cpu_hz / 20;
-        let message = self.trace.lock().unwrap().message(cx.seconds());
-        self.web.send_text(&message);
+        let mut trace = self.trace.lock().unwrap();
+        trace.advance(cx.seconds());
+        if let Some(web) = &self.web { web.send_text(&trace.message(cx.seconds())); }
     }
 }
 impl<S: Soc> Observer<S> for Publisher {
     fn name(&self) -> &'static str { "pao-trace" }
     fn wants(&self) -> Wants { Wants::MMIO | Wants::ROUND }
-    fn on_mmio(&mut self, _cx: &Ctx, _pc: u32, addr: u32, value: u32, write: bool) {
-        if write { self.register(addr, value); }
+    fn on_mmio(&mut self, cx: &Ctx, _pc: u32, addr: u32, value: u32, write: bool) {
+        if write && ((GPIO_OUT_SEL..GPIO_OUT_SEL + PINS as u32 * 4).contains(&addr) || (MCPWM0..MCPWM0 + 0x1000).contains(&addr)) {
+            self.trace.lock().unwrap().advance(cx.seconds());
+            self.register(addr, value);
+        }
     }
     fn on_round(&mut self, cx: &Ctx) { self.publish(cx); }
 }
@@ -148,7 +158,7 @@ mod tests {
     fn motor_duty_i2c_bytes_and_gpio_edges_reach_one_message() {
         let trace = Arc::new(Mutex::new(Trace::default()));
         let web = WebServer::queued();
-        let mut publisher = Publisher::new(trace.clone(), web.clone());
+        let mut publisher = Publisher::new(trace.clone(), Some(web.clone()));
         // Right motor as motor.cc sets it up: IN1/IN2 on generators 0A/0B, 1 MHz / 1000 ticks.
         publisher.register(GPIO_OUT_SEL + 11 * 4, 160);
         publisher.register(GPIO_OUT_SEL + 12 * 4, 161);

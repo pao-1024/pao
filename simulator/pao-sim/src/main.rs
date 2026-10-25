@@ -1,6 +1,7 @@
 mod board;
 mod ssd1306;
 mod trace;
+mod world;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -22,10 +23,11 @@ fn main() {
             std::process::exit(2);
         };
         let web = esp_soc::web::WebServer::start(port, dir).expect("web server");
-        machine.add_observer(Box::new(trace::Publisher::new(board.trace.clone(), web.clone())));
         machine.web = Some(web);
         machine.rt.enabled = true;
     }
+    // Motion decoding and echo geometry also run without a browser attached.
+    machine.add_observer(Box::new(trace::Publisher::new(board.trace.clone(), machine.web.clone())));
     machine.bus.board = Box::new(board);
     machine.bus.attach_board_devices();
     esp32sim::run(machine, &options);

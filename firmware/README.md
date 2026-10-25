@@ -193,7 +193,10 @@ if (error == ESP_OK) {
 - `ESP_ERR_INVALID_STATE`：触发前 Echo 未恢复低电平，或 RMT 状态异常。
 
 构造时检查 GPIO 并申请 RMT 和队列资源，初始化失败通过 `ESP_ERROR_CHECK` 终止；
-析构释放资源。当前未接入自动避障、MCP 工具或网页遥控，实际量程和测距精度仍需实机验证。
+析构释放资源。板型通过 `self.ultrasonic.get_distance` 向灵矽提供测距和运动状态，
+通过 `self.chassis.move_forward` 按前方同一静止反射物的距离变化控制前进；
+参数、停止条件和使用限制见[板型说明](boards/pao/README.md)。网页遥控不自动避障。
+实际量程、测距精度及行驶误差仍需实机验证。
 时序依据 [HC-SR04-33 数据手册](https://cdn.sparkfun.com/assets/a/8/9/c/a/HC-SR04-33_Datasheet.pdf)，
 RMT 接口见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.1/esp32s3/api-reference/peripherals/rmt.html)。
 

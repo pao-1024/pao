@@ -21,6 +21,8 @@ export const MODULES: Module[] = [
     wires: [wire(13, "IN3", "pwm"), wire(14, "IN4", "pwm")] },
   { id: "relay", name: "继电器", part: "发射按钮 · 低电平吸合", side: "right", wires: [wire(18, "IN", "gpio")] },
   { id: "led", name: "状态灯", part: "GPIO48 指示", side: "right", wires: [wire(48, "DIN", "gpio")] },
+  { id: "ultrasonic", name: "超声波", part: "HC-SR04 · 前方边界", side: "right",
+    wires: [wire(8, "Trig", "gpio"), wire(9, "Echo", "gpio", "in")] },
 ];
 
 export const PIN_LABEL = new Map(MODULES.flatMap(m => m.wires.map(w => [w.pin, `${m.name} ${w.signal}`] as const)));
@@ -97,17 +99,12 @@ export function motion(left: number, right: number) {
   return `${direction}并${turn > 0 ? "左" : "右"}转`;
 }
 
-/** Car pose in scene units (the car is about 1.7 long); heading 0 faces +Z and grows turning left. */
+/** Heading 0 faces +Z and grows turning left. */
 export type Pose = { x: number; z: number; heading: number };
-// ponytail: duty maps linearly to speed with no inertia or stall; calibrate against the real car if the view must match distances.
-export const MAX_SPEED = 3, TRACK = 1.56;
-
-/** Differential drive: integrates signed wheel duties in [-1, 1] over `dt` seconds. */
-export function stepPose(pose: Pose, left: number, right: number, dt: number): Pose {
-  const speed = (left + right) / 2 * MAX_SPEED, turn = (right - left) * MAX_SPEED / TRACK;
-  const heading = pose.heading + turn * dt / 2;
-  return { x: pose.x + Math.sin(heading) * speed * dt, z: pose.z + Math.cos(heading) * speed * dt, heading: pose.heading + turn * dt };
-}
+/** Native world coordinates and geometry are in centimetres, heading in radians. */
+export type World = Pose & { distance_cm: number; width_cm: number; depth_cm: number };
+// Decorative wheel spin only; the native world owns car position and distance.
+export const MAX_SPEED = 3;
 
 /** Simulated launcher energy: the module is always powered and charging; a relay (GPIO18) pull-in spends it. */
 export type Launcher = { energy: number; shots: number; lastShot: number | null };

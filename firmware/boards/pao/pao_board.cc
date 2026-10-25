@@ -12,6 +12,7 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
+#include "settings.h"
 
 #include <driver/i2c_master.h>
 #include <esp_check.h>
@@ -19,13 +20,20 @@
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <esp_timer.h>
+#include <freertos/task.h>
 #include <wifi_manager.h>
 
 #include <atomic>
 #include <cstdlib>
+#include <cstdint>
+#include <cstring>
 #include <mutex>
+#include <string_view>
 
 #define TAG "PaoBoard"
+
+extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
+extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
@@ -39,6 +47,13 @@ private:
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
+    TaskHandle_t distance_task_ = nullptr;
+    uint32_t chassis_generation_ = 0;
+    bool distance_active_ = false;
+    float start_distance_cm_ = 0;
+    float moved_cm_ = 0;
+    int requested_cm_ = 0;
+    const char* motion_status_ = "idle";
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
@@ -48,21 +63,124 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
-    void DriveChassis(int forward, int turn, int duration_ms) {
-        std::lock_guard<std::mutex> lock(chassis_mutex_);
-        chassis_.drive(0, 0);
+    // 续发速度只取消旧任务和定时器，不能先清零 PWM，否则连续加速会周期性断动力。
+    // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
+    void ResetMotionLocked(const char* status) {
         chassis_deadline_ = 0;
+        distance_active_ = false;
+        ++chassis_generation_;
+        motion_status_ = status;
         const auto error = esp_timer_stop(chassis_timer_);
         if (error != ESP_ERR_INVALID_STATE) {
             ESP_ERROR_CHECK(error);
         }
+    }
+
+    void StopChassisLocked(const char* status) {
+        chassis_.drive(0, 0);
+        ResetMotionLocked(status);
+    }
+
+    uint32_t DriveChassis(int forward, int turn, int duration_ms) {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
         if (forward != 0 || turn != 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
-            chassis_.drive(forward / 100.0f, turn / 100.0f);
         }
+        chassis_.drive(forward / 100.0f, turn / 100.0f);
         ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
+        return chassis_generation_;
+    }
+
+    void DriveWheels(int left, int right, int duration_ms) {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
+        if (left != 0 || right != 0) {
+            const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
+            chassis_deadline_ = esp_timer_get_time() + duration_us;
+            ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
+        }
+        chassis_.driveWheels(left / 100.0f, right / 100.0f);
+        ESP_LOGI(TAG, "Wheel drive: left=%d right=%d duration_ms=%d", left, right, duration_ms);
+    }
+
+    void SaveWheelCalibration() {
+        const auto [left, right] = chassis_.wheelCalibration();
+        Settings settings("chassis", true);
+        settings.SetInt("left_gain", left);
+        settings.SetInt("right_gain", right);
+        ESP_LOGI(TAG, "Wheel calibration saved: left=%d right=%d permille", left, right);
+    }
+
+    ToolResult MoveForward(int distance_cm, int speed) {
+        const auto generation = DriveChassis(0, 0, 0);
+        float initial_cm = 0;
+        const auto error = ultrasonic_.readDistanceCm(initial_cm);
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        if (generation != chassis_generation_) {
+            return std::unexpected("运动已被新的底盘指令取消");
+        }
+        if (chassis_.speedLimits().first == 0) {
+            return std::unexpected("行驶上限为 0，无法按距离前进；请先在网页调整速度上限");
+        }
+        if (error != ESP_OK) {
+            motion_status_ = "sensor_error";
+            return std::unexpected(std::string("起始测距失败，未启动电机：") + esp_err_to_name(error));
+        }
+        if (initial_cm - distance_cm < 10.0f) {
+            motion_status_ = "obstacle";
+            return std::unexpected("前方空间不足：目标位置须保留至少 10cm 距离，未启动电机");
+        }
+        start_distance_cm_ = initial_cm;
+        requested_cm_ = distance_cm;
+        moved_cm_ = 0;
+        distance_active_ = true;
+        motion_status_ = "moving";
+        chassis_deadline_ = esp_timer_get_time() + 15000000;
+        ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
+        chassis_.drive(speed / 100.0f, 0);
+        xTaskNotifyGive(distance_task_);
+        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, speed);
+        return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+    }
+
+    void RunDistanceControl() {
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            while (true) {
+                uint32_t generation;
+                {
+                    std::lock_guard<std::mutex> lock(chassis_mutex_);
+                    if (!distance_active_) {
+                        break;
+                    }
+                    generation = chassis_generation_;
+                }
+                float current_cm = 0;
+                // 驱动负责 >=60ms 采样间隔；等待回波时不能持有底盘锁，急停仍可立即执行。
+                const auto error = ultrasonic_.readDistanceCm(current_cm);
+                {
+                    std::lock_guard<std::mutex> lock(chassis_mutex_);
+                    if (generation != chassis_generation_ || !distance_active_) {
+                        continue;
+                    }
+                    if (error != ESP_OK) {
+                        StopChassisLocked("sensor_error");
+                        ESP_LOGW(TAG, "Distance move stopped: %s", esp_err_to_name(error));
+                        continue;
+                    }
+                    moved_cm_ = start_distance_cm_ - current_cm;
+                    if (current_cm <= 10.0f || moved_cm_ >= requested_cm_) {
+                        StopChassisLocked(moved_cm_ >= requested_cm_ ? "reached" : "obstacle");
+                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm", motion_status_, moved_cm_, requested_cm_);
+                    }
+                }
+                // 测距锁释放后让出一个 tick，避免连续重抢导致进度查询一直等到运动结束。
+                vTaskDelay(1);
+            }
+        }
     }
 
     void InitializeChassisTools() {
@@ -74,12 +192,23 @@ private:
             std::lock_guard<std::mutex> lock(board->chassis_mutex_);
             // 已排队的旧定时回调不能中断刚收到的新运动指令。
             if (board->chassis_deadline_ != 0 && esp_timer_get_time() >= board->chassis_deadline_) {
-                board->chassis_.drive(0, 0);
-                board->chassis_deadline_ = 0;
+                board->StopChassisLocked(board->distance_active_ ? "timeout" : "idle");
                 ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
             }
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
+        Settings settings("chassis");
+        if (!chassis_.setWheelCalibration(settings.GetInt("left_gain", 1000), settings.GetInt("right_gain", 1000))) {
+            ESP_LOGW(TAG, "Invalid wheel calibration; using defaults");
+        }
+        if (!chassis_.setSpeedLimits(settings.GetInt("max_linear", 100), settings.GetInt("max_turn", 30))) {
+            ESP_LOGW(TAG, "Invalid speed limits; using defaults");
+        }
+        if (xTaskCreate([](void* arg) {
+                static_cast<PaoBoard*>(arg)->RunDistanceControl();
+            }, "distance_move", 4096, this, 5, &distance_task_) != pdPASS) {
+            ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+        }
 
         auto& mcp = McpServer::GetInstance();
         mcp.AddTool("self.chassis.drive",
@@ -93,7 +222,9 @@ private:
             "forward 为 0、turn 不为 0 时原地旋转。forward 和 turn 都为 0 时立即停止。\n"
             "- duration_ms（可选，整数 100 到 15000，默认 1000）：行驶毫秒数，到时自动停止；"
             "超过 15000 会报错且不执行，需要更久请分多次调用。\n"
-            "速度是电机占空比，不代表实际距离或转过的角度。\n"
+            "forward 和 turn 均受网页保存的行驶/旋转速度上限约束，100 也不能绕过上限。"
+            "控制量影响电机占空比，不代表实际距离或转过的角度。\n"
+            "按厘米前进请使用 self.chassis.move_forward。\n"
             "返回：true 表示已开始执行。",
             PropertyList({Property("forward", kPropertyTypeInteger, -100, 100),
                           Property("turn", kPropertyTypeInteger, -100, 100),
@@ -105,7 +236,7 @@ private:
             });
         mcp.AddTool("self.chassis.stop",
             "是什么：小车两轮底盘的急停。\n"
-            "能做什么：立刻让两个电机停转，并取消 self.chassis.drive 还没走完的定时运动。"
+            "能做什么：立刻让两个电机停转，并取消当前定时或按距离运动。"
             "用户说停、停下、别动、刹车时调用。\n"
             "参数：无。\n"
             "返回：true 表示已停止。",
@@ -114,11 +245,59 @@ private:
                 DriveChassis(0, 0, 0);
                 return true;
             });
+        mcp.AddTool("self.chassis.move_forward",
+            "是什么：通过前方超声波距离变化反馈控制小车直行。用户要求前进多少厘米时调用。\n"
+            "参数：distance_cm 必填整数 1..390；speed 可选整数 1..100，默认 50，为相对行驶上限的速度百分比。\n"
+            "以前方同一静止反射物的起始距离减当前距离估算前进量，到达后停车；"
+            "必须有稳定反射物，不支持空旷环境里程测量、倒退或转弯。"
+            "目标位置必须保留至少 10cm；空间不足或起始测距失败直接报错且不启动。"
+            "新底盘指令会替换旧运动；途中无回波、测距错误、前方不足 10cm 或超过 15 秒立即停止。"
+            "受采样间隔和惯性影响，不能保证厘米级精度。\n"
+            "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询进度及停止原因。",
+            PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390),
+                          Property("speed", kPropertyTypeInteger, 50, 1, 100)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                return MoveForward(properties["distance_cm"].value<int>(), properties["speed"].value<int>());
+            });
+        mcp.AddTool("self.ultrasonic.get_distance",
+            "是什么：读取小车前方 HC-SR04 超声波距离，单位厘米，量程 2..400cm。\n"
+            "用户询问前方距离、障碍物距离或按厘米运动进度时调用。参数：无。\n"
+            "返回 JSON：distance_cm（本次失败时为 null）、error（测距错误或 null）、motion_status、"
+            "requested_cm、moved_cm（最近一次按距离运动的估算进度，可为负值）。"
+            "motion_status 为 idle/moving/reached/obstacle/sensor_error/timeout/cancelled；"
+            "只有 reached 表示按测距反馈达到目标。测距失败不能理解为前方没有障碍物。",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                return ReadDistance();
+            });
+    }
+
+    cJSON* ReadDistance() {
+        float distance_cm = 0;
+        const auto error = ultrasonic_.readDistanceCm(distance_cm);
+        auto* result = cJSON_CreateObject();
+        if (error == ESP_OK) {
+            cJSON_AddNumberToObject(result, "distance_cm", distance_cm);
+            cJSON_AddNullToObject(result, "error");
+        } else {
+            cJSON_AddNullToObject(result, "distance_cm");
+            cJSON_AddStringToObject(result, "error", esp_err_to_name(error));
+        }
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        cJSON_AddStringToObject(result, "motion_status", motion_status_);
+        cJSON_AddNumberToObject(result, "requested_cm", requested_cm_);
+        cJSON_AddNumberToObject(result, "moved_cm", moved_cm_);
+        return result;
     }
 
     // 语音工具和网页遥控在不同任务里调用，Launcher 自身串行化继电器脉冲。
     void FireLauncher() {
         launcher_.fire();
+        // 音频入队可能等待正在播放的语音，在主循环处理，避免阻塞遥控指令续发。
+        Application::GetInstance().Schedule([]() {
+            const auto size = reinterpret_cast<std::uintptr_t>(pao_launch_end) - reinterpret_cast<std::uintptr_t>(pao_launch_start);
+            Application::GetInstance().PlaySound(std::string_view(pao_launch_start, size));
+        });
         ESP_LOGI(TAG, "Launcher fired");
     }
 
@@ -215,14 +394,14 @@ private:
     }
 
     // 读取查询参数中的整数；缺省时取 fallback，非整数或越界返回 false。
-    static bool QueryInt(httpd_req_t* req, const char* key, int fallback, int min, int max, int& out) {
+    static bool QueryInt(const char* query, const char* key, int fallback, int min, int max, int& out) {
         out = fallback;
-        char query[128];
         char value[16];
-        if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
-            httpd_query_key_value(query, key, value, sizeof(value)) != ESP_OK) {
-            return true;
+        const auto error = httpd_query_key_value(query, key, value, sizeof(value));
+        if (error == ESP_ERR_NOT_FOUND) {
+            return fallback >= min && fallback <= max;
         }
+        if (error != ESP_OK) { return false; }
         char* end = nullptr;
         const long parsed = std::strtol(value, &end, 10);
         if (end == value || *end != '\0' || parsed < min || parsed > max) {
@@ -236,6 +415,7 @@ private:
         httpd_resp_set_status(req, status);
         httpd_resp_set_type(req, type);
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "http://127.0.0.1:8080");
         return httpd_resp_sendstr(req, body);
     }
 
@@ -251,6 +431,122 @@ private:
         return static_cast<PaoBoard*>(req->user_ctx);
     }
 
+    // HTTP 和 WebSocket 共用指令校验与执行，避免两个入口的运动约束发生偏差。
+    std::string ControlCommand(const std::string& path, const char* query) {
+        int forward, turn, duration_ms, left, right, distance_cm, speed, linear;
+        if (path == "/api/drive") {
+            if (!QueryInt(query, "forward", 0, -100, 100, forward) || !QueryInt(query, "turn", 0, -100, 100, turn) ||
+                !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
+                return "forward/turn 取 -100..100，duration_ms 取 100..15000";
+            }
+            DriveChassis(forward, turn, duration_ms);
+        } else if (path == "/api/stop") {
+            DriveChassis(0, 0, 0);
+        } else if (path == "/api/speed_limits") {
+            if (!QueryInt(query, "linear", -1, 0, 100, linear) || !QueryInt(query, "turn", -1, 0, 100, turn)) {
+                return "linear/turn 均为必填整数，取 0..100";
+            }
+            std::lock_guard<std::mutex> lock(chassis_mutex_);
+            StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+            chassis_.setSpeedLimits(linear, turn);
+            Settings settings("chassis", true);
+            settings.SetInt("max_linear", linear);
+            settings.SetInt("max_turn", turn);
+            ESP_LOGI(TAG, "Speed limits saved: linear=%d turn=%d percent", linear, turn);
+        } else if (path == "/api/wheels") {
+            if (!QueryInt(query, "left", 0, -100, 100, left) || !QueryInt(query, "right", 0, -100, 100, right) ||
+                !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
+                return "left/right 取 -100..100，duration_ms 取 100..15000";
+            }
+            DriveWheels(left, right, duration_ms);
+        } else if (path == "/api/calibrate" || path == "/api/calibration/reset") {
+            if (path == "/api/calibrate" &&
+                (!QueryInt(query, "forward", 0, 1, 100, forward) || !QueryInt(query, "turn", 0, -100, 100, turn))) {
+                return "需要向前微调的 forward/turn";
+            }
+            std::lock_guard<std::mutex> lock(chassis_mutex_);
+            StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+            if (path == "/api/calibration/reset") {
+                chassis_.setWheelCalibration(1000, 1000);
+            } else if (!chassis_.calibrateForward(forward / 100.0f, turn / 100.0f)) {
+                return "请先向前微调至走直；两轮都须向前，修正比例不能低于 10%";
+            }
+            SaveWheelCalibration();
+        } else if (path == "/api/move_forward") {
+            if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm) || !QueryInt(query, "speed", 50, 1, 100, speed)) {
+                return "distance_cm 取 1..390，speed 取 1..100";
+            }
+            const auto result = MoveForward(distance_cm, speed);
+            if (!result) { return result.error(); }
+        } else if (path == "/api/launcher/fire") {
+            FireLauncher();
+        } else {
+            return "未知控制指令";
+        }
+        return "";
+    }
+
+    static esp_err_t HttpControl(httpd_req_t* req) {
+        char query[128] = {};
+        const auto error = httpd_req_get_url_query_str(req, query, sizeof(query));
+        if (error != ESP_OK && error != ESP_ERR_NOT_FOUND) { return BadRequest(req, "查询参数过长"); }
+        const std::string uri(req->uri);
+        const auto result = Self(req)->ControlCommand(uri.substr(0, uri.find('?')), query);
+        return result.empty() ? Ok(req) : BadRequest(req, result.c_str());
+    }
+
+    cJSON* ReadControlStatus() {
+        const auto [left, right] = chassis_.wheelCalibration();
+        const auto [linear, turn] = chassis_.speedLimits();
+        auto* result = cJSON_CreateObject();
+        cJSON_AddNumberToObject(result, "left_gain_permille", left);
+        cJSON_AddNumberToObject(result, "right_gain_permille", right);
+        cJSON_AddNumberToObject(result, "max_linear_percent", linear);
+        cJSON_AddNumberToObject(result, "max_turn_percent", turn);
+        return result;
+    }
+
+    static esp_err_t WebSocketControl(httpd_req_t* req) {
+        if (req->method == HTTP_GET) { return ESP_OK; }
+        httpd_ws_frame_t frame = {};
+        ESP_RETURN_ON_ERROR(httpd_ws_recv_frame(req, &frame, 0), TAG, "Cannot read WebSocket frame");
+        if (frame.type != HTTPD_WS_TYPE_TEXT || frame.len == 0 || frame.len > 512 || !frame.final) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        char payload[513] = {};
+        frame.payload = reinterpret_cast<uint8_t*>(payload);
+        ESP_RETURN_ON_ERROR(httpd_ws_recv_frame(req, &frame, frame.len), TAG, "Cannot read WebSocket payload");
+        CJsonUniquePtr request(cJSON_ParseWithLengthOpts(payload, frame.len + 1, nullptr, true));
+        const auto* id = cJSON_GetObjectItemCaseSensitive(request.get(), "id");
+        const auto* path = cJSON_GetObjectItemCaseSensitive(request.get(), "path");
+        const auto* query = cJSON_GetObjectItemCaseSensitive(request.get(), "query");
+        if (!cJSON_IsNumber(id) || id->valuedouble < 1 || id->valuedouble > 2147483647 ||
+            id->valuedouble != id->valueint || !cJSON_IsString(path) || !cJSON_IsString(query) ||
+            std::strlen(path->valuestring) > 64 || std::strlen(query->valuestring) > 127) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        auto* board = Self(req);
+        CJsonUniquePtr response(cJSON_CreateObject());
+        cJSON_AddNumberToObject(response.get(), "id", id->valueint);
+        std::string error;
+        if (std::strcmp(path->valuestring, "/api/status") == 0) {
+            cJSON_AddItemToObject(response.get(), "data", board->ReadControlStatus());
+        } else if (std::strcmp(path->valuestring, "/api/distance") == 0) {
+            cJSON_AddItemToObject(response.get(), "data", board->ReadDistance());
+        } else {
+            error = board->ControlCommand(path->valuestring, query->valuestring);
+            cJSON_AddBoolToObject(response.get(), "data", error.empty());
+        }
+        cJSON_AddBoolToObject(response.get(), "ok", error.empty());
+        if (!error.empty()) { cJSON_AddStringToObject(response.get(), "error", error.c_str()); }
+        CJsonStringUniquePtr text(cJSON_PrintUnformatted(response.get()));
+        if (!text) { return ESP_ERR_NO_MEM; }
+        frame.type = HTTPD_WS_TYPE_TEXT;
+        frame.payload = reinterpret_cast<uint8_t*>(text.get());
+        frame.len = std::strlen(text.get());
+        return httpd_ws_send_frame(req, &frame);
+    }
+
     // 局域网遥控页，参数范围与同名 MCP 工具一致；没有鉴权，只应在可信网络中使用。
     void StartControlServer() {
         if (control_server_ != nullptr) {
@@ -259,7 +555,7 @@ private:
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.server_port = 80;
         config.ctrl_port = 32769;
-        config.max_uri_handlers = 8;
+        config.max_uri_handlers = 12;
         config.lru_purge_enable = true;
         if (httpd_start(&control_server_, &config) != ESP_OK) {
             ESP_LOGE(TAG, "Control server failed to start");
@@ -271,29 +567,38 @@ private:
                 return Reply(req, "200 OK", "text/html; charset=utf-8", kControlPage);
             }, this},
             {"/api/status", HTTP_GET, [](httpd_req_t* req) {
-                return Reply(req, "200 OK", "application/json", "{}");
+                CJsonUniquePtr result(Self(req)->ReadControlStatus());
+                CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
+                if (!text) { return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode status"); }
+                return Reply(req, "200 OK", "application/json", text.get());
             }, this},
-            {"/api/drive", HTTP_POST, [](httpd_req_t* req) {
-                int forward, turn, duration_ms;
-                if (!QueryInt(req, "forward", 0, -100, 100, forward) || !QueryInt(req, "turn", 0, -100, 100, turn) ||
-                    !QueryInt(req, "duration_ms", 1000, 100, 15000, duration_ms)) {
-                    return BadRequest(req, "forward/turn 取 -100..100，duration_ms 取 100..15000");
+            {"/api/drive", HTTP_POST, HttpControl, this},
+            {"/api/stop", HTTP_POST, HttpControl, this},
+            {"/api/speed_limits", HTTP_POST, HttpControl, this},
+            {"/api/wheels", HTTP_POST, HttpControl, this},
+            {"/api/calibrate", HTTP_POST, HttpControl, this},
+            {"/api/calibration/reset", HTTP_POST, HttpControl, this},
+            {"/api/distance", HTTP_GET, [](httpd_req_t* req) {
+                CJsonUniquePtr result(Self(req)->ReadDistance());
+                CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
+                if (!text) {
+                    return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode distance");
                 }
-                Self(req)->DriveChassis(forward, turn, duration_ms);
-                return Ok(req);
+                return Reply(req, "200 OK", "application/json", text.get());
             }, this},
-            {"/api/stop", HTTP_POST, [](httpd_req_t* req) {
-                Self(req)->DriveChassis(0, 0, 0);
-                return Ok(req);
-            }, this},
-            {"/api/launcher/fire", HTTP_POST, [](httpd_req_t* req) {
-                Self(req)->FireLauncher();
-                return Ok(req);
-            }, this},
+            {"/api/move_forward", HTTP_POST, HttpControl, this},
+            {"/api/launcher/fire", HTTP_POST, HttpControl, this},
         };
         for (const auto& route : routes) {
             ESP_ERROR_CHECK(httpd_register_uri_handler(control_server_, &route));
         }
+        httpd_uri_t websocket = {};
+        websocket.uri = "/ws";
+        websocket.method = HTTP_GET;
+        websocket.handler = WebSocketControl;
+        websocket.user_ctx = this;
+        websocket.is_websocket = true;
+        ESP_ERROR_CHECK(httpd_register_uri_handler(control_server_, &websocket));
         ESP_LOGI(TAG, "Control page: http://%s/", WifiManager::GetInstance().GetIpAddress().c_str());
     }
 
