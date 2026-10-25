@@ -23,7 +23,17 @@
 
 端子别名：SPH0645 的 DATA / SELECT 对应面板 DOUT / SEL；MAX98357A 的 LRCLK / VO+ / VO− 对应 LRC / OUT_PLUS / OUT_MINUS；DRV8833 的 PWRIN / NFAULT / !SLEEP 对应 VMOTOR / FLT / SLP。DRV8833 的 VM、ASEN、BSEN 没有在此编辑器开放。不能把该驱动或 SPH0645 当作 PAO 原板型的 MX1508 / INMP441。
 
-## 新增电源与负载
+## I²C 传感器
+
+以下原版模块照片直接引用 Adafruit 官方 CDN，版权归 Adafruit，加载需要网络。引脚和制造几何来自 `src/sensors.ts` 中固定版本的官方 Eagle 源文件（CC BY-SA 3.0），不从照片估算。
+
+- MCP9808 #1782 原版八针：https://cdn-shop.adafruit.com/640x480/1782-03.jpg ；https://learn.adafruit.com/adafruit-mcp9808-precision-i2c-temperature-sensor-guide/pinouts 。
+- BH1750 #4681：https://cdn-shop.adafruit.com/640x480/4681-05.jpg ；https://learn.adafruit.com/adafruit-bh1750-ambient-light-sensor/pinouts 。
+- SHT31-D #2857 原版七针：https://cdn-shop.adafruit.com/640x480/2857-03.jpg ；https://learn.adafruit.com/adafruit-sht31-d-temperature-and-humidity-sensor-breakout/pinouts 。
+
+驱动寄存器依据 MCP9808 DS20001955、ROHM BH1750FVI 和 Sensirion SHT3x-DIS，交叉核对官方 Adafruit_MCP9808、Adafruit_CircuitPython_BH1750、Adafruit_SHT31 驱动。当前采用 MCP 连续转换、BH1750 连续高分辨率和 SHT31 单次高重复性测量模式；SHT31 不启用加热器。
+
+## 电源与负载照片
 
 以下照片直接引用厂商 CDN，用于型号识别，版权归原厂商，未复制到本仓库，也不适用上述 Fritzing SVG 的许可。加载需要网络。
 

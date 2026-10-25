@@ -12,6 +12,33 @@ import { fileURLToPath } from "node:url";
 
 const plan = (types) => ({ supported: true, title: "设计", summary: "按需选型", modules: types.map((type) => ({ type, reason: "需求所需" })), sharedI2s: false, board: { width: 140, height: 100 } });
 
+test("mixed sensors share actual I2C pins and allocate address straps; invalid electrical conditions are rejected", () => {
+  const d = assembleHardware({ ...plan(["esp","oled","mcp9808","mcp9808","bh1750","sht31"]), board: { width:180,height:160 } });
+  const generated = firmwareProject(d);
+  assert.deepEqual(generated.spec.sensors.map((s) => s.address),[0x18,0x19,0x23,0x44]);
+  assert.equal(generated.spec.i2cBuses.length,1);
+  const change = (target,source) => d.connections.map((c) => c.b === target ? {...c,a:source} : c);
+  assert.throws(() => firmwareProject({...d,connections:change("4:A0","1:J3-1")}),/地址冲突/);
+  assert.throws(() => firmwareProject({...d,connections:change("6:RST","1:J3-1")}),/RST/);
+  assert.throws(() => firmwareProject({...d,connections:change("5:VIN","7:\u002b5V")}),/上拉随 VIN/);
+  assert.throws(() => firmwareProject({...d,connections:change("5:SDA","1:J3-8")}),/不能只共享/);
+  const second = d.connections.map((c) => c.b === "5:SDA" ? {...c,a:"1:J3-8"} : c.b === "5:SCL" ? {...c,a:"1:J3-9"} : c);
+  assert.equal(firmwareProject({...d,connections:second}).spec.sensors.find((s) => s.id === 5).bus,1);
+  const filled = assembleHardware({ ...plan(["esp","mcp9808","mcp9808"]), board:{width:180,height:160} });
+  const result = firmwareProject(filled);
+  assert.notEqual(result.spec.sensors[0].address,result.spec.sensors[1].address);
+  assert.throws(() => assembleHardware({...plan(["esp","oled","mic","bh1750"]),board:{width:180,height:160}}),/电流预算超限/);
+});
+
+test("mixed sensor modules produce connected manufacturable copper and a real schematic", async () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const result = await buildHardware(root,{...plan(["esp","oled","mcp9808","mcp9808","bh1750","sht31"]),board:{width:180,height:160}},new AbortController().signal,()=>{});
+  assert.deepEqual(boardIssues(result.nodes,result.connections,result.traces,result.board),[]);
+  assert.equal(JSON.parse(result.manufacturing["drc.json"]).passed,true);
+  assert.equal(result.traces.length,result.connections.length);
+  assert.equal(result.schematic.json.filter((e) => e.type === "source_component").length,7);
+});
+
 test("hardware selection creates distinct BOMs and complete electrical dependencies", () => {
   const motor = assembleHardware(plan(["motor", "esp", "oled"]));
   assert.deepEqual(motor.nodes.map((n) => n.type), ["esp", "oled", "motor", "supply", "dcMotor", "dcMotor"]);

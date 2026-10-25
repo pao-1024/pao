@@ -1,6 +1,7 @@
 import { catalog } from "./catalog.ts";
 import type { Module, Connection, ModuleType } from "./catalog.ts";
-import { electricalReport, nets, resolvePin, endpoint } from "./electrical.ts";
+import { electricalReport, nets, resolvePin, endpoint, i2cTopology } from "./electrical.ts";
+import { isSensor, sensorDefinitions } from "./sensors.ts";
 import { validateAgent, validateAgentHardware, type AgentApplication } from "./agent-spec.ts";
 
 export type Application = { kind: "diagnostic" } | { kind: "intercom"; volume: number } |
@@ -79,10 +80,13 @@ export function firmwareProject(value: unknown) {
       const load = group(d.id, `${channel}OUT1`).map((key) => resolvePin(nodes, key)!).find((p) => p.node.type === "dcMotor")!;
       return { id: load.node.id, polarity: load.pin.id === "M1" ? 1 : -1 };
     }) } : null;
-  const spec = { version: 1, oled, mic, amp, motor, sharedI2s, application };
+  const topology = i2cTopology(nodes,connections);
+  const sensors = topology.devices.filter((d) => isSensor(d.type)).map((d) => ({ ...d, type: d.type as keyof typeof sensorDefinitions }));
+  const spec = { version: 1, oled: oled ? { ...oled, bus: topology.devices.find((d) => d.id === oled.id)!.bus } : null, mic, amp, motor, sensors, i2cBuses: topology.buses, sharedI2s, application };
   if (application.kind === "agent") validateAgentHardware(application, spec);
   const definitions: Record<string, number> = {
     HAS_OLED: +!!oled, OLED_SDA: oled?.sda ?? -1, OLED_SCL: oled?.scl ?? -1, OLED_RST: oled?.reset ?? -1,
+    OLED_BUS: spec.oled?.bus ?? 0, I2C_BUS_COUNT: topology.buses.length, SENSOR_COUNT: sensors.length,
     HAS_MIC: +!!mic, MIC_BCLK: mic?.bclk ?? -1, MIC_WS: mic?.ws ?? -1, MIC_DATA: mic?.data ?? -1, MIC_CHANNEL: mic?.channel ?? 0,
     HAS_AMP: +!!amp, AMP_BCLK: amp?.bclk ?? -1, AMP_WS: amp?.ws ?? -1, AMP_DATA: amp?.data ?? -1,
     HAS_MOTOR: +!!motor, MOTOR_ENABLE: motor?.enable ?? -1,
@@ -95,5 +99,7 @@ export function firmwareProject(value: unknown) {
     ...Object.fromEntries(["A1", "A2", "B1", "B2"].map((name, i) => [`MOTOR_${name}`, motor?.pins[i] ?? -1])),
   };
   return { design, spec, report, header: "// Generated from the validated wiring. ESP-IDF 6.0.1 / ESP32-S3.\n#pragma once\n" +
-    Object.entries(definitions).map(([key, value]) => `#define ${key} ${value}`).join("\n") + "\n" };
+    Object.entries(definitions).map(([key, value]) => `#define ${key} ${value}`).join("\n") + "\n" +
+    `struct StudioI2cRoute { int sda, scl; };\nstatic constexpr StudioI2cRoute studio_i2c_routes[] = {${topology.buses.length ? topology.buses.map((b) => `{${b.sda},${b.scl}}`).join(",") : "{-1,-1}"}};\n` +
+    `struct StudioSensorConfig { int id, kind, bus, address; };\nstatic constexpr StudioSensorConfig studio_sensor_configs[] = {${sensors.length ? sensors.map((s) => `{${s.id},${sensorDefinitions[s.type].code},${s.bus},${s.address}}`).join(",") : "{0,0,0,0}"}};\n` };
 }

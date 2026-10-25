@@ -177,6 +177,7 @@ function App() {
     if (completed.length > 20) { setMessage("补齐必要器件后超过模块上限。"); return; }
     serial.current = Math.max(serial.current, ...completed.map((n) => n.id));
     const connected = autoConnect(completed, connections);
+    if (completed.some((n) => ["mcp9808", "bh1750", "sht31"].includes(n.type))) setBoard((current) => ({ width: Math.max(180,current.width), height: Math.max(160,current.height) }));
     setNodes(completed);
     setConnections(connected.connections);
     setPending(null);
@@ -481,7 +482,7 @@ function App() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <div className="filters">
-                    {["全部", "主控", "显示", "音频", "执行器", "电源", "负载"].map((c) => (
+                    {["全部", "主控", "显示", "传感器", "音频", "执行器", "电源", "负载"].map((c) => (
                       <button
                         key={c}
                         aria-pressed={category === c}

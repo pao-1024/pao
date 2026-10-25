@@ -19,6 +19,18 @@ test("runtime actions reject cross-origin requests, DNS rebinding and missing ac
 const step = { name: "quiet", level: 0, durationMs: 500, alarm: false, volume: 0, toneHz: 0, motorA: 0, motorB: 0, label: "QUIET" };
 const application = { kind: "agent", prompt: "quiet", summary: "quiet", source: 'StudioOutput studio_step(bool, int, int64_t) { return {0,0,0,0,false,"QUIET"}; }', scenarios: [step, { ...step, name: "loud", level: 9000 }] };
 
+test("sensor scenarios validate real units, physical capabilities and sample time before building", () => {
+  const scenario = { ...step, durationMs:1000, inputs:[{id:3,temperatureC:-10.5},{id:4,lux:12.5}] };
+  const app = validateAgent({...application,scenarios:[scenario,{...scenario,name:"transition"}]});
+  const spec = { mic:null,amp:null,motor:null,sensors:[{id:3,type:"mcp9808"},{id:4,type:"bh1750"}] };
+  assert.deepEqual(validateAgentHardware(app,spec).scenarios[0].inputs,scenario.inputs);
+  for (const inputs of [[{id:3,lux:10}],[{id:7,temperatureC:25}]])
+    assert.throws(() => validateAgentHardware({...app,scenarios:[{...scenario,inputs}]},spec),/未接入/);
+  for (const inputs of [[{id:3,temperatureC:126}],[{id:3,temperatureC:25},{id:3,temperatureC:30}],[{id:4,lux:-1}],[{id:3}]])
+    assert.throws(() => validateAgent({...application,scenarios:[{...scenario,inputs},scenario]}));
+  assert.throws(() => validateAgentHardware({...app,scenarios:[{...scenario,durationMs:500}]},spec),/750/);
+});
+
 test("unsupported hardware scenarios are rejected before the first valid acceptance contract is frozen", async () => {
   let calls = 0;
   const spec = { mic: null, amp: null, motor: {} };

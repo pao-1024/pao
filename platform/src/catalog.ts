@@ -1,4 +1,5 @@
-export type ModuleType = "esp" | "oled" | "mic" | "speaker" | "motor" | "supply" | "speakerLoad" | "dcMotor";
+import { sensorDefinitions, sensorTypes, type SensorType } from "./sensors.ts";
+export type ModuleType = "esp" | "oled" | "mic" | "speaker" | "motor" | "supply" | "speakerLoad" | "dcMotor" | SensorType;
 export type Part = {
   type: ModuleType;
   name: string;
@@ -14,6 +15,9 @@ export type Part = {
   output?: { family: "audio"; minOhms: number; maxWatts: number } | { family: "motor"; channelMa: number };
 };
 export const catalog: Part[] = [
+  ...sensorTypes.map((type) => ({ type, name: sensorDefinitions[type].name, model: sensorDefinitions[type].model, maker: "Adafruit",
+    category: "传感器", image: ({ mcp9808: "https://cdn-shop.adafruit.com/640x480/1782-03.jpg", bh1750: "https://cdn-shop.adafruit.com/640x480/4681-05.jpg", sht31: "https://cdn-shop.adafruit.com/640x480/2857-03.jpg" })[type], voltage: "VIN 3.3V / I²C 3.3V", bus: "I²C",
+    source: sensorDefinitions[type].source, note: "板载上拉与 VIN 同电平，必须接 3.3V；按实际地址脚电平计算地址，支持同型号多实例。ALERT/ALR 不使用，禁止并接稳压输出。SHT31 RST 固定高电平，未启用加热器。" })),
   {
     type: "esp",
     name: "ESP32-S3 DevKitC-1",
@@ -145,7 +149,7 @@ export function completeProject(nodes: Module[]): Module[] {
   let id = Math.max(0, ...nodes.map((n) => n.id));
   const add = (type: ModuleType) => result.push({ id: ++id, type,
     x: 70 + ((result.length % 4) * 340), y: 80 + Math.floor(result.length / 4) * 350 });
-  if (nodes.some((n) => ["esp", "oled", "mic", "speaker", "motor"].includes(n.type)) && !nodes.some((n) => n.type === "supply")) add("supply");
+  if (nodes.some((n) => !["speakerLoad", "dcMotor", "supply"].includes(n.type)) && !nodes.some((n) => n.type === "supply")) add("supply");
   if (nodes.some((n) => n.type === "speaker") && !nodes.some((n) => n.type === "speakerLoad")) add("speakerLoad");
   if (nodes.some((n) => n.type === "motor"))
     for (let count = result.filter((n) => n.type === "dcMotor").length; count < 2; count++) add("dcMotor");

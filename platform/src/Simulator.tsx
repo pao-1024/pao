@@ -5,6 +5,7 @@ import type { Module, Connection } from "./catalog.ts";
 import type { AgentApplication } from "./agent-spec.ts";
 import type { HardwareResult } from "./hardware-plan.ts";
 import { partFor, moduleImage } from "./catalog.ts";
+import { sensorDefinitions, sensorMetricRanges, sensorDefaults } from "./sensors.ts";
 
 type Runtime = {
   state: string; log: string; active: boolean;
@@ -143,6 +144,7 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
   const [pending, setPending] = useState(false);
   const [connected, setConnected] = useState(false);
   const [serial, setSerial] = useState("");
+  const [stimuli, setStimuli] = useState<Record<string, number>>({});
   const [pins, setPins] = useState({ levels: 0n, pwm: new Map<number, number>(), transactions: 0 });
   const [audio, setAudio] = useState({ samples: 0, peak: 0, rate: 0 });
   const [frames, setFrames] = useState(0);
@@ -245,6 +247,7 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
             if (/stack overflow|Guru Meditation|Rebooting|abort\(\)/.test(uart.current.slice(Math.max(bootAt, readyAt)))) setFirmwareReady(false);
           }
           if (message.t === "microphone-error") setError(`音频输入被拒绝：${message.message}`);
+          if (message.t === "board-input-error") setError(`传感器输入被拒绝：${message.message}`);
           if (message.t === "pao") setPins({ levels: BigInt(`0x${message.levels}`), pwm: new Map(message.pwm), transactions: message.i2c[0] });
         } catch (e) { setError(`模拟器消息无效：${e}`); }
       };
@@ -358,6 +361,20 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
       </div></div><div><h3>当前板型</h3><p>{nodes.length} 个模块 · {connections.length} 根接线</p>
         <details><summary>GPIO / 声道 / 负载配置</summary><pre className="runtime-log">{spec ? JSON.stringify(spec, null, 2) : "请修正接线"}</pre></details></div></div>
     {error && <p role="alert" className="notice">{error}</p>}
+    {!!spec?.sensors.length && <div className="runtime-setup"><div><h3>传感器 / 模拟环境输入</h3><p>输入进入模拟器器件寄存器，由当前固件通过真实 I²C 接线采样；数值为仿真刺激。</p>
+      {spec.sensors.map((s) => <fieldset key={s.id}><legend>{partFor(s.type).name} #{s.id} · I²C {s.bus} · 0x{s.address.toString(16)} · SDA GPIO{s.sda} / SCL GPIO{s.scl}</legend>
+        {sensorDefinitions[s.type].metrics.map((metric) => <label key={metric}>{({ temperatureC: "温度 / °C", humidityPercent: "湿度 / %RH", lux: "照度 / lx" })[metric]}
+          <input aria-label={`${metric} #${s.id}`} type="number" step="0.1" min={sensorMetricRanges[metric][0]} max={sensorMetricRanges[metric][1]} value={stimuli[`${s.id}:${metric}`] ?? sensorDefaults[metric]} onChange={(e) => setStimuli((v) => ({ ...v,[`${s.id}:${metric}`]: Number(e.target.value) }))} /></label>)}
+        <button disabled={!ready} onClick={() => {
+          const entries = sensorDefinitions[s.type].metrics.map((metric) => [metric,stimuli[`${s.id}:${metric}`] ?? sensorDefaults[metric]] as const);
+          if (entries.some(([metric,value]) => !Number.isFinite(value) || value < sensorMetricRanges[metric][0] || value > sensorMetricRanges[metric][1])) { setError("传感器输入超出范围"); return; }
+          setError("");
+          socket.current?.send(JSON.stringify({ t: "board-input", id:s.id, ...Object.fromEntries(entries.map(([metric,value]) => [metric,Math.round(value*1000)])) }));
+        }}>应用环境输入 #{s.id}</button>
+      </fieldset>)}</div><div><h3>固件 I²C 实际采样</h3>{spec.sensors.map((s) => {
+        const sample = Array.from(serial.matchAll(/STUDIO SENSOR id=(\d+) valid=(\d) temperature_milli=(-?\d+) humidity_milli=(-?\d+) lux_milli=(-?\d+)/g)).filter((m) => Number(m[1]) === s.id).at(-1);
+        return <p key={s.id}>#{s.id} {sample ? sample[2] === "1" ? sensorDefinitions[s.type].metrics.map((metric) => `${metric}: ${Number(sample[({ temperatureC:3,humidityPercent:4,lux:5 })[metric]])/1000}`).join(" · ") : "CRC 校验失败" : "等待固件采样"}</p>;
+      })}</div></div>}
     <div className="runtime-setup"><div><h3>实际外设输出</h3>
       {spec?.oled && <><canvas ref={screen} width={128} height={32} aria-label="当前接线 OLED 128×32 实际显存" style={{ width: "100%", maxWidth: 512, imageRendering: "pixelated", background: "#051410" }} />
         <p>OLED 帧 {frames} · I²C 事务 {pins.transactions}</p>{application.kind === "diagnostic" && <button disabled={!connected} onClick={() => command("display")}>切换 OLED 图案</button>}</>}

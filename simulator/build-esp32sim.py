@@ -27,16 +27,17 @@ def build():
     run("git", "submodule", "update", "--init", "--recursive", "--", "simulator/esp32sim")
     # Keep the pinned checkout pristine; the tracked extension is compiled from an isolated copy.
     work = ROOT / "tmp/studio-sim"
-    patch = ROOT / "simulator/i2s-streaming.patch"
-    stamp = hashlib.sha256(run("git", "rev-parse", "HEAD", cwd=source, capture=True).stdout.encode() + patch.read_bytes() + Path(__file__).read_bytes()).hexdigest()
+    patches = [ROOT / "simulator/i2s-streaming.patch", ROOT / "simulator/board-input.patch"]
+    stamp = hashlib.sha256(run("git", "rev-parse", "HEAD", cwd=source, capture=True).stdout.encode() + b"".join(p.read_bytes() for p in patches) + Path(__file__).read_bytes()).hexdigest()
     marker = work / "kernel-revision"
     if not marker.exists() or marker.read_text() != stamp:
         if (work / "esp32sim").exists():
             shutil.rmtree(work / "esp32sim")
         shutil.copytree(source, work / "esp32sim", ignore=shutil.ignore_patterns(".git", "target", "node_modules"))
         directory = str((work / "esp32sim").relative_to(ROOT))
-        run("git", "apply", "--directory", directory, patch)
-        run("git", "apply", "--directory", directory, "--reverse", "--check", patch)
+        for patch in patches:
+            run("git", "apply", "--directory", directory, patch)
+            run("git", "apply", "--directory", directory, "--reverse", "--check", patch)
         marker.write_text(stamp)
     if (work / "pao-sim").exists():
         shutil.rmtree(work / "pao-sim")

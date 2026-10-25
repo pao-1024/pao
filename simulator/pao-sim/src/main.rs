@@ -2,6 +2,7 @@ mod board;
 mod ssd1306;
 mod trace;
 mod project;
+mod sensors;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();

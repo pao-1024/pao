@@ -82,7 +82,7 @@ export function runtimePlugin(): Plugin {
   function generate(value: unknown, hardware?: HardwareResult) {
     const generated = firmwareProject(value);
     const files: Record<string, string> = {};
-    for (const name of ["CMakeLists.txt", "sdkconfig.defaults", "main/CMakeLists.txt", "main/main.cpp"])
+    for (const name of ["CMakeLists.txt", "sdkconfig.defaults", "main/CMakeLists.txt", "main/main.cpp", "main/sensor-driver.h"])
       files[name] = readFileSync(resolve(root, "platform/firmware", name), "utf8");
     files["main/wiring.h"] = generated.header;
     files["main/motor.cc"] = readFileSync(resolve(root, "firmware/components/pao/motor.cc"), "utf8");

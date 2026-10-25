@@ -13,6 +13,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "sensor-driver.h"
 
 static std::atomic<bool> app_running{false}, app_alarm{false};
 static std::atomic<int> input_level{0};
@@ -69,20 +70,11 @@ static void init_oled() {
     output((gpio_num_t)OLED_RST);
     vTaskDelay(pdMS_TO_TICKS(10));
     ESP_ERROR_CHECK(gpio_set_level((gpio_num_t)OLED_RST, 1));
-    i2c_master_bus_config_t bus_cfg = {};
-    bus_cfg.i2c_port = I2C_NUM_0;
-    bus_cfg.sda_io_num = (gpio_num_t)OLED_SDA;
-    bus_cfg.scl_io_num = (gpio_num_t)OLED_SCL;
-    bus_cfg.clk_source = I2C_CLK_SRC_DEFAULT;
-    bus_cfg.glitch_ignore_cnt = 7;
-    // The selected breakout already provides pull-ups to its 3.3V VIN.
-    i2c_master_bus_handle_t bus;
-    ESP_ERROR_CHECK(i2c_new_master_bus(&bus_cfg, &bus));
     i2c_device_config_t dev = {};
     dev.dev_addr_length = I2C_ADDR_BIT_LEN_7;
     dev.device_address = 0x3c;
     dev.scl_speed_hz = 100000;
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &dev, &oled));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(studio_buses[OLED_BUS], &dev, &oled));
     uint8_t init[] = {0, 0xae, 0xd5, 0x80, 0xa8, 31, 0xd3, 0, 0x40, 0x8d, 0x14,
                       0x20, 0, 0xa1, 0xc8, 0xda, 2, 0x81, 0x8f, 0xd9, 0xf1, 0xdb, 0x40,
                       0xa4, 0xa6, 0xaf, 0x21, 0, 127, 0x22, 0, 3};
@@ -188,6 +180,8 @@ static void init_audio() {
 extern "C" void app_main() {
     setvbuf(stdout, nullptr, _IONBF, 0);
     printf("STUDIO BOOT oled=%d mic=%d amp=%d motor=%d\n", HAS_OLED, HAS_MIC, HAS_AMP, HAS_MOTOR);
+    init_studio_buses();
+    init_studio_sensors();
 #if HAS_MOTOR
     output((gpio_num_t)MOTOR_ENABLE);
     Motor a((gpio_num_t)MOTOR_A1, (gpio_num_t)MOTOR_A2);
@@ -206,10 +200,12 @@ extern "C" void app_main() {
     char line[80]; size_t length = 0;
     bool overflow = false;
     [[maybe_unused]] int64_t next_display = 0;
+    int64_t next_sensor = 0;
 #if APP_MODE == 3
     int64_t next_agent_log = 0;
 #endif
     while (true) {
+        if (esp_timer_get_time() >= next_sensor) { sample_studio_sensors(); next_sensor = esp_timer_get_time() + 200000; }
 #if APP_MODE == 3
         const int64_t agent_now = esp_timer_get_time() / 1000;
         agent_output = studio_step(app_running.load(), input_level.load(), agent_now);

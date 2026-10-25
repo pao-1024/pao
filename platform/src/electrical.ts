@@ -1,5 +1,6 @@
 import { partFor } from "./catalog.ts";
 import type { Module, ModuleType, Connection, Part } from "./catalog.ts";
+import { sensorDefinitions, sensorTypes, isSensor } from "./sensors.ts";
 
 type Pin = {
   id: string; name: string; side: number; row: number; required: boolean; blocked?: boolean;
@@ -16,6 +17,13 @@ const input = (id: string, signal: string) => p(id, "in", { signal, voltage: [0,
 const ground = () => p("GND", "gnd");
 const power = (id: string, voltage: [number, number], currentMa: number) => p(id, "power-in", { voltage, currentMa });
 export const pinSets: Record<ModuleType, Pin[]> = {
+  ...Object.fromEntries(sensorTypes.map((type) => [type, sensorDefinitions[type].physicalPins.map((id) => {
+    if (id === "VIN") return { ...power(id, [2.7,5.5], sensorDefinitions[type].currentMa), name: type === "mcp9808" ? "Vdd" : id };
+    if (id === "GND") return ground();
+    if (id === "SDA" || id === "SCL") return input(id, id === "SDA" ? "i2c-sda" : "i2c-scl");
+    if (["ALERT", "ALR", "3Vo"].includes(id)) return p(id, id === "3Vo" ? "power-out" : "out", { required: false, blocked: true, ...(id === "3Vo" ? { sourceVoltage: 3.3 } : {}) });
+    return p(id, "strap", { voltage: [0,3.6] });
+  })])) as Record<typeof sensorTypes[number], Pin[]>,
   esp: [j1, j3].flatMap((names, side) => names.map((name, row) => ({
     ...p(`J${side ? 3 : 1}-${row + 1}`, name === "GND" ? "gnd" : name === "3V3" ? "power-out" : name === "5V" ? "power-in" : "gpio", {
       name, required: side === 0 && name === "5V",
@@ -125,13 +133,13 @@ export function connectionError(nodes: Module[], connections: Pick<Connection, "
 }
 function logicVoltageIssues(nodes: Module[], groups: string[][]) {
   const issues: string[] = [];
-  for (const n of nodes.filter((n) => n.type === "oled")) {
+  for (const n of nodes.filter((n) => n.type === "oled" || isSensor(n.type))) {
     const rail = groups.find((g) => g.includes(endpoint(n.id, "VIN")))!;
     const voltage = sourcePins(nodes, rail)[0]?.pin.sourceVoltage;
     if (voltage && voltage > 3.6) for (const pin of ["SDA", "SCL"]) {
       const bus = groups.find((g) => g.includes(endpoint(n.id, pin)))!;
       if (bus.some((key) => resolvePin(nodes, key)!.node.type === "esp"))
-        issues.push(`OLED #${n.id} 的 I²C 上拉随 VIN；${voltage}V 不能直连 ESP32 3.3V GPIO，请使用 3.3V VIN 或额外电平转换`);
+        issues.push(`${partFor(n.type).name} #${n.id} 的 I²C 上拉随 VIN；${voltage}V 不能直连 ESP32 3.3V GPIO，请使用 3.3V VIN 或额外电平转换`);
     }
   }
   return issues;
@@ -139,6 +147,33 @@ function logicVoltageIssues(nodes: Module[], groups: string[][]) {
 export function missingPins(nodes: Module[], connections: Pick<Connection, "a" | "b">[]) {
   return nodes.flatMap((n) => pinSets[n.type].filter((p) => p.required &&
     !connections.some((c) => c.a === endpoint(n.id, p.id) || c.b === endpoint(n.id, p.id))).map((p) => endpoint(n.id, p.id)));
+}
+
+export function i2cTopology(nodes: Module[], connections: Pick<Connection,"a" | "b">[]) {
+  const groups = nets(nodes, connections), issues: string[] = [];
+  const group = (id: number, pin: string) => groups.find((g) => g.includes(endpoint(id,pin)))!;
+  const gpio = (id: number, pin: string) => { const p = group(id,pin).map((k) => resolvePin(nodes,k)!).find((p) => p.node.type === "esp" && p.pin.kind === "gpio"); return p ? Number(p.pin.name.slice(4)) : -1; };
+  const buses: { sda: number; scl: number }[] = [];
+  const devices = nodes.filter((n) => n.type === "oled" || isSensor(n.type)).map((n) => {
+    const route = { sda: gpio(n.id,"SDA"), scl: gpio(n.id,"SCL") };
+    let bus = buses.findIndex((b) => b.sda === route.sda && b.scl === route.scl);
+    if (bus < 0) { bus = buses.length; buses.push(route); }
+    const def = isSensor(n.type) ? sensorDefinitions[n.type] : null;
+    const bits = def?.straps.reduce((v,p,i) => v | ((sourcePins(nodes,group(n.id,p)).length ? 1 : 0) << i), 0) || 0;
+    const address = def ? def.addresses[bits] : 60;
+    if (n.type === "sht31" && !sourcePins(nodes,group(n.id,"RST")).some((p) => p.pin.sourceVoltage === 3.3)) issues.push(`SHT31 #${n.id} RST 必须固定为 3.3V 才能运行`);
+    return { id: n.id, type: n.type, bus, address, ...route };
+  });
+  if (buses.length > 2) issues.push("ESP32-S3 最多支持两个硬件 I²C 控制器");
+  buses.forEach((a,i) => {
+    for (const b of buses.slice(i+1)) if (a.sda === b.sda || a.scl === b.scl) issues.push("不同 I²C 总线不能只共享一根时钟或数据线");
+    const onBus = devices.filter((d) => d.bus === i);
+    if (new Set(onBus.map((d) => d.address)).size !== onBus.length) issues.push(`I²C 总线 ${i} 地址冲突，请调整地址脚实际接线`);
+    // Every selected sensor has 10k pull-ups; use a conservative 4.7k allocation for the OLED.
+    const conductance = onBus.reduce((sum,d) => sum + 1 / (d.type === "oled" ? 4700 : 10000), 0);
+    if (conductance && 1 / conductance < 1000) issues.push(`I²C 总线 ${i} 并联上拉过强，须减少模块或拆分总线`);
+  });
+  return { devices, buses, issues };
 }
 
 export function loadError(driver: Part, load: Part, supplyVolts: number) {
@@ -155,7 +190,7 @@ export function loadError(driver: Part, load: Part, supplyVolts: number) {
   return "";
 }
 
-export function referenceConnections(nodes: Module[]): Connection[] {
+export function referenceConnections(nodes: Module[], existing: Pick<Connection,"a" | "b">[] = []): Connection[] {
   const esp = nodes.find((n) => n.type === "esp");
   if (!esp) return [];
   const result: Connection[] = [];
@@ -169,6 +204,24 @@ export function referenceConnections(nodes: Module[]): Connection[] {
   };
   for (const n of nodes) for (const [pin, name] of Object.entries(map[n.type] || {}))
     wire(name === "GND" && ["SEL", "GAIN"].includes(pin) ? endpoint(n.id, "GND") : gpio(name), endpoint(n.id, pin));
+  const existingGroups = nets(nodes, existing);
+  for (const type of sensorTypes) {
+    const def = sensorDefinitions[type], selected = nodes.filter((n) => n.type === type), used = new Set<number>();
+    const known = (n: Module, pin: string) => {
+      const group = existingGroups.find((g) => g.includes(endpoint(n.id, pin)))!;
+      return group.some((k) => resolvePin(nodes,k)!.pin.kind === "gnd") ? 0 : sourcePins(nodes,group).some((p) => p.pin.sourceVoltage === 3.3) ? 1 : undefined;
+    };
+    const fixed = new Map<number,number>();
+    for (const n of selected) if (def.straps.every((p) => known(n,p) !== undefined)) {
+      const bits = def.straps.reduce((v,p,i) => v | (known(n,p)! << i), 0); fixed.set(n.id,bits); used.add(bits);
+    }
+    for (const n of selected) {
+      for (const [pin,name] of Object.entries({ VIN: "3V3", GND: "GND", SDA: "GPIO41", SCL: "GPIO42" })) wire(gpio(name),endpoint(n.id,pin));
+      const bits = fixed.get(n.id) ?? def.addresses.findIndex((_, value) => !used.has(value) && def.straps.every((p,i) => known(n,p) === undefined || known(n,p) === (value >> i & 1)));
+      if (bits >= 0) { used.add(bits); def.straps.forEach((pin,i) => wire(gpio(bits >> i & 1 ? "3V3" : "GND"),endpoint(n.id,pin))); }
+      if (type === "sht31") wire(gpio("3V3"),endpoint(n.id,"RST"));
+    }
+  }
   const supply = nodes.find((n) => n.type === "supply");
   if (supply) {
     wire(endpoint(supply.id, "+5V"), gpio("5V"));
@@ -193,15 +246,18 @@ export function autoConnect(nodes: Module[], existing: Connection[]) {
   if (nodes.filter((n) => n.type === "esp").length !== 1)
     return { connections, issues: ["自动接线需要且仅支持一个 ESP32 主控"] };
   const ambiguous = new Set<ModuleType>();
-  for (const n of nodes) if (nodes.filter((m) => m.type === n.type).length > (n.type === "dcMotor" ? 2 : 1)) ambiguous.add(n.type);
+  for (const n of nodes) if (!isSensor(n.type) && nodes.filter((m) => m.type === n.type).length > (n.type === "dcMotor" ? 2 : 1)) ambiguous.add(n.type);
   for (const type of ambiguous) issues.push(`${partFor(type).name} 存在多个模块，当前接口分配不能确定，未自动连接`);
-  for (const c of referenceConnections(nodes)) {
+  for (const c of referenceConnections(nodes, existing)) {
     const source = resolvePin(nodes, c.a)!, target = resolvePin(nodes, c.b)!;
     if (ambiguous.has(source.node.type) || ambiguous.has(target.node.type)) continue;
     if (connections.some((wire) => wire.a === c.b || wire.b === c.b)) {
       if (target.pin.kind !== "gnd" || nets(nodes, connections).some((g) => g.includes(c.a) && g.includes(c.b))) continue;
     }
-    if (source.pin.kind === "gpio" && connections.some((wire) => wire.a === c.a || wire.b === c.a)) {
+    const sharedI2c = ["i2c-sda", "i2c-scl"].includes(target.pin.signal || "") && nets(nodes, connections).find((g) => g.includes(c.a))!.every((k) => {
+      const pin = resolvePin(nodes,k)!.pin; return pin.kind === "gpio" || pin.signal === target.pin.signal;
+    });
+    if (!sharedI2c && source.pin.kind === "gpio" && connections.some((wire) => wire.a === c.a || wire.b === c.a)) {
       issues.push(`${pinLabel(nodes, c.a)} 已被占用，保留原连接`); continue;
     }
     const error = connectionError(nodes, connections, c.a, c.b);
@@ -225,6 +281,7 @@ export function electricalReport(nodes: Module[], connections: Pick<Connection, 
     if (error) issues.push(`${pinLabel(nodes, group[0])}：${error}`);
   }
   issues.push(...logicVoltageIssues(nodes, groups));
+  issues.push(...i2cTopology(nodes,connections).issues);
   for (const key of missingPins(nodes, connections)) issues.push(`${pinLabel(nodes, key)} 必需端子未连接`);
   for (const n of nodes) {
     for (const pin of pinSets[n.type].filter((p) => p.kind === "power-in")) {

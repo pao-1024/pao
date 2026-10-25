@@ -1,14 +1,26 @@
-export type Scenario = { name: string; level: number; durationMs: number; alarm: boolean; volume: number; toneHz: number; motorA: number; motorB: number; label: string };
+import { validateSensorInputs, sensorDefinitions, type SensorInput, type SensorType } from "./sensors.ts";
+export type Scenario = { name: string; level: number; durationMs: number; alarm: boolean; volume: number; toneHz: number; motorA: number; motorB: number; label: string; inputs?: SensorInput[] };
 export type AgentApplication = { kind: "agent"; prompt: string; summary: string; source: string; scenarios: Scenario[] };
 
-export function validateAgentHardware(application: AgentApplication, spec: { mic: unknown; amp: unknown; motor: unknown }) {
-  for (const step of application.scenarios)
+export function validateAgentHardware(application: AgentApplication, spec: { mic: unknown; amp: unknown; motor: unknown; sensors?: { id: number; type: SensorType }[] }) {
+  for (const step of application.scenarios) {
     if ((!spec.mic && (step.level || step.volume)) || (!spec.amp && (step.volume || step.toneHz)) || (!spec.motor && (step.motorA || step.motorB)))
       throw Error(`验收 ${step.name} 使用了当前接线没有的外设`);
+    for (const input of step.inputs || []) {
+      const sensor = spec.sensors?.find((s) => s.id === input.id);
+      if (!sensor || Object.keys(input).some((key) => key !== "id" && !(sensorDefinitions[sensor.type].metrics as readonly string[]).includes(key))) throw Error(`验收 ${step.name} 使用了未接入的传感器或物理量`);
+      if (step.durationMs < 750) throw Error("传感器验收至少持续 750ms，等待实际 I²C 采样");
+    }
+  }
   return application;
 }
 
 export const agentApi = `struct StudioOutput { int volume; int toneHz; int motorA; int motorB; bool alarm; const char *label; };
+// StudioSensor studio_sensor(int moduleId) returns { bool valid; float temperatureC, humidityPercent, lux; }.
+// Read current connected sensor IDs from spec.sensors. Samples update every 200ms through real I2C drivers.
+// Only use metrics supported by that sensor; unsupported fields are NAN. Guard with valid before use.
+// Optional scenario inputs: [{id: moduleId, temperatureC: 32, humidityPercent: 70, lux: 10}].
+// Supply only supported metrics in real units (Celsius, percent RH, lux); durationMs >=750 for sensor steps.
 // Implement: StudioOutput studio_step(bool running, int level, int64_t now_ms)
 // Called every ~20ms. level is absolute PCM16 peak (0..32768). now_ms is monotonic guest time.
 // volume: microphone passthrough 0..100%; toneHz: 0=silence or 100..2000Hz (overrides passthrough).
@@ -37,7 +49,11 @@ export const agentSchema = {
         durationMs: { type: "integer", minimum: 250, maximum: 2500 }, alarm: { type: "boolean" },
         volume: { type: "integer", minimum: 0, maximum: 100 }, toneHz: { type: "integer", minimum: 0, maximum: 2000 },
         motorA: { type: "integer", minimum: -50, maximum: 50 }, motorB: { type: "integer", minimum: -50, maximum: 50 },
-        label: { type: "string", pattern: "^[A-Z ]{1,20}$" } }
+        label: { type: "string", pattern: "^[A-Z ]{1,20}$" },
+        inputs: { type: "array", maxItems: 12, items: { type: "object", additionalProperties: false, required: ["id"], properties: {
+          id: { type: "integer", minimum: 1 }, temperatureC: { type: "number", minimum: -40, maximum: 125 },
+          humidityPercent: { type: "number", minimum: 0, maximum: 100 }, lux: { type: "number", minimum: 0, maximum: 50000 }
+        } } } }
     } }
   }
 };
@@ -57,7 +73,7 @@ export function validateAgent(value: unknown): AgentApplication {
     if (s.toneHz > 0 && s.toneHz < 100) throw Error("提示音至少 100Hz");
     if (typeof s.name !== "string" || !s.name.trim() || s.name.length > 100 || typeof s.alarm !== "boolean" || typeof s.label !== "string" || !/^[A-Z ]{1,20}$/.test(s.label)) throw Error("验收名称、状态或屏幕标签无效");
     duration += s.durationMs;
-    return { name: s.name, level: s.level, durationMs: s.durationMs, alarm: s.alarm, volume: s.volume, toneHz: s.toneHz, motorA: s.motorA, motorB: s.motorB, label: s.label };
+    return { name: s.name, level: s.level, durationMs: s.durationMs, alarm: s.alarm, volume: s.volume, toneHz: s.toneHz, motorA: s.motorA, motorB: s.motorB, label: s.label, ...(s.inputs === undefined ? {} : { inputs: validateSensorInputs(s.inputs) }) };
   });
   if (duration > 15000) throw Error("验收总时长不能超过 15 秒");
   return { kind: "agent", prompt: a.prompt, summary: a.summary, source: a.source, scenarios };

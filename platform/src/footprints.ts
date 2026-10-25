@@ -1,4 +1,5 @@
 import type { Module, ModuleType, Point } from "./catalog.ts";
+import { sensorDefinitions, sensorTypes, isSensor } from "./sensors.ts";
 
 export type Rect = Point & { width: number; height: number };
 export type Pad = Point & { pin: string; diameter: number; drill: number };
@@ -19,6 +20,11 @@ const terminal = (pins: string[]): Footprint => ({
 
 // Top view, millimetres. Adafruit coordinates are transformed from the fixed Eagle revision (Y up) to Y down.
 export const footprints: Record<ModuleType, Footprint> = {
+  ...Object.fromEntries(sensorTypes.map((type): [typeof type, Footprint] => { const d = sensorDefinitions[type]; return [type, {
+    name: d.model, source: d.cad, body: { x: 0, y: 0, width: d.width, height: d.height },
+    pads: d.physicalPins.map((p,i) => pad(p,d.firstX+i*2.54,d.pinY)), holes: d.holes.map(([x,y]) => hole(x,y)), keepouts: [],
+    assembly: "原版 THT 排针版本，按丝印方向插入母排针；M2.5 绝缘支柱，离板至少 8.5mm。STEMMA 线缆不安装，板上 VIN/Vdd 供电为 3.3V，地址脚和 SHT31 复位按接线图连接。",
+  }]; })) as Record<typeof sensorTypes[number],Footprint>,
   esp: {
     name: "Espressif ESP32-S3-DevKitC-1 v1.1 / WROOM-1",
     source: "https://dl.espressif.com/dl/schematics/esp_idf/DXF_ESP32-S3-DevKitC-1_V1.1_20220429.pdf",
@@ -72,6 +78,7 @@ export const footprints: Record<ModuleType, Footprint> = {
 };
 
 export function placement(node: Module, index: number): Point {
+  if (isSensor(node.type)) return node.placement || { x: 98 + (index % 2) * 38, y: 52 + Math.floor(index / 2) * 24 };
   return node.placement || {
     esp: { x: 50, y: 10 }, oled: { x: 98, y: 18 }, mic: { x: 8, y: 10 },
     speaker: { x: 8, y: 35 }, motor: { x: 8, y: 62 }, supply: { x: 8, y: 87 },

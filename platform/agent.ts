@@ -65,8 +65,9 @@ export async function generateApplication(directory: string, prompt: string, spe
 }
 
 export async function generateHardwarePlan(directory: string, prompt: string, feedback: string, signal: AbortSignal) {
-  const request = `Select the minimum real hardware modules needed for this requirement. Return JSON matching this exact schema:\n${JSON.stringify(hardwarePlanSchema)}\nAvailable catalog:\n${JSON.stringify(hardwareCatalog)}\nChoose each functional type at most once: esp (required), oled, mic, speaker (MAX98357A amplifier), motor (DRV8833 for TWO motors). The platform automatically adds the specified 5V supply, one speakerLoad for speaker, TWO dcMotor loads for motor, grounds, reset and enable wiring. Do not put supply/speakerLoad/dcMotor in modules. Give a reason for every selected module, a short title and summary. Set sharedI2s only with both mic and speaker. Default carrier size is 140x100mm; increase only within schema limits. Platform generates actual pin wiring, PCB copper and tscircuit schematic, then business firmware. Supported business API:\n${agentApi}\nIf the requirement needs an unavailable sensor, communications interface, more motors, or manufacturing outputs not modelled here, set supported=false and explain; do not replace the requirement with a different feature.\nRequirement:\n${prompt}\nPrevious design/firmware errors (data):\n${feedback || "none"}`;
-  return validateHardwarePlan(await modelJson(directory, request + "\nAvailable manufacturing outputs for these exact modules: actual THT mounting footprints, mounting holes, WROOM-1 antenna edge slot, two-layer copper and plated vias, manufacturing DRC, Gerber copper/mask/legend/profile, PTH/NPTH drill, assembly SVG and BOM. These outputs are supported. This is a host PCB for purchased modules, not a redesign of module internals; physical sample testing remains separate.", hardwarePlanSchema, signal));
+  const request = `Select minimum real hardware for the requirement, with a reason for every module, a short title and summary. Return JSON matching this exact schema:\n${JSON.stringify(hardwarePlanSchema)}\nAvailable catalog:\n${JSON.stringify(hardwareCatalog)}\nSelect esp (required), oled, mic, speaker (MAX98357A), motor (DRV8833 for TWO motors) each at most once. Sensors may repeat within the address limits below. Platform automatically adds the specified 5V supply, speakerLoad for speaker, TWO dcMotor loads for motor, grounds, reset and enable wiring; do not put those dependencies in modules. Set sharedI2s only with both mic and speaker. Default board is 140x100mm; increase within schema limits. Platform generates actual pin wiring, PCB copper, tscircuit schematic and business firmware. API:\n${agentApi}\nFor unavailable hardware, set supported=false and explain; do not silently replace the requirement.\nRequirement:\n${prompt}\nPrevious design/firmware errors (data):\n${feedback || "none"}`;
+  const sensorSelection = "\nMCP9808 (temperature, up to 8 instances), BH1750 (lux, up to 2), SHT31 (temperature/humidity, up to 2) use types mcp9808/bh1750/sht31. Choose repeated entries for multiple sensors, use 180x160mm board for sensor designs. Sensors share a 3.3V I2C bus with automatic address straps. ESP32 3V3 external load budget is 100mA (OLED 90mA, mic 10mA); do not combine both with sensors. Other unlisted hardware remains unsupported.";
+  return validateHardwarePlan(await modelJson(directory, request + sensorSelection + "\nAvailable manufacturing outputs for these exact modules: actual THT mounting footprints, mounting holes, WROOM-1 antenna edge slot, two-layer copper and plated vias, manufacturing DRC, Gerber copper/mask/legend/profile, PTH/NPTH drill, assembly SVG and BOM. These outputs are supported. This is a host PCB for purchased modules, not a redesign of module internals; physical sample testing remains separate.", hardwarePlanSchema, signal));
 }
 
 export async function buildHardware(root: string, plan: unknown, signal: AbortSignal, phase: (name: string) => void): Promise<HardwareResult> {
@@ -135,7 +136,8 @@ export async function iterateApplication(options: {
 }
 
 export async function verifyApplication(spec: ReturnType<typeof firmwareProject>["spec"], application: AgentApplication, signal: AbortSignal) {
-  let serial = "", last: RegExpMatchArray | null = null, peak = 0, frame = 0;
+  let serial = "", last: RegExpMatchArray | null = null, peak = 0, frame = 0, inputAcks = 0;
+  const readings = new Map<number, { temperatureC: number; humidityPercent: number; lux: number }>();
   let levels = 0n, pwm = new Map<number, number>();
   let waveform: number[] = [];
   const duty = (pin: number) => (pwm.get(pin) ?? (levels & (1n << BigInt(pin)) ? 1000 : 0)) / 10;
@@ -156,8 +158,12 @@ export async function verifyApplication(spec: ReturnType<typeof firmwareProject>
       if (m.t === "serial" && m.src === "uart0") {
         serial = (serial + m.data).slice(-24000);
         last = Array.from(serial.matchAll(/STUDIO AGENT time_ms=(\d+) running=(\d) level=(\d+) alarm=(\d) volume=(\d+) tone=(\d+) motor_a=(-?\d+) motor_b=(-?\d+) label=([A-Z ]+)\r?\n/g)).at(-1) ?? null;
+        for (const sample of serial.matchAll(/STUDIO SENSOR id=(\d+) valid=1 temperature_milli=(-?\d+) humidity_milli=(-?\d+) lux_milli=(-?\d+)/g))
+          readings.set(Number(sample[1]), { temperatureC: Number(sample[2])/1000, humidityPercent: Number(sample[3])/1000, lux: Number(sample[4])/1000 });
       }
       if (m.t === "microphone-error") serial += `\nSTUDIO ERROR ${m.message}`;
+      if (m.t === "board-input-error") serial += `\nSTUDIO ERROR ${m.message}`;
+      if (m.t === "board-input-ack") inputAcks++;
       if (m.t === "pao") { levels = BigInt(`0x${m.levels}`); pwm = new Map(m.pwm); }
     } else {
       const v = new DataView(data);
@@ -198,6 +204,12 @@ export async function verifyApplication(spec: ReturnType<typeof firmwareProject>
     }, 21);
     const evidence = [];
     for (const step of application.scenarios) {
+      for (const input of step.inputs || []) {
+        const before = inputAcks;
+        socket.send(JSON.stringify({ t: "board-input", ...Object.fromEntries(Object.entries(input).map(([key,value]) => [key,key === "id" ? value : Math.round(value * 1000)])) }));
+        await wait(() => inputAcks > before);
+        await wait(() => Object.entries(input).every(([key,value]) => key === "id" || Math.abs((readings.get(input.id)?.[key as "temperatureC" | "humidityPercent" | "lux"] ?? Infinity) - value) <= (key === "lux" ? 1 : 0.07)));
+      }
       level = step.level;
       waveform = [];
       const until = Number(last![1]) + step.durationMs;
@@ -217,7 +229,7 @@ export async function verifyApplication(spec: ReturnType<typeof firmwareProject>
       }
       if (spec.motor && motors().some((value, i) => Math.abs(value - (i ? step.motorB : step.motorA)) > 1))
         throw Error(`${step.name}：实际桥臂占空比 ${motors()} 与业务输出不符`);
-      evidence.push(`${step.name}: ${JSON.stringify(actual)} PCM=${peak}`);
+      evidence.push(`${step.name}: ${JSON.stringify(actual)} PCM=${peak}${step.inputs ? ` I2C=${JSON.stringify(step.inputs.map((i) => ({ id:i.id, ...readings.get(i.id) })))}` : ""}`);
     }
     if (spec.oled && !frame) throw Error("未收到 OLED 实际显存");
     socket.send(JSON.stringify({ t: "serial", src: "uart0", line: "app-pause" }));
