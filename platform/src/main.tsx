@@ -465,7 +465,7 @@ function App() {
                 {connectionIssue && <p role="alert">拒绝连接：{connectionIssue}</p>}
                 添加模块自动补齐电源和匹配负载，连接复位、使能与总线；电气检查通过后才开始 PCB 布线。
                 <p role="status">{autoIssues.length ? `电气待解决：${autoIssues.join("；")}` : "模块电气规则通过"}</p>
-                {electrical.budgets.map((b) => <p key={b.source}>{pinLabel(nodes, b.source)} · {b.voltage}V · 预算 {b.demandMa} / {b.capacityMa}mA</p>)}
+                {electrical.budgets.map((b) => <p key={b.source}>{pinLabel(nodes, b.source)} · {b.voltage}V · 预算 {Number(b.demandMa.toFixed(2))} / {b.capacityMa}mA</p>)}
                 <details><summary>接线与固件初始化条件</summary><ul>{electrical.requirements.map((r) => <li key={r}>{r}</li>)}</ul></details>
                 <p>{routing ? "正在后台自动布线，可继续操作模块。" : `PCB 已布 ${traces.length} / ${connections.length} 根。未布通的网络在 PCB 页列出。`}</p>
               </div>
