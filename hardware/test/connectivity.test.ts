@@ -76,6 +76,7 @@ test("编译产物包含全部模块，且没有电路错误", () => {
       "AMP",
       "SPEAKER",
       "OLED",
+      "HC_SR04",
       "MX1508",
       "MOTOR_RIGHT",
       "MOTOR_LEFT",
@@ -110,7 +111,7 @@ test("编译产物包含全部模块，且没有电路错误", () => {
   )
 })
 
-test("13 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
+test("15 路外接 GPIO 与接线要求一致，每路只连接对应模块信号", () => {
   // 独立记录接线要求，不从电路源码导入预期值。
   const connections: [number, string][] = [
     [4, "MIC.WS"],
@@ -121,6 +122,8 @@ test("13 路外接 GPIO 与接线要求一致，每路只连接对应模块信�
     [16, "AMP.LRC"],
     [41, "OLED.SDA"],
     [42, "OLED.SCL"],
+    [8, "HC_SR04.TRIG"],
+    [9, "HC_SR04.ECHO"],
     [11, "MX1508.IN1"],
     [12, "MX1508.IN2"],
     [13, "MX1508.IN3"],
@@ -176,6 +179,7 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.VIN",
     "AMP.SD_MODE",
     "OLED.VCC",
+    "HC_SR04.VCC",
   ])
   // 发射器专用 3.3V：降压输出供继电器线圈与发射器本身，发射器常供电持续充能。
   assertNetwork(["BUCK_3V3.VOUT_PLUS", "RELAY_FIRE.VCC", "LAUNCHER.VCC"])
@@ -189,6 +193,7 @@ test("5V、3.3V 与公共地分配正确，功放选左声道并设置 12dB 增�
     "AMP.GND",
     "AMP.GAIN",
     "OLED.GND",
+    "HC_SR04.GND",
     "MX1508.GND",
     "RELAY_FIRE.GND",
     "RELAY_FIRE.COM",

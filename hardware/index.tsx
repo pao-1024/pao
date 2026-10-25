@@ -5,6 +5,7 @@ import { Microphone } from "./sections/Microphone"
 import { MotorDrive } from "./sections/MotorDrive"
 import { PowerSupply } from "./sections/PowerSupply"
 import { Launcher } from "./sections/Launcher"
+import { Ultrasonic } from "./sections/Ultrasonic"
 
 // 各功能区内聚接线和布局，入口只组合整张图纸。
 export default function PaoWiring() {
@@ -31,6 +32,7 @@ export default function PaoWiring() {
         <Microphone />
         <AudioOutput />
         <Display />
+        <Ultrasonic />
         <MotorDrive />
         <Launcher />
       </schematicsheet>
