@@ -3,4 +3,5 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES esp_driver_gpio esp_driver_mcpwm esp_driver_rmt
     PRIV_REQUIRES log esp_timer esp_rom
+    EMBED_FILES "sounds/pao_launch.ogg"
 )

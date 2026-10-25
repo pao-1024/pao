@@ -25,11 +25,15 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <string_view>
 
 #define TAG "PaoBoard"
 
+extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
+extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
@@ -289,6 +293,11 @@ private:
     // 语音工具和网页遥控在不同任务里调用，Launcher 自身串行化继电器脉冲。
     void FireLauncher() {
         launcher_.fire();
+        // 音频入队可能等待正在播放的语音，在主循环处理，避免阻塞遥控指令续发。
+        Application::GetInstance().Schedule([]() {
+            const auto size = reinterpret_cast<std::uintptr_t>(pao_launch_end) - reinterpret_cast<std::uintptr_t>(pao_launch_start);
+            Application::GetInstance().PlaySound(std::string_view(pao_launch_start, size));
+        });
         ESP_LOGI(TAG, "Launcher fired");
     }
 
