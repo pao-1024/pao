@@ -31,7 +31,7 @@ export function hardwareDesign(nodes: Module[], connections: Connection[]) {
 
 export function hardwareSource(nodes: Module[], connections: Connection[]) {
   const design = hardwareDesign(nodes, connections);
-  return `// tscircuit 模块接口原理图；没有经过核实的 PCB 封装。\nexport default function Design() {\n  return (\n    <board pcbDisabled routingDisabled schLayout={{layoutMode: "none"}}>\n${design.modules.map((m) => `      <chip {...${JSON.stringify(m)}} />`).join("\n")}\n${design.connections.map(([from, to]) => `      <trace from=${JSON.stringify(from)} to=${JSON.stringify(to)} />`).join("\n")}\n    </board>\n  );\n}\n`;
+  return `// tscircuit 模块接口原理图；真实 PCB 封装、铜线及制造文件由同一接线的制造包导出。\nexport default function Design() {\n  return (\n    <board pcbDisabled routingDisabled schLayout={{layoutMode: "none"}}>\n${design.modules.map((m) => `      <chip {...${JSON.stringify(m)}} />`).join("\n")}\n${design.connections.map(([from, to]) => `      <trace from=${JSON.stringify(from)} to=${JSON.stringify(to)} />`).join("\n")}\n    </board>\n  );\n}\n`;
 }
 
 export async function compileHardware(

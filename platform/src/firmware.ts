@@ -1,7 +1,7 @@
 import { catalog } from "./catalog.ts";
 import type { Module, Connection, ModuleType } from "./catalog.ts";
 import { electricalReport, nets, resolvePin, endpoint } from "./electrical.ts";
-import { validateAgent, type AgentApplication } from "./agent-spec.ts";
+import { validateAgent, validateAgentHardware, type AgentApplication } from "./agent-spec.ts";
 
 export type Application = { kind: "diagnostic" } | { kind: "intercom"; volume: number } |
   { kind: "sound-alarm"; threshold: number; holdMs: number; frequency: number } | AgentApplication;
@@ -80,10 +80,7 @@ export function firmwareProject(value: unknown) {
       return { id: load.node.id, polarity: load.pin.id === "M1" ? 1 : -1 };
     }) } : null;
   const spec = { version: 1, oled, mic, amp, motor, sharedI2s, application };
-  if (application.kind === "agent") for (const step of application.scenarios) {
-    if ((!mic && (step.level || step.volume)) || (!amp && (step.volume || step.toneHz)) || (!motor && (step.motorA || step.motorB)))
-      throw Error(`验收 ${step.name} 使用了当前接线没有的外设`);
-  }
+  if (application.kind === "agent") validateAgentHardware(application, spec);
   const definitions: Record<string, number> = {
     HAS_OLED: +!!oled, OLED_SDA: oled?.sda ?? -1, OLED_SCL: oled?.scl ?? -1, OLED_RST: oled?.reset ?? -1,
     HAS_MIC: +!!mic, MIC_BCLK: mic?.bclk ?? -1, MIC_WS: mic?.ws ?? -1, MIC_DATA: mic?.data ?? -1, MIC_CHANNEL: mic?.channel ?? 0,

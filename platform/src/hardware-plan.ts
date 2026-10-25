@@ -3,7 +3,7 @@ import { autoConnect, boardIssues, placement } from "./circuit.ts";
 import { firmwareProject } from "./firmware.ts";
 
 export type HardwarePlan = { supported: boolean; title: string; summary: string; modules: { type: "esp" | "oled" | "mic" | "speaker" | "motor"; reason: string }[]; sharedI2s: boolean; board: { width: number; height: number } };
-export type HardwareResult = { plan: HardwarePlan; nodes: Module[]; connections: Connection[]; board: HardwarePlan["board"]; traces: Trace[]; schematic: { svg: string; json: unknown }; source: string };
+export type HardwareResult = { plan: HardwarePlan; nodes: Module[]; connections: Connection[]; board: HardwarePlan["board"]; traces: Trace[]; manufacturing: Record<string, string>; schematic: { svg: string; json: unknown }; source: string };
 export class UnsupportedHardware extends Error {}
 
 export const hardwarePlanSchema = {
@@ -39,11 +39,11 @@ export function validateHardwarePlan(value: unknown): HardwarePlan {
 
 export function assembleHardware(value: unknown) {
   const plan = validateHardwarePlan(value);
-  // Stable ordering keeps the connector layout independent of the model's array order.
+  // Stable ordering keeps module placement independent of the model's array order.
   const chosen = ["esp", "oled", "mic", "speaker", "motor"] as const;
   const nodes = completeProject(chosen.filter((type) => plan.modules.some((m) => m.type === type)).map((type, i) => ({ id: i + 1, type, x: 70 + (i % 4) * 340, y: 80 + Math.floor(i / 4) * 350 })));
   let motor = 0;
-  nodes.forEach((n, i) => { n.placement = n.type === "dcMotor" ? { x: 8 + 32 * motor++, y: 90 } : placement(n, i); });
+  nodes.forEach((n, i) => { n.placement = n.type === "dcMotor" ? { x: 36 + 32 * motor++, y: 87 } : placement(n, i); });
   const connected = autoConnect(nodes, []);
   if (connected.issues.length) throw Error(`自动接线失败：${connected.issues.join("；")}`);
   const connections = connected.connections;

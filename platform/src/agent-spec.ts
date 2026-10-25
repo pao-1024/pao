@@ -1,6 +1,13 @@
 export type Scenario = { name: string; level: number; durationMs: number; alarm: boolean; volume: number; toneHz: number; motorA: number; motorB: number; label: string };
 export type AgentApplication = { kind: "agent"; prompt: string; summary: string; source: string; scenarios: Scenario[] };
 
+export function validateAgentHardware(application: AgentApplication, spec: { mic: unknown; amp: unknown; motor: unknown }) {
+  for (const step of application.scenarios)
+    if ((!spec.mic && (step.level || step.volume)) || (!spec.amp && (step.volume || step.toneHz)) || (!spec.motor && (step.motorA || step.motorB)))
+      throw Error(`验收 ${step.name} 使用了当前接线没有的外设`);
+  return application;
+}
+
 export const agentApi = `struct StudioOutput { int volume; int toneHz; int motorA; int motorB; bool alarm; const char *label; };
 // Implement: StudioOutput studio_step(bool running, int level, int64_t now_ms)
 // Called every ~20ms. level is absolute PCM16 peak (0..32768). now_ms is monotonic guest time.

@@ -7,6 +7,7 @@ import { firmwareProject } from "./src/firmware.ts";
 import { assembleHardware, validateHardwarePlan, UnsupportedHardware } from "./src/hardware-plan.ts";
 import { buildHardware } from "./agent.ts";
 import { boardIssues, electricalReport } from "./src/circuit.ts";
+import { manufacturingDrc } from "./src/manufacturing.ts";
 import { fileURLToPath } from "node:url";
 
 const plan = (types) => ({ supported: true, title: "设计", summary: "按需选型", modules: types.map((type) => ({ type, reason: "需求所需" })), sharedI2s: false, board: { width: 140, height: 100 } });
@@ -33,6 +34,11 @@ test("hardware worker produces checked copper and a real schematic, and can be c
   assert.equal(result.traces.length, result.connections.length);
   assert.deepEqual(boardIssues(result.nodes, result.connections, result.traces, result.board), []);
   assert.match(result.schematic.svg, /<svg/);
+  assert.equal(JSON.parse(result.manufacturing["drc.json"]).passed, true);
+  assert.ok(result.traces.some((t) => t.vias?.length));
+  const viaTrace = result.traces.find((t) => t.vias?.length);
+  const misplacedVia = result.traces.map((t) => t === viaTrace ? { ...t, vias: [{ x: 0, y: 0 }] } : t);
+  assert.equal(manufacturingDrc(result.nodes, result.connections, misplacedVia, result.board).passed, false);
   assert.equal(result.schematic.json.filter((e) => e.type === "source_component").length, 9);
   const controller = new AbortController();
   await assert.rejects(buildHardware(root, plan(["esp", "oled", "mic", "speaker", "motor"]), controller.signal,

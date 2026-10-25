@@ -121,6 +121,9 @@ export type Module = {
 };
 export type Connection = { id: string; a: string; b: string };
 export type Trace = {
+  vias?: Point[];
+  from?: string;
+  to?: string;
   automatic?: boolean;
   connection: string;
   layer: "F.Cu" | "B.Cu";

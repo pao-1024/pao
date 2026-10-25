@@ -96,6 +96,7 @@ export function runtimePlugin(): Plugin {
       files["schematic.svg"] = hardware.schematic.svg;
       files["circuit.json"] = JSON.stringify(hardware.schematic.json, null, 2);
       files["pcb.json"] = JSON.stringify({ board: hardware.board, nodes: hardware.nodes, connections: hardware.connections, traces: hardware.traces }, null, 2);
+      Object.assign(files, hardware.manufacturing);
     }
     const key = JSON.stringify(generated.design);
     const id = createHash("sha256").update(JSON.stringify(files)).update(key).digest("hex");

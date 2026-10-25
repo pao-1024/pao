@@ -875,6 +875,9 @@ pre {
 }
 .pcb-scroll svg {
   display: block;
+  width: 100%;
+  min-width: 600px;
+  height: auto;
   cursor: crosshair;
   touch-action: none;
 }

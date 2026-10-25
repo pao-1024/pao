@@ -4,7 +4,7 @@ import { allowedRequest } from "./runtime.ts";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { iterateApplication, verifyApplication } from "./agent.ts";
-import { validateAgent } from "./src/agent-spec.ts";
+import { validateAgent, validateAgentHardware } from "./src/agent-spec.ts";
 import { UnsupportedHardware } from "./src/hardware-plan.ts";
 
 test("runtime actions reject cross-origin requests, DNS rebinding and missing action header", () => {
@@ -18,6 +18,19 @@ test("runtime actions reject cross-origin requests, DNS rebinding and missing ac
 
 const step = { name: "quiet", level: 0, durationMs: 500, alarm: false, volume: 0, toneHz: 0, motorA: 0, motorB: 0, label: "QUIET" };
 const application = { kind: "agent", prompt: "quiet", summary: "quiet", source: 'StudioOutput studio_step(bool, int, int64_t) { return {0,0,0,0,false,"QUIET"}; }', scenarios: [step, { ...step, name: "loud", level: 9000 }] };
+
+test("unsupported hardware scenarios are rejected before the first valid acceptance contract is frozen", async () => {
+  let calls = 0;
+  const spec = { mic: null, amp: null, motor: {} };
+  const valid = { ...application, scenarios: [step, { ...step, name: "steady", motorA: 30, motorB: 30, label: "RUN" }] };
+  const result = await iterateApplication({ prompt: "motor", signal: new AbortController().signal, update() {},
+    generate: async () => validateAgentHardware(++calls === 1 ? application : valid, spec),
+    build: async (app) => { assert.deepEqual(app.scenarios, valid.scenarios); },
+    verify: async () => "motor 30%", });
+  assert.equal(calls, 2);
+  assert.deepEqual(result.scenarios, valid.scenarios);
+  assert.throws(() => validateAgentHardware(valid, { ...spec, motor: null }), /没有的外设/);
+});
 
 test("Agent repairs compilation and simulation errors without weakening acceptance", async () => {
   const feedback = [], progress = []; let builds = 0, checks = 0;

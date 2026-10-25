@@ -297,7 +297,7 @@ function App() {
           application: activeApplication,
           firmware: { header: firmware, main: firmwareMain },
           notice:
-            "模块接口设计与载板草稿；不是可制造 PCB。应用固件按当前接线和业务参数生成，运行状态以仿真页面为准。",
+            "项目 JSON 是设计数据；制造文件请在 PCB 页通过制造 DRC 后导出 Gerber ZIP。应用固件按当前接线和业务参数生成，运行状态以仿真页面为准。",
         },
         null,
         2,
@@ -393,7 +393,7 @@ function App() {
                     进入模块工作台 →
                   </a>
                   <span className="hero-note">
-                    已接通模块选型、接线、载板与固件仿真；制造交付仍在规划
+                    已接通模块选型、接线、PCB 制造包与固件仿真；实物样板待验证
                   </span>
                 </div>
                 <img src="/modules/esp.png" alt="Espressif ESP32-S3 开发板" />
@@ -404,7 +404,7 @@ function App() {
                   <h2>器件、连接、代码</h2>
                   <p>
                     官方器件图形、具名端子、自动接线与双面避障布线、tscircuit
-                    原理图生成、载板草稿与数据导出。
+                    原理图生成、真实模块 PCB 与制造包导出。
                   </p>
                 </article>
                 <article>
@@ -418,7 +418,7 @@ function App() {
                   <span className="badge">已实现 / Agent</span>
                   <h2>从需求到验证</h2>
                   <p>
-                    Agent 按需求选择真实模块，自动接线、生成载板与业务 C++，编译仿真并反馈错误修复。更多驱动、HIL 与制造检查仍在规划。
+                    Agent 按需求选择真实模块，自动接线、生成 PCB 与制造文件及业务 C++，编译仿真并反馈错误修复。更多驱动、HIL 与实物样板验收仍在规划。
                   </p>
                 </article>
               </div>
@@ -814,10 +814,10 @@ function App() {
             <>
               <div className="section-heading">
                 <div>
-                  <span className="eyebrow">PCB / 载板设计草稿</span>
+                  <span className="eyebrow">PCB / 真实模块安装板</span>
                   <h1>从连接关系，到板上布局。</h1>
                 </div>
-                <span className="badge">可用 · 约束布线与几何检查</span>
+                <span className="badge">可用 · 制造 DRC 与 Gerber</span>
               </div>
               <PCB
                 nodes={nodes}
@@ -863,11 +863,10 @@ function App() {
                   </p>
                 </article>
                 <article>
-                  <span className="badge planned">规划中</span>
+                  <span className="badge">可用 · DRC 门禁</span>
                   <h2>制造输出</h2>
                   <p>
-                    核实封装、布线规则、供电与机械约束，经过实际打样验证后，再提供
-                    Gerber 与制造交付。
+                    真实模块封装、安装孔及天线开槽。PCB 页检查全部网络与制造规则后导出 Gerber、钻孔、装配图和 BOM；实际打样验收另行完成。
                   </p>
                 </article>
               </div>

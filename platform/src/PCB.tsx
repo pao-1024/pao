@@ -5,15 +5,17 @@ import {
   padPoint,
   placement,
   pinLabel,
-  routePoints,
-  boardIssues,
   traceIssues,
   suggestTrace,
   corner,
   electricalReport,
   requiredTraceWidth,
+  copperSegments,
+  boardRules,
 } from "./circuit.ts";
 import type { Module, Connection, Trace } from "./catalog.ts";
+import { placedFootprints, boardOutline } from "./footprints.ts";
+import { manufacturingDrc, manufacturingFiles, manufacturingZip } from "./manufacturing.ts";
 
 export function PCB({
   nodes,
@@ -51,13 +53,15 @@ export function PCB({
     "自动处理全部网络并尝试双面避障；已有合规人工走线会保留，自动走线重新规划。",
   );
   const selected = connections.find((c) => c.id === wire);
-  const issues = boardIssues(nodes, connections, traces, board);
+  const drc = manufacturingDrc(nodes, connections, traces, board);
+  const issues = drc.issues;
+  const footprints = placedFootprints(nodes);
   const electrical = electricalReport(nodes, connections);
   return (
     <div className="pcb-layout">
       <aside className="panel tools">
-        <span className="eyebrow">CARRIER BOARD / 载板草稿</span>
-        <h2>板框与连接器</h2>
+        <span className="eyebrow">MODULE PCB / 模块安装板</span>
+        <h2>真实封装与板框</h2>
         <label>
           板宽 / mm
           <input
@@ -97,6 +101,8 @@ export function PCB({
               <legend>
                 U{n.id} / {n.type}
               </legend>
+              <p><a href={footprints[i].source} target="_blank" rel="noreferrer">{footprints[i].name}</a></p>
+              <small>{footprints[i].assembly}</small>
               {(["x", "y"] as const).map((axis) => (
                 <label key={axis}>
                   {axis.toUpperCase()} / mm
@@ -180,35 +186,32 @@ export function PCB({
                 <circle cx="0" cy="0" r=".09" fill="#819c91" />
               </pattern>
             </defs>
-            <rect
-              width={board.width}
-              height={board.height}
-              rx="1"
+            <polygon
+              points={boardOutline(nodes, board).map((p) => `${p.x},${p.y}`).join(" ")}
               fill="#204a40"
               stroke="#bda66c"
               strokeWidth=".3"
             />
-            <rect
-              width={board.width}
-              height={board.height}
+            <polygon
+              points={boardOutline(nodes, board).map((p) => `${p.x},${p.y}`).join(" ")}
               fill="url(#pcb-grid)"
             />
+            {footprints.map((f) => <g key={`body-${f.id}`}>
+              <rect {...f.body} fill="none" stroke="#c5d9ca" strokeWidth=".15" strokeDasharray="1 .5" />
+              <text x={f.body.x + 1} y={f.body.y + 4} fontSize="2" fill="#e5eee8">U{f.id} / {f.type}</text>
+              {f.keepouts.map((r) => <g key={r.name}><rect x={r.x} y={r.y} width={r.width} height={r.height} fill="#e18a5e" fillOpacity=".25" stroke="#efc48b" strokeWidth=".15" /><title>{r.name}</title></g>)}
+              {f.holes.map((h, i) => <g key={i}><circle cx={h.x} cy={h.y} r={h.drill / 2 + .5} fill="none" stroke="#ccd6d0" strokeWidth=".1" /><circle cx={h.x} cy={h.y} r={h.drill / 2} fill="#101e1a" /><title>NPTH Ø{h.drill} mm / M2.5 绝缘支柱</title></g>)}
+              {f.pads.filter((p) => p.pin.startsWith("NC:")).map((p) => <g key={p.pin}><circle cx={p.x} cy={p.y} r={p.diameter / 2} fill="#d5bd77"/><circle cx={p.x} cy={p.y} r={p.drill / 2} fill="#204a40"/><title>{p.pin} / 不接线</title></g>)}
+            </g>)}
             {connections.map((c) => {
               const a = padPoint(nodes, c.a),
                 b = padPoint(nodes, c.b),
                 t = traces.find((t) => t.connection === c.id);
               const invalid = t && traceIssues(nodes, connections, traces, board, t).length > 0;
               return t ? (
-                <polyline
-                  key={c.id}
-                  points={routePoints(nodes, c, t)
-                    .map((p) => `${p.x},${p.y}`)
-                    .join(" ")}
-                  fill="none"
-                  stroke={invalid ? "#ff405c" : t.layer === "F.Cu" ? "#eb8a69" : "#78b7e0"}
-                  strokeWidth={t.width}
-                  strokeDasharray={invalid ? ".8 .4" : undefined}
-                />
+                <g key={c.id}>{copperSegments(nodes, c, t).map((s, i) => <line key={i} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={invalid ? "#ff405c" : s.layer === "F.Cu" ? "#eb8a69" : "#78b7e0"} strokeWidth={t.width} strokeLinecap="round" strokeDasharray={invalid ? ".8 .4" : undefined} />)}
+                  {(t.vias || []).map((v, i) => <g key={`via${i}`}><circle cx={v.x} cy={v.y} r={boardRules.viaDiameter / 2} fill="#d5bd77"/><circle cx={v.x} cy={v.y} r={boardRules.viaDrill / 2} fill="#204a40"/><title>换层过孔 / 1.2mm 焊盘 / 0.6mm 钻孔</title></g>)}
+                </g>
               ) : (
                 <line
                   key={c.id}
@@ -238,6 +241,7 @@ export function PCB({
                 {pinSets[n.type].map((p) => {
                   const key = endpoint(n.id, p.id),
                     pt = padPoint(nodes, key);
+                  const physical = footprints.find((f) => f.id === n.id)!.pads.find((pad) => pad.pin === p.id)!;
                   const finish = () => {
                     if (!draft || !selected) return;
                     if (key !== selected.b) {
@@ -277,8 +281,8 @@ export function PCB({
                           r="1.1"
                           fill="transparent"
                         />
-                        <circle cx={pt.x} cy={pt.y} r=".8" fill="#d5bd77" />
-                        <circle cx={pt.x} cy={pt.y} r=".35" fill="#204a40" />
+                        <circle cx={pt.x} cy={pt.y} r={physical.diameter / 2} fill="#d5bd77" />
+                        <circle cx={pt.x} cy={pt.y} r={physical.drill / 2} fill="#204a40" />
                       </g>
                       <text
                         x={pt.x + 1}
@@ -295,7 +299,7 @@ export function PCB({
               </g>
             ))}
             <text x="3" y={board.height - 3} fontSize="1.8" fill="#b3cebd">
-              PAO STUDIO / CONNECTOR DRAFT / NOT FOR MANUFACTURE
+              PAO STUDIO / 2 LAYER / FR-4 1.6mm / 1oz
             </text>
           </svg>
         </div>
@@ -317,6 +321,7 @@ export function PCB({
             <ul>{connections.filter((c) => !traces.some((t) => t.connection === c.id)).map((c) =>
               <li key={c.id}>{pinLabel(nodes, c.a)} → {pinLabel(nodes, c.b)}</li>)}</ul>
           </details>}
+        <details><summary>高级 / 手工调整铜线</summary>
         <label>
           目标连接
           <select
@@ -401,12 +406,21 @@ export function PCB({
         >
           删除所选走线
         </button>
-        <h3>几何 DRC</h3>
-        <p>信号 0.4 mm · 3.3V 0.5 mm · 负载 0.8 mm · 5V / GND 1.2 mm；铜间距 0.25 mm，铜到板边 0.5 mm。线宽为项目布线目标，制造前仍需结合铜厚、温升和回流布局复核。</p>
-        <p>{issues.length ? issues.join("；") : "当前已布铜线未发现上述几何冲突；不代表完成布线或可以生产。"}</p>
+        </details>
+        <h3>制造 DRC / {drc.passed ? "通过" : `${issues.length} 项阻止导出`}</h3>
+        <p>双层 FR-4 / 1.6mm / 1oz。铜间距 0.25mm，铜到板边及 NPTH 0.5mm，环宽 ≥0.25mm，孔间距 ≥0.25mm，阻焊扩展 0.05mm / 最小阻焊桥 0.1mm。换层过孔 Ø1.2 / 钻孔 Ø0.6mm。</p>
+        {issues.length ? <details open><summary>检查结果</summary><ul>{issues.map((s) => <li key={s}>{s}</li>)}</ul></details> : <p role="status">全部网络已连通，封装、铜线、钻孔与阻焊规则通过，可以导出制造文件。</p>}
+        <button className="primary" disabled={routing || !drc.passed} onClick={() => {
+          try {
+            const bytes = manufacturingZip(manufacturingFiles(nodes, connections, traces, board));
+            const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: "application/zip" }));
+            const a = document.createElement("a"); a.href = url; a.download = "pao-pcb-fabrication.zip"; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setHint("已导出 Gerber / PTH / NPTH / 装配图 / BOM / DRC。下单前核对工厂 CAM 预览和模块版本。");
+          } catch (error) { setHint(String(error)); }
+        }}>导出 Gerber 制造包 ZIP</button>
         <div className="notice">
-          当前为 2.54 mm 连接器布局草稿，不是厂商模块封装。尚无过孔、完整 ERC /
-          DRC 或 Gerber；不能据此打板。
+          使用固定官方版本的真实模块安装封装；电源、扬声器与电机通过 5.08mm 端子外接。制造包可用于裸板打样，按 BOM 采购模块与排针后手工装配。模块须与版本及安装方向一致；实物功能、温升与射频性能仍需样板验证。
         </div>
         <button
           onClick={() => {
@@ -419,7 +433,7 @@ export function PCB({
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
               a.href = url;
-              a.download = "carrier-NOT-FOR-MANUFACTURE.svg";
+              a.download = "pao-pcb-layout.svg";
               a.click();
               setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
