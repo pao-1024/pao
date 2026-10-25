@@ -46,7 +46,8 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <button class="direction right" data-dir="right" aria-label="按住顺时针旋转">↷<small>顺时针</small></button>
 <button class="direction down" data-dir="backward" aria-label="按住后退">↓<small>后退</small></button>
 </div>
-<label>运动输出<input id="power" type="range" min="20" max="100" value="80"><output id="powerOut">80%</output></label>
+<label>前进／后退最大输出<input id="movePower" type="range" min="20" max="100" value="80"><output id="movePowerOut">80%</output></label>
+<label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80"><output id="rotatePowerOut">80%</output></label>
 </section>
 <section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>发射后约 10 s 充满</small></button></section>
 <section class="settings"><h2>运动校准</h2>
@@ -96,7 +97,8 @@ function markDirection(dir){document.querySelectorAll(".direction").forEach(butt
   button.classList.toggle("active",button.dataset.dir===dir))}
 function syncMotion(force=false){const dir=selectedDir();markDirection(dir);
   if(!dir){if(currentPath){queueMotion(currentPath,{speed:0,duration_ms:400});currentPath=null;lastDir=null}return}
-  const now=performance.now(),motion=directions[dir],speed=motion.sign*Number($("power").value);
+  const now=performance.now(),motion=directions[dir];
+  const power=motion.path==="/api/move"?"movePower":"rotatePower",speed=motion.sign*Number($(power).value);
   if(force||dir!==lastDir||speed!==lastSpeed||now-lastSent>=150){
     queueMotion(motion.path,{speed,duration_ms:400});lastSent=now;lastDir=dir;lastSpeed=speed;currentPath=motion.path}}
 function clearControls(){pointerDir=null;held.clear();currentPath=null;lastDir=null;pendingMotion=null;markDirection(null)}
@@ -107,7 +109,7 @@ for(const button of document.querySelectorAll(".direction")){
   button.onpointerup=button.onpointercancel=()=>{if(pointerDir===button.dataset.dir){pointerDir=null;syncMotion(true)}};
 }
 $("stop").onclick=emergencyStop;
-$("power").oninput=()=>{$("powerOut").textContent=$("power").value+"%";syncMotion(true)};
+for(const id of ["movePower","rotatePower"]){$(id).oninput=()=>{$(id+"Out").textContent=$(id).value+"%";syncMotion(true)}}
 setInterval(()=>syncMotion(),50);
 
 function showConfig(){ $("rampOut").textContent=(Number($("ramp").value)/1000).toFixed(1)+" s";
