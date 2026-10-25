@@ -116,28 +116,28 @@ MCPWM API 见[乐鑫文档](https://docs.espressif.com/projects/esp-idf/en/v6.0.
 #include "chassis.h"
 
 Chassis chassis(left, right);
-chassis.move(0.5f);          // 前进，目标输出 50%
-chassis.move(-0.5f);         // 后退
-chassis.rotate(0.5f);        // 俯视时逆时针原地旋转
-chassis.move(0.0f);          // 平滑停车
-chassis.stop();              // 立即清零两轮输出
+chassis.forward();           // 前进
+chassis.backward();          // 后退
+chassis.turnLeft();          // 俯视时逆时针原地旋转
+chassis.turnRight();         // 俯视时顺时针原地旋转
+chassis.stop();              // 平滑停车
+chassis.emergencyStop();     // 立即清零两轮输出
 ```
 
-`move(float speed)`、`rotate(float speed)` 使用 `[-1, 1]` 的归一化输出量。
-`move` 正负表示前进、后退；`rotate` 正负表示俯视时逆时针、顺时针。
+四个方向动作使用 `ChassisConfig` 中保存的前进或旋转最大输出。
 新运动替换当前运动，反向或切换运动类型时先降至零输出，再向新目标渐变。
-有限越界值限幅，非有限值按零处理。
 
 底盘的单个后台任务按实际经过时间更新两轮输出。`ChassisConfig` 包含
 `ramp_time_ms`（0～3000，默认 1000）、`left_scale` 和 `right_scale`（均为 `[0, 1]`，
-默认 1）。前者表示归一化输出从零到满输出所需时间；零表示关闭渐变。
+默认 1），以及 `move_output` 和 `rotate_output`（均为 `[0.2, 1]`，默认 0.8）。
+渐变时间表示归一化输出从零到满输出所需时间；零表示关闭渐变。
 `chassis.setConfig(config)` 可在运行时修改配置，当前运动和计时不因此重置。
 两侧比例系数分别乘到目标输出上；修改系数时输出渐变过渡。
-板型遥控页会将三个参数保存到 NVS，重启后恢复；`Chassis` 本身不读写存储。
+板型遥控页会将五个参数保存到 NVS，重启后恢复；`Chassis` 本身不读写存储。
 
 左右电机必须是不同实例，并且都以带动车体前进为正方向；通过 `Motor` 的 GPIO 顺序适配接线。
 电机生命周期必须覆盖底盘，同一对电机交由一个底盘统一控制，使用期间通过底盘下发运动指令。
-构造和析构时均停止两轮；`stop()` 立即清零输出，`move(0)`、`rotate(0)` 平滑停车。
+构造和析构时均停止两轮；`stop()` 平滑停车，`emergencyStop()` 立即清零输出。
 底盘命令串行执行，请从普通任务调用，不支持 ISR。
 
 该底盘面向无编码器电机，参数控制的是 PWM 占空比渐变，不保证实际加速度、速度或轨迹；

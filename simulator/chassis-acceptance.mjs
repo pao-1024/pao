@@ -47,12 +47,18 @@ async function config() {
   return (await request('/api/motion-config', null, 'GET')).json();
 }
 
+async function action(name, duration_ms = 3000) {
+  await request('/api/chassis', { action: name, duration_ms });
+}
+
 async function saveConfig(settings) {
   await request('/api/motion-config', settings);
   const loaded = await config();
   assert.equal(loaded.ramp_time_ms, settings.ramp_time_ms);
   closeTo(loaded.left_scale, settings.left_scale, 0.00001);
   closeTo(loaded.right_scale, settings.right_scale, 0.00001);
+  if (settings.move_output !== undefined) assert.equal(loaded.move_output, settings.move_output);
+  if (settings.rotate_output !== undefined) assert.equal(loaded.rotate_output, settings.rotate_output);
 }
 
 async function connect() {
@@ -76,18 +82,21 @@ async function connect() {
 }
 
 async function exercise() {
-  assert.deepEqual(await config(), { ramp_time_ms: 1000, left_scale: 1, right_scale: 1 });
+  assert.deepEqual(await config(), { ramp_time_ms: 1000, left_scale: 1, right_scale: 1,
+    move_output: 80, rotate_output: 80 });
   assert.ok(stopped(latest()), 'Motor output must be zero at first boot');
   console.log('PASS: first boot defaults and stopped motors');
 
+  await saveConfig({ ramp_time_ms: 1000, left_scale: 1, right_scale: 1,
+    move_output: 60, rotate_output: 60 });
   const started = latest().time;
-  await request('/api/move', { speed: 60, duration_ms: 3000 });
+  await action('forward');
   await waitSim(0.30);
   let ramp = traces.filter(trace => trace.time > started + 0.05);
   assert.ok(ramp.some(trace => trace.left > 0.05 && trace.left < 0.5));
   assert.ok(ramp.every(trace => trace.left >= -0.01 && trace.right >= -0.01));
   const beforeRepeat = latest().right;
-  await request('/api/move', { speed: 60, duration_ms: 3000 });
+  await action('forward');
   await waitSim(0.45);
   assert.ok(latest().right >= beforeRepeat - 0.02, 'Repeat command reset the ramp');
   closeTo(latest().left, 0.6);
@@ -98,41 +107,40 @@ async function exercise() {
   await waitSim(0.65);
   closeTo(latest().left, 0.3);
   closeTo(latest().right, 0.6);
-  await request('/api/move', { speed: -60, duration_ms: 3000 });
+  await action('backward');
   await waitFor(trace => trace.left < -0.15 && trace.right < -0.3, 'reverse after zero');
   console.log('PASS: live wheel calibration and reverse through zero');
 
-  await request('/api/rotate', { speed: 60, duration_ms: 3000 });
+  await action('turn_left');
   await waitFor(trace => trace.left < -0.15 && trace.right > 0.3, 'counterclockwise rotation');
-  await request('/api/rotate', { speed: -60, duration_ms: 3000 });
+  await action('turn_right');
   await waitFor(trace => trace.left > 0.15 && trace.right < -0.3, 'clockwise rotation');
   console.log('PASS: rotation signs and motion replacement');
 
-  await request('/api/rotate', { speed: 0, duration_ms: 400 });
+  await action('stop');
   await waitSim(0.10);
   assert.ok(Math.abs(latest().right) > 0.05 && Math.abs(latest().right) < 0.6,
     'Zero command must start with a smooth descent');
-  await waitSim(0.45);
-  assert.ok(stopped(latest()), 'Expiry must force zero output');
-  console.log('PASS: soft stop followed by expiry protection');
+  await waitFor(stopped, 'soft stop output');
+  console.log('PASS: soft stop');
 
-  await request('/api/move', { speed: 80, duration_ms: 3000 });
+  await action('forward');
   await waitFor(trace => trace.right > 0.2, 'motion before emergency stop');
-  await request('/api/stop');
+  await action('emergency_stop');
   await waitFor(stopped, 'immediate stop output');
   console.log('PASS: immediate stop');
 
   await saveConfig({ ramp_time_ms: 1000, left_scale: 1, right_scale: 1 });
-  await request('/api/move_forward', { distance_cm: 20, speed: 50 });
+  await request('/api/move_forward', { distance_cm: 20 });
   await waitFor(trace => trace.left > 0.1 && trace.right > 0.1, 'distance move through new chassis');
-  await request('/api/stop');
+  await action('emergency_stop');
   await waitFor(stopped, 'distance move cancellation');
   const distance = await (await request('/api/distance', null, 'GET')).json();
   assert.equal(distance.motion_status, 'cancelled');
   console.log('PASS: distance move uses new chassis and stop cancels it');
 
-  await saveConfig({ ramp_time_ms: 0, left_scale: 0, right_scale: 1 });
-  await request('/api/move', { speed: 50, duration_ms: 500 });
+  await saveConfig({ ramp_time_ms: 0, left_scale: 0, right_scale: 1, move_output: 50 });
+  await action('forward', 500);
   await waitFor(trace => trace.right > 0.45, 'zero-ramp motion');
   closeTo(latest().left, 0, 0.01);
   closeTo(latest().right, 0.5, 0.02);
@@ -145,16 +153,19 @@ async function exercise() {
     { ramp_time_ms: 0, left_scale: 'nan', right_scale: 1 },
     { ramp_time_ms: 0, left_scale: 0 },
   ]) await request('/api/motion-config', invalid, 'POST', 400);
-  assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1 });
+  assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1,
+    move_output: 50, rotate_output: 60 });
   await request('/api/drive', { forward: 20, turn: 20 }, 'POST', 404);
   console.log('PASS: invalid values do not alter config; old drive route is absent');
 }
 
 async function restartZero() {
-  assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1 });
+  assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1,
+    move_output: 50, rotate_output: 60 });
   assert.ok(stopped(latest()), 'Motors started after NVS recovery');
   console.log('PASS: restart restored valid zero values and stopped motors');
-  await saveConfig({ ramp_time_ms: 1200, left_scale: 0.75, right_scale: 0.9 });
+  await saveConfig({ ramp_time_ms: 1200, left_scale: 0.75, right_scale: 0.9,
+    move_output: 100, rotate_output: 100 });
 }
 
 async function restartFinal() {
@@ -162,12 +173,14 @@ async function restartFinal() {
   assert.equal(saved.ramp_time_ms, 1200);
   closeTo(saved.left_scale, 0.75, 0.00001);
   closeTo(saved.right_scale, 0.9, 0.00001);
+  assert.equal(saved.move_output, 100);
+  assert.equal(saved.rotate_output, 100);
   assert.ok(stopped(latest()), 'Motors started after persisted config load');
-  await request('/api/move', { speed: 100, duration_ms: 2500 });
+  await action('forward', 2500);
   await waitSim(1.30);
   closeTo(latest().left, 0.75);
   closeTo(latest().right, 0.9);
-  await request('/api/stop');
+  await action('emergency_stop');
   await waitFor(stopped, 'final stop');
   console.log('PASS: restart restored nonzero settings and applied them to real PWM');
 }

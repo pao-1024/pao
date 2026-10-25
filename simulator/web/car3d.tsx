@@ -365,7 +365,7 @@ export function Car3D(props: Props) {
       <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"}</span>
       <label>前进 <input aria-label="前进厘米数" type="number" min="1" max="390" value={distance} onChange={event => setDistance(event.target.value)} /> cm</label>
       <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request(`/api/move_forward?distance_cm=${requestedDistance}`, "POST")}>前进</button>
-      <button onClick={() => void request("/api/stop", "POST")}>停止</button>
+      <button onClick={() => void request("/api/chassis?action=emergency_stop", "POST")}>停止</button>
       <button onClick={() => void request("/api/distance")}>测距 / 进度</button>
       <output aria-live="polite">{reading}</output>
     </div>
