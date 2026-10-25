@@ -19,7 +19,7 @@ type TraceEvent =
   | { k: "pwm"; pin: number; duty: number }
   | { k: "i2c"; addr: number; read: boolean; len: number; data: string };
 type Stream = { samples: number; peak: number; rate: number };
-type Command = { forward: number; turn: number; duration: number } | null;
+type Command = { motion: string; speed: number; duration: number } | null;
 
 const BUSES: [Bus, string][] = [["i2c", "I2C"], ["pwm", "PWM"], ["gpio", "GPIO"], ["i2s", "I2S"]];
 const ROWS = 400, LOG_LINES = 800, ACTIVE_MS = 450;
@@ -128,8 +128,8 @@ function App() {
     for (const line of lines) {
       const state = line.match(/State: (\S+) -> (\S+)/);
       if (state) setDevice(state[2]);
-      const drive = line.match(/Chassis drive: forward=(-?\d+) turn=(-?\d+) duration_ms=(\d+)/);
-      if (drive) setCommand({ forward: +drive[1], turn: +drive[2], duration: +drive[3] });
+      const command = line.match(/Chassis (move|rotate): speed=(-?\d+) duration_ms=(\d+)/);
+      if (command) setCommand({ motion: command[1], speed: +command[2], duration: +command[3] });
       if (line.includes("Chassis stopped")) setCommand(null);
     }
     if (lines.length) setLogLines(previous => [...previous, ...lines].slice(-LOG_LINES));
@@ -341,7 +341,7 @@ function App() {
         <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} world={world} />
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
-          <dt>固件指令</dt><dd>{command ? `drive forward=${command.forward} turn=${command.turn} · ${command.duration} ms` : "无进行中的运动"}</dd>
+          <dt>固件指令</dt><dd>{command ? `${command.motion} speed=${command.speed} · ${command.duration} ms` : "无进行中的运动"}</dd>
           <dt>发射器</dt><dd>{firing ? "发射中（继电器吸合）" : charging ? "充能中" : "已充满"} · 电量 {percent(launcher.energy)}</dd>
           <dt>发射记录</dt><dd>{launcher.shots ? `共 ${launcher.shots} 发 · 上一发能量 ${percent(launcher.lastShot ?? 0)}${launcher.lastShot ? "" : "（空发）"}` : "尚未发射"}</dd>
         </dl>

@@ -108,7 +108,7 @@ export const MAX_SPEED = 3;
 
 /** Simulated launcher energy: the module is always powered and charging; a relay (GPIO18) pull-in spends it. */
 export type Launcher = { energy: number; shots: number; lastShot: number | null };
-// ponytail: linear charge over the HU-064 no-load figure (about 10 s); replace with the measured curve once the module is characterised.
+// Simulation-only linear charge; replace the assumed timing with measurements from the real module.
 export const FULL_CHARGE_S = 10;
 
 /** Advances the launcher by `dt` seconds of charging, then applies a pull-in seen in the same interval. */

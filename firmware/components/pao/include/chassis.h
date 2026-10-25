@@ -1,42 +1,63 @@
 #pragma once
 
+#include <cstdint>
 #include <mutex>
-#include <utility>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 
 class Motor;
 
+struct ChassisConfig {
+    uint32_t ramp_time_ms = 1000;
+    float left_scale = 1.0f;
+    float right_scale = 1.0f;
+};
+
 class Chassis {
 public:
-    // 左右电机必须是不同实例，且生命周期覆盖底盘；两轮均以前进为正方向。
-    // 构造和析构时停止两轮。
+    // 左右电机必须是不同实例，生命周期覆盖底盘；两轮均以前进为正方向。
     Chassis(Motor& left, Motor& right);
     ~Chassis();
 
     Chassis(const Chassis&) = delete;
     Chassis& operator=(const Chassis&) = delete;
 
-    // forward、turn ∈ [-1, 1]，分别表示前进和向左旋转的控制量。
-    // drive(0, 0) 滑行停止；有限越界值限幅，任一非有限值使两轮停止。
-    // 不能在 ISR 中调用。
-    void drive(float forward, float turn);
-    void driveWheels(float left, float right);
+    // 正值前进或逆时针，负值后退或顺时针；0 平滑停车。
+    // 有限越界值限幅，非有限值按 0 处理。不能在 ISR 中调用。
+    void move(float speed);
+    void rotate(float speed);
+    // 立即清零两轮输出和当前运动目标。
+    void stop();
 
-    // 修正比例以千分比保存，仅允许减速校正；返回 false 时保持原校正。
-    bool setWheelCalibration(int left, int right);
-    std::pair<int, int> wheelCalibration();
-    bool calibrateForward(float forward, float turn);
-    // 0..100%，0 禁用对应分量；作用于后续指令，停止当前运动由调用方负责。
-    bool setSpeedLimits(int linear, int turn);
-    std::pair<int, int> speedLimits();
+    // 修改配置不会重置当前运动；无效配置保持原值。
+    bool setConfig(const ChassisConfig& config);
+    ChassisConfig config() const;
+    static bool validConfig(const ChassisConfig& config);
 
 private:
+    enum class Motion { Stopped, Move, Rotate };
+
+    static void taskEntry(void* arg);
+    void run();
+    void setMotion(Motion motion, float speed);
+    void advanceLocked(float elapsed_seconds);
+    void writeMotorsLocked();
+
     Motor& left_;
     Motor& right_;
-    std::mutex mutex_;
-    int left_gain_ = 1000;
-    int right_gain_ = 1000;
-    int linear_limit_ = 100;
-    int turn_limit_ = 30;
-    static std::pair<float, float> Mix(float forward, float turn);
-    std::pair<float, float> Limit(float left, float right) const;
+    mutable std::mutex mutex_;
+    ChassisConfig config_;
+    Motion requested_ = Motion::Stopped;
+    Motion active_ = Motion::Stopped;
+    float target_speed_ = 0;
+    float current_speed_ = 0;
+    float applied_left_scale_ = 1;
+    float applied_right_scale_ = 1;
+    float last_left_output_ = 0;
+    float last_right_output_ = 0;
+    bool running_ = true;
+    TaskHandle_t task_ = nullptr;
+    SemaphoreHandle_t task_stopped_ = nullptr;
 };
