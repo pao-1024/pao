@@ -10,7 +10,10 @@ import {
   routePoints,
   traceIssues,
   suggestTrace,
+  autoConnect,
+  autoRoute,
 } from "./src/circuit.ts";
+import { starter } from "./src/catalog.ts";
 const nodes = [
   { id: 1, type: "esp" },
   { id: 2, type: "oled" },
@@ -119,4 +122,45 @@ test("starter carrier pads fit inside its default board", () => {
     }),
     [],
   );
+});
+
+test("automatic wiring adds known interfaces once and preserves manual connections", () => {
+  const result = autoConnect(nodes, []);
+  assert.deepEqual(result.connections, referenceConnections(nodes));
+  assert.deepEqual(result.issues, []);
+  assert.deepEqual(autoConnect(nodes, result.connections).connections, result.connections);
+  const manual = [{ id: "manual", a: "1:J3-8", b: "2:SDA" }];
+  const changed = autoConnect(nodes, manual);
+  assert.equal(changed.connections[0], manual[0]);
+  assert.equal(changed.connections.filter((c) => c.b === "2:SDA").length, 1);
+  const occupied = autoConnect(nodes, [{ id: "occupied", a: "1:J3-7", b: "2:RST" }]);
+  assert.ok(occupied.issues.some((s) => s.includes("占用")));
+  assert.ok(!occupied.connections.some((c) => c.b === "2:SDA"));
+  assert.equal(autoConnect(nodes.filter((n) => n.type !== "esp"), []).connections.length, 0);
+  assert.equal(autoConnect([...nodes, { id: 4, type: "esp" }], []).connections.length, 0);
+  const duplicate = autoConnect([...nodes, { id: 4, type: "oled" }], []);
+  assert.ok(duplicate.issues.some((s) => s.includes("多个模块")));
+  assert.ok(!duplicate.connections.some((c) => c.b.startsWith("2:") || c.b.startsWith("4:")));
+});
+
+test("automatic PCB routing completes all starter nets and preserves valid copper on repeat", () => {
+  const board = { width: 100, height: 80 }, connections = referenceConnections(starter);
+  const result = autoRoute(starter, connections, [], board);
+  assert.equal(result.traces.length, connections.length);
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(boardIssues(starter, connections, result.traces, board), []);
+  assert.deepEqual(autoRoute(starter, connections, result.traces, board).traces, result.traces);
+  let incremental = [];
+  for (let count = 2; count <= starter.length; count++) {
+    const subset = starter.slice(0, count), wires = referenceConnections(subset);
+    const step = autoRoute(subset, wires, incremental, board);
+    assert.deepEqual(step.failed, []);
+    incremental = step.traces;
+  }
+  const manual = { ...result.traces[0], automatic: false };
+  assert.equal(autoRoute(starter, connections, [manual], board).traces[0], manual);
+  const blocked = autoRoute(starter, connections, [], { width: 5, height: 5 });
+  assert.equal(blocked.traces.length, 0);
+  assert.equal(blocked.failed.length, connections.length);
+  assert.ok(autoConnect(starter, []).issues.some((s) => s.includes("匹配负载")));
 });

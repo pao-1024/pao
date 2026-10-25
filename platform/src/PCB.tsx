@@ -10,6 +10,7 @@ import {
   traceIssues,
   suggestTrace,
   corner,
+  autoRoute,
 } from "./circuit.ts";
 import type { Module, Connection, Trace } from "./catalog.ts";
 
@@ -42,7 +43,7 @@ export function PCB({
     return () => window.removeEventListener("keydown", cancel);
   }, []);
   const [hint, setHint] = useState(
-    "选择连接尝试避障布线，或手动放置路径点；线段自动约束为 45° / 90°。",
+    "自动处理全部网络并尝试双面避障；已有合规人工走线会保留，自动走线重新规划。",
   );
   const selected = connections.find((c) => c.id === wire);
   const issues = boardIssues(nodes, connections, traces, board);
@@ -299,6 +300,17 @@ export function PCB({
       <aside className="panel tools">
         <span className="eyebrow">ROUTING / 布线</span>
         <h2>连接决定走线</h2>
+        <button className="primary" disabled={!connections.length} onClick={() => {
+          const result = autoRoute(nodes, connections, traces, board, width);
+          onTraces(result.traces);
+          setDraft(null);
+          setHint(`自动布线完成：${result.traces.length} 根已布，${result.failed.length} 根未布通。未布通时请调整布局或约束后重新自动布线。`);
+        }}>自动布线全部网络</button>
+        {connections.some((c) => !traces.some((t) => t.connection === c.id)) &&
+          <details><summary>未布通网络 / {connections.length - traces.length}</summary>
+            <ul>{connections.filter((c) => !traces.some((t) => t.connection === c.id)).map((c) =>
+              <li key={c.id}>{pinLabel(nodes, c.a)} → {pinLabel(nodes, c.b)}</li>)}</ul>
+          </details>}
         <label>
           目标连接
           <select
@@ -353,7 +365,6 @@ export function PCB({
           }}
         >尝试避障布线</button>
         <button
-          className="primary"
           disabled={!selected}
           onClick={() =>
             setDraft({ connection: wire, layer, width, points: [] })

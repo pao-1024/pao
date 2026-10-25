@@ -302,6 +302,32 @@ export function missingPins(
       .map((p) => endpoint(n.id, p.id)),
   );
 }
+
+export function autoConnect(nodes: Module[], existing: Connection[]) {
+  const connections = [...existing];
+  const issues: string[] = [];
+  if (nodes.filter((n) => n.type === "esp").length !== 1)
+    return { connections, issues: ["自动接线需要且仅支持一个 ESP32 主控；请调整模块选择。"] };
+  for (const c of referenceConnections(nodes)) {
+    const target = resolvePin(nodes, c.b)!;
+    if (connections.some((wire) => wire.a === c.b || wire.b === c.b)) continue;
+    if (nodes.filter((n) => n.type === target.node.type).length > 1) {
+      issues.push(`${target.node.type} 存在多个模块，地址或接口分配尚未支持，未自动并联`);
+      continue;
+    }
+    const source = resolvePin(nodes, c.a)!;
+    if (source.pin.kind === "io" && connections.some((wire) => wire.a === c.a || wire.b === c.a)) {
+      issues.push(`${pinLabel(nodes, c.a)} 已被占用，保留原连接`);
+      continue;
+    }
+    const error = connectionError(nodes, connections, c.a, c.b);
+    if (error) issues.push(`${pinLabel(nodes, c.b)}：${error}`);
+    else connections.push(c);
+  }
+  for (const key of missingPins(nodes, connections))
+    issues.push(`${pinLabel(nodes, key)} 尚无可用自动连接规则或匹配负载`);
+  return { connections, issues: [...new Set(issues)] };
+}
 export function pinLabel(nodes: Module[], key: string) {
   const p = resolvePin(nodes, key);
   return p
@@ -438,8 +464,115 @@ export function suggestTrace(nodes: Module[], connections: Connection[], traces:
     const candidate = { ...trace, points };
     if (!traceIssues(nodes, connections, traces, board, candidate).length) return candidate;
   }
+  return gridRoute(nodes, connections, traces, board, trace);
+}
+
+function gridRoute(nodes: Module[], connections: Connection[], traces: Trace[],
+  board: { width: number; height: number }, trace: Trace): Trace | null {
+  const c = connections.find((c) => c.id === trace.connection)!;
+  const start = padPoint(nodes, c.a), end = padPoint(nodes, c.b);
+  const net = new Set(nets(nodes, connections).find((g) => g.includes(c.a)) || [c.a, c.b]);
+  const pads = nodes.flatMap((n) => pinSets[n.type].map((p) => endpoint(n.id, p.id)))
+    .filter((key) => !net.has(key)).map((key) => padPoint(nodes, key));
+  const obstacles = traces.filter((t) => t.layer === trace.layer && t.connection !== trace.connection)
+    .flatMap((t) => {
+      const wire = connections.find((c) => c.id === t.connection);
+      return !wire || net.has(wire.a) ? [] : segments(routePoints(nodes, wire, t))
+        .map(([a, b]) => ({ a, b, radius: (trace.width + t.width) / 2 + boardRules.clearance + 0.01 }));
+    });
+  const radius = boardRules.padRadius + trace.width / 2 + boardRules.clearance + 0.01;
+  const margin = trace.width / 2 + boardRules.edge + 0.01;
+  const round = (n: number) => Math.round(n * 100000) / 100000;
+  function axis(key: "x" | "y", max: number) {
+    return [...new Set([start[key], end[key], margin, max - margin,
+      ...pads.flatMap((p) => [p[key] - radius, p[key], p[key] + radius]),
+      ...obstacles.flatMap((o) => [o.a[key] - o.radius, o.a[key] + o.radius, o.b[key] - o.radius, o.b[key] + o.radius]),
+    ].filter((n) => n >= margin && n <= max - margin).map(round))].sort((a, b) => a - b);
+  }
+  const xs = axis("x", board.width), ys = axis("y", board.height), size = xs.length * ys.length;
+  // shortcut: bounded planar search without vias; use a dedicated router for large/multilayer boards.
+  if (size > 90000 || start.x < margin || start.y < margin || end.x < margin || end.y < margin ||
+      start.x > board.width - margin || end.x > board.width - margin || start.y > board.height - margin || end.y > board.height - margin)
+    return null;
+  const point = (id: number): Point => ({ x: xs[Math.floor(id / ys.length)], y: ys[id % ys.length] });
+  const source = xs.indexOf(round(start.x)) * ys.length + ys.indexOf(round(start.y));
+  const target = xs.indexOf(round(end.x)) * ys.length + ys.indexOf(round(end.y));
+  const cost = new Float64Array(size).fill(Infinity), previous = new Int32Array(size).fill(-1);
+  const closed = new Uint8Array(size);
+  const heap: { id: number; score: number }[] = [];
+  function push(id: number, score: number) {
+    let i = heap.length;
+    heap.push({ id, score });
+    while (i > 0) {
+      const parent = Math.floor((i - 1) / 2);
+      if (heap[parent].score <= score) break;
+      heap[i] = heap[parent]; i = parent;
+    }
+    heap[i] = { id, score };
+  }
+  function pop() {
+    const first = heap[0], last = heap.pop()!;
+    if (heap.length) {
+      let i = 0;
+      while (2 * i + 1 < heap.length) {
+        let child = 2 * i + 1;
+        if (child + 1 < heap.length && heap[child + 1].score < heap[child].score) child++;
+        if (heap[child].score >= last.score) break;
+        heap[i] = heap[child]; i = child;
+      }
+      heap[i] = last;
+    }
+    return first.id;
+  }
+  cost[source] = 0; push(source, 0);
+  let visited = 0;
+  while (heap.length && visited < 15000) {
+    const id = pop();
+    if (closed[id]) continue;
+    closed[id] = 1; visited++;
+    if (id === target) {
+      const path: Point[] = [];
+      for (let at = target; at !== -1; at = previous[at]) path.push(point(at));
+      path.reverse();
+      const points = path.filter((p, i) => i > 0 && i < path.length - 1 &&
+        !((path[i - 1].x === p.x && path[i + 1].x === p.x) || (path[i - 1].y === p.y && path[i + 1].y === p.y)));
+      const candidate = { ...trace, points };
+      return traceIssues(nodes, connections, traces, board, candidate).length ? null : candidate;
+    }
+    const p = point(id), x = Math.floor(id / ys.length), y = id % ys.length;
+    const neighbors = [x > 0 ? id - ys.length : -1, x + 1 < xs.length ? id + ys.length : -1,
+      y > 0 ? id - 1 : -1, y + 1 < ys.length ? id + 1 : -1];
+    for (const next of neighbors) {
+      if (next < 0 || closed[next]) continue;
+      const q = point(next), distance = cost[id] + Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+      if (distance >= cost[next]) continue;
+      if (pads.some((pad) => pointDistance(pad, p, q) < radius - 1e-8) ||
+          obstacles.some((o) => segmentDistance(p, q, o.a, o.b) < o.radius - 1e-8)) continue;
+      cost[next] = distance; previous[next] = id;
+      push(next, distance + Math.abs(q.x - end.x) + Math.abs(q.y - end.y));
+    }
+  }
   return null;
 }
+export function autoRoute(nodes: Module[], connections: Connection[], existing: Trace[],
+  board: { width: number; height: number }, width = 0.4) {
+  // Replan generated copper as a whole; keep only explicitly edited, valid routes fixed.
+  const manual = existing.filter((t) => !t.automatic);
+  const traces = manual.filter((t) => !traceIssues(nodes, connections, manual, board, t).length);
+  const failed: Connection[] = [];
+  for (const c of [...connections].reverse()) {
+    if (traces.some((t) => t.connection === c.id)) continue;
+    let route: Trace | null = null;
+    for (const layer of ["F.Cu", "B.Cu"] as const) {
+      route = suggestTrace(nodes, connections, traces, board, { connection: c.id, layer, width, points: [] });
+      if (route) break;
+    }
+    if (route) traces.push({ ...route, automatic: true });
+    else failed.push(c);
+  }
+  return { traces, failed };
+}
+
 export function boardIssues(
   nodes: Module[],
   connections: Connection[],

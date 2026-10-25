@@ -90,6 +90,7 @@ export type Module = {
 };
 export type Connection = { id: string; a: string; b: string };
 export type Trace = {
+  automatic?: boolean;
   connection: string;
   layer: "F.Cu" | "B.Cu";
   width: number;

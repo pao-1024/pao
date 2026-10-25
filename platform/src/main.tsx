@@ -4,6 +4,8 @@ import {
   pinSets,
   connectionError,
   referenceConnections,
+  autoConnect,
+  autoRoute,
   missingPins,
   pinLabel,
   boardIssues,
@@ -45,14 +47,16 @@ function App() {
   const [connections, setConnections] = useState<Connection[]>(() =>
     referenceConnections(starter),
   );
-  const [traces, setTraces] = useState<Trace[]>([]);
+  const [traces, setTraces] = useState<Trace[]>(() =>
+    autoRoute(starter, referenceConnections(starter), [], { width: 100, height: 80 }).traces,
+  );
   const [board, setBoard] = useState({ width: 100, height: 80 });
   const [selected, setSelected] = useState<number | null>(1);
   const [selectedWire, setSelectedWire] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
-  const [message, setMessage] = useState("先选器件，再连接每一个真实端子。");
+  const [message, setMessage] = useState("添加模块后自动接线并尝试双面布线；未完成项会明确列出。");
   const [firmware, setFirmware] = useState(
     "// 固件草稿：未编译，不会下发给 PAO 模拟器。\nvoid app_main(void) {\n}\n",
   );
@@ -70,6 +74,7 @@ function App() {
   const unconnected = missingPins(nodes, connections);
   const part = nodes.find((n) => n.id === selected);
   const wire = connections.find((c) => c.id === selectedWire);
+  const autoIssues = autoConnect(nodes, connections).issues;
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [page]);
@@ -107,10 +112,19 @@ function App() {
       x: Math.max(20, Math.min(1140, x)),
       y: Math.max(30, Math.min(700, y)),
     };
-    setNodes([...nodes, n]);
+    const nextNodes = [...nodes, n];
+    setNodes(nextNodes);
+    automate(nextNodes);
     setSelected(n.id);
     setSelectedWire(null);
-    setMessage(`已添加 ${partFor(type).name}，请核对端子后接线。`);
+  }
+  function automate(nextNodes = nodes) {
+    const connected = autoConnect(nextNodes, connections);
+    const routed = autoRoute(nextNodes, connected.connections, traces, board);
+    setConnections(connected.connections);
+    setTraces(routed.traces);
+    setPending(null);
+    setMessage(`自动接线：新增 ${connected.connections.length - connections.length} 根连接；PCB 已布 ${routed.traces.length} 根，${routed.failed.length} 根未布通。已有连接和合规人工走线已保留，自动走线已重新规划。`);
   }
   function removeWire(id: string) {
     setConnections(connections.filter((c) => c.id !== id));
@@ -306,7 +320,7 @@ function App() {
                   <span className="badge live">已实现 / 工作台</span>
                   <h2>器件、连接、代码</h2>
                   <p>
-                    官方器件图形、具名端子、接线校验、tscircuit
+                    官方器件图形、具名端子、自动接线与双面避障布线、tscircuit
                     原理图生成、载板草稿与数据导出。
                   </p>
                 </article>
@@ -345,7 +359,10 @@ function App() {
                   <h1>从真实器件开始设计。</h1>
                 </div>
                 <div className="actions">
-                  <span className="badge live">可用 · 具名端子接线</span>
+                  <span className="badge live">可用 · 自动接线</span>
+                  <button className="primary" onClick={() => automate()}>
+                    自动接线并布线
+                  </button>
                   <button
                     onClick={() => {
                       setPending(null);
@@ -360,6 +377,11 @@ function App() {
                     取消接线
                   </button>
                 </div>
+              </div>
+              <div className="notice">
+                添加模块即按内置引脚规则自动连接并尝试 PCB 双面布线；手动接线仅用于覆盖默认设计。
+                {autoIssues.length > 0 && <p>自动接线待解决：{autoIssues.join("；")}</p>}
+                <p>PCB 已布 {traces.length} / {connections.length} 根。未布通的网络在 PCB 页列出，不会以违规铜线替代。</p>
               </div>
               <div className="workbench">
                 <aside className="library">

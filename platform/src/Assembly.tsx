@@ -208,7 +208,7 @@ export function Assembly({
       <div className="bench-status">
         {pending
           ? `已选 ${pending} · 点击目标端子，Esc 取消`
-          : "点击端子接线 · 拖动器件标题移动 · 端子面板为逻辑引出，不代表实物针序"}
+          : "添加模块自动接线 · 点击端子可调整 · 端子面板为逻辑引出，不代表实物针序"}
       </div>
     </section>
   );
