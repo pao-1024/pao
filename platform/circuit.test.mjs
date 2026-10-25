@@ -12,17 +12,24 @@ import {
   suggestTrace,
   autoConnect,
   autoRoute,
+  electricalReport,
+  requiredTraceWidth,
 } from "./src/circuit.ts";
-import { starter } from "./src/catalog.ts";
+import { starter, defaultBoard, completeProject } from "./src/catalog.ts";
+import { loadError } from "./src/electrical.ts";
+import { partFor } from "./src/catalog.ts";
 const nodes = [
   { id: 1, type: "esp" },
   { id: 2, type: "oled" },
   { id: 3, type: "mic" },
 ];
 test("reference wiring uses real header pins and leaves no OLED inputs open", () => {
-  const wires = referenceConnections(nodes);
+  const project = completeProject(nodes);
+  const wires = referenceConnections(project);
   assert.ok(wires.some((w) => w.a === "1:J3-7" && w.b === "2:SDA"));
-  assert.deepEqual(missingPins(nodes, wires), []);
+  assert.deepEqual(missingPins(project, wires), []);
+  assert.ok(wires.some((w) => w.b === "2:RST"));
+  assert.deepEqual(electricalReport(project, wires).issues, []);
   assert.ok(
     nets(nodes, wires).some((g) => g.includes("2:GND") && g.includes("3:GND")),
   );
@@ -30,11 +37,11 @@ test("reference wiring uses real header pins and leaves no OLED inputs open", ()
 test("reject duplicate, reserved, missing and transitive rail shorts", () => {
   const wires = [{ a: "1:J1-1", b: "2:VIN" }];
   assert.match(connectionError(nodes, wires, "2:VIN", "1:J1-1"), /已经/);
-  assert.match(connectionError(nodes, wires, "2:VIN", "1:J1-21"), /短接/);
+  assert.match(connectionError(nodes, wires, "2:VIN", "1:J1-21"), /电压/);
   assert.match(connectionError(nodes, wires, "2:VIN", "1:J1-22"), /短接/);
   assert.match(connectionError(nodes, [], "1:J3-13", "2:SDA"), /保留/);
   assert.match(connectionError(nodes, [], "1:missing", "2:SDA"), /不存在/);
-  assert.match(connectionError(nodes, [], "2:3V3", "1:J1-1"), /尚未建模/);
+  assert.match(connectionError(nodes, [], "2:3V3", "1:J1-1"), /保留/);
   assert.equal(connectionError(nodes, [], "1:J3-7", "2:SDA"), "");
 });
 test("board positions use mm and detect bounds after placement changes", () => {
@@ -97,9 +104,9 @@ test("same-layer cross-net copper crossing is blocked but opposite-layer crossin
 
 test("router escapes a dense header and reports impossible routes without mutating traces", () => {
   const wires = referenceConnections(nodes);
-  const board = { width: 100, height: 80 };
+  const board = defaultBoard;
   const existing = [];
-  const trace = { connection: wires[0].id, layer: "F.Cu", width: 0.4, points: [] };
+  const trace = { connection: wires[0].id, layer: "F.Cu", width: 1.2, points: [] };
   const route = suggestTrace(nodes, wires, existing, board, trace);
   assert.ok(route);
   assert.ok(traceIssues(nodes, wires, existing, board, trace).length > 0);
@@ -107,7 +114,7 @@ test("router escapes a dense header and reports impossible routes without mutati
   assert.deepEqual(traceIssues(nodes, wires, existing, board, route), []);
   assert.deepEqual(existing, []);
   assert.equal(suggestTrace(nodes, wires, existing, { width: 5, height: 5 }, trace), null);
-  const moved = nodes.map((n) => n.id === 2 ? { ...n, placement: { x: 99, y: 12 } } : n);
+  const moved = nodes.map((n) => n.id === 2 ? { ...n, placement: { x: 139, y: 12 } } : n);
   assert.ok(boardIssues(moved, wires, [route], board).some((s) => s.includes("走线")));
 });
 test("starter carrier pads fit inside its default board", () => {
@@ -116,45 +123,46 @@ test("starter carrier pads fit inside its default board", () => {
     type,
   }));
   assert.deepEqual(
-    boardIssues(starter, referenceConnections(starter), [], {
-      width: 100,
-      height: 80,
-    }),
+    boardIssues(starter, referenceConnections(starter), [], defaultBoard),
     [],
   );
 });
 
 test("automatic wiring adds known interfaces once and preserves manual connections", () => {
-  const result = autoConnect(nodes, []);
-  assert.deepEqual(result.connections, referenceConnections(nodes));
+  const project = completeProject(nodes);
+  const result = autoConnect(project, []);
+  assert.deepEqual(result.connections, referenceConnections(project));
   assert.deepEqual(result.issues, []);
-  assert.deepEqual(autoConnect(nodes, result.connections).connections, result.connections);
+  assert.deepEqual(autoConnect(project, result.connections).connections, result.connections);
   const manual = [{ id: "manual", a: "1:J3-8", b: "2:SDA" }];
-  const changed = autoConnect(nodes, manual);
+  const changed = autoConnect(project, manual);
   assert.equal(changed.connections[0], manual[0]);
   assert.equal(changed.connections.filter((c) => c.b === "2:SDA").length, 1);
-  const occupied = autoConnect(nodes, [{ id: "occupied", a: "1:J3-7", b: "2:RST" }]);
+  const occupied = autoConnect(project, [{ id: "occupied", a: "1:J3-7", b: "2:RST" }]);
   assert.ok(occupied.issues.some((s) => s.includes("占用")));
   assert.ok(!occupied.connections.some((c) => c.b === "2:SDA"));
   assert.equal(autoConnect(nodes.filter((n) => n.type !== "esp"), []).connections.length, 0);
   assert.equal(autoConnect([...nodes, { id: 4, type: "esp" }], []).connections.length, 0);
-  const duplicate = autoConnect([...nodes, { id: 4, type: "oled" }], []);
+  const duplicate = autoConnect([...project, { id: 99, type: "oled" }], []);
   assert.ok(duplicate.issues.some((s) => s.includes("多个模块")));
-  assert.ok(!duplicate.connections.some((c) => c.b.startsWith("2:") || c.b.startsWith("4:")));
+  assert.ok(!duplicate.connections.some((c) => c.b.startsWith("2:") || c.b.startsWith("99:")));
 });
 
 test("automatic PCB routing completes all starter nets and preserves valid copper on repeat", () => {
-  const board = { width: 100, height: 80 }, connections = referenceConnections(starter);
+  const board = defaultBoard, connections = referenceConnections(starter);
   const result = autoRoute(starter, connections, [], board);
   assert.equal(result.traces.length, connections.length);
   assert.deepEqual(result.failed, []);
   assert.deepEqual(boardIssues(starter, connections, result.traces, board), []);
   assert.deepEqual(autoRoute(starter, connections, result.traces, board).traces, result.traces);
+  assert.deepEqual(autoRoute(starter, [...connections].reverse(), [], board).failed, []);
   let incremental = [];
   for (let count = 2; count <= starter.length; count++) {
-    const subset = starter.slice(0, count), wires = referenceConnections(subset);
+    const subset = completeProject(starter.slice(0, count)), wires = referenceConnections(subset);
     const step = autoRoute(subset, wires, incremental, board);
-    assert.deepEqual(step.failed, []);
+    assert.deepEqual(step.issues, []);
+    assert.equal(step.traces.length + step.failed.length, wires.length);
+    assert.deepEqual(boardIssues(subset, wires, step.traces, board), []);
     incremental = step.traces;
   }
   const manual = { ...result.traces[0], automatic: false };
@@ -162,5 +170,78 @@ test("automatic PCB routing completes all starter nets and preserves valid coppe
   const blocked = autoRoute(starter, connections, [], { width: 5, height: 5 });
   assert.equal(blocked.traces.length, 0);
   assert.equal(blocked.failed.length, connections.length);
-  assert.ok(autoConnect(starter, []).issues.some((s) => s.includes("匹配负载")));
+  assert.deepEqual(autoConnect(starter, []).issues, []);
+});
+
+test("electrical rules distinguish valid configuration levels, voltage ranges and bus roles", () => {
+  assert.equal(connectionError(starter, [], "1:J1-1", "3:SEL"), "");
+  assert.match(connectionError(starter, [], "2:SCL", "3:DOUT"), /总线角色/);
+  assert.match(connectionError(starter, [], "5:+5V", "3:VDD"), /电压/);
+  assert.match(connectionError(starter, [], "5:+5V", "1:J3-7"), /信号脚/);
+  assert.match(connectionError(starter, [], "1:J3-8", "3:VDD"), /信号脚/);
+  assert.match(connectionError(starter, [], "1:J3-10", "2:SDA"), /保留/);
+  assert.equal(connectionError(starter, [], "5:+5V", "2:VIN"), "");
+  const poweredOled = [{ a: "5:+5V", b: "2:VIN" }];
+  assert.match(connectionError(starter, poweredOled, "1:J3-7", "2:SDA"), /上拉/);
+  const connectedOled = [{ a: "1:J3-7", b: "2:SDA" }];
+  assert.match(connectionError(starter, connectedOled, "5:+5V", "2:VIN"), /上拉/);
+  assert.match(connectionError(starter, [], "4:OUT_MINUS", "1:J1-22"), /差分负载/);
+  assert.match(connectionError(starter, [], "4:OUT_PLUS", "4:OUT_MINUS"), /输出不可短接/);
+  assert.match(connectionError(starter, [], "1:J1-1", "5:+5V"), /不能并联/);
+  assert.match(connectionError(starter, [], "1:J1-1", "4:VIN"), /电流预算/);
+});
+
+test("complete design reports removed reset, supply, ground and load instead of claiming success", () => {
+  const wires = referenceConnections(starter);
+  for (const key of ["2:RST", "5:GND", "1:J1-21", "6:MINUS"]) {
+    const broken = wires.filter((c) => c.a !== key && c.b !== key);
+    const report = electricalReport(starter, broken);
+    assert.ok(report.issues.length, key);
+    assert.ok(autoRoute(starter, broken, [], defaultBoard).issues.length);
+    assert.equal(autoRoute(starter, broken, [], defaultBoard).traces.length, 0);
+  }
+  const invalid = [...wires, { id: "bad", a: "2:SCL", b: "3:DOUT" }];
+  assert.ok(autoConnect(starter, invalid).issues.some((s) => s.includes("总线角色")));
+  const badPair = wires.map((c) => c.b === "6:MINUS" ? { ...c, a: "4:OUT_PLUS" } : c);
+  assert.ok(electricalReport(starter, badPair).issues.some((s) => s.includes("负载")));
+});
+
+test("automatic dependencies complete motor power, enable and two matched loads", () => {
+  const project = completeProject([...starter, { id: 7, type: "motor", x: 0, y: 0 }]);
+  assert.equal(project.filter((n) => n.type === "dcMotor").length, 2);
+  assert.deepEqual(completeProject(project), project);
+  const connected = autoConnect(project, []);
+  assert.deepEqual(connected.issues, []);
+  assert.ok(connected.connections.some((c) => c.a === "5:+5V" && c.b === "7:VMOTOR"));
+  assert.ok(connected.connections.some((c) => c.b === "7:SLP"));
+  const report = electricalReport(project, connected.connections);
+  assert.deepEqual(report.budgets.map((b) => [b.voltage, b.demandMa, b.capacityMa]), [[3.3, 100, 100], [5, 2120, 4000]]);
+  assert.ok(report.gpio.some((p) => p.gpio === "GPIO18" && p.role === "enable" && p.initial === 0));
+  assert.ok(report.gpio.some((p) => p.gpio === "GPIO17" && p.role === "reset" && p.initial === 0));
+  assert.ok(report.gpio.some((p) => p.role === "i2c-sda" && p.direction === "open-drain"));
+  assert.equal(report.audio.bitClock, 3072000);
+  const crossed = connected.connections.map((c) => c.b === "8:M2" ? { ...c, a: "7:BOUT2" } : c);
+  assert.ok(electricalReport(project, crossed).issues.some((s) => s.includes("同一通道")));
+  assert.match(connectionError(project, [], "7:AOUT1", "6:PLUS"), /负载类型/);
+  const pcb = autoRoute(project, connected.connections, [], defaultBoard);
+  assert.deepEqual(pcb.issues, []);
+  assert.deepEqual(pcb.failed, []);
+  assert.equal(pcb.traces.length, connected.connections.length);
+  assert.ok(pcb.traces.every((t) => t.width >= requiredTraceWidth(project, connected.connections, connected.connections.find((c) => c.id === t.connection))));
+  assert.deepEqual(boardIssues(project, connected.connections, pcb.traces, defaultBoard), []);
+});
+
+test("load ratings and aggregate power budgets reject unsafe combinations", () => {
+  assert.equal(loadError(partFor("speaker"), partFor("speakerLoad"), 5), "");
+  assert.match(loadError(partFor("speaker"), { ...partFor("speakerLoad"), load: { family: "audio", ohms: 2, watts: 3 } }, 5), /阻抗/);
+  assert.match(loadError(partFor("speaker"), { ...partFor("speakerLoad"), load: { family: "audio", ohms: 4, watts: 1 } }, 5), /功率/);
+  assert.match(loadError(partFor("motor"), { ...partFor("dcMotor"), load: { family: "motor", ratedVolts: 6, stallMa: 1500 } }, 5), /电流/);
+  assert.match(loadError(partFor("motor"), partFor("dcMotor"), 9), /电压/);
+  const project = [...starter, ...[7, 8, 9, 10].map((id) => ({ id, type: "speaker", x: 0, y: 0 }))];
+  const wires = [...referenceConnections(starter), ...[7, 8, 9, 10].map((id) => ({ id: `extra${id}`, a: "5:+5V", b: `${id}:VIN` }))];
+  assert.ok(electricalReport(project, wires).issues.some((s) => s.includes("电流预算超限")));
+  assert.ok(electricalReport([], []).issues.length);
+  const right = referenceConnections(starter).map((c) => c.b === "3:SEL" ? { ...c, a: "1:J1-1" } : c);
+  assert.deepEqual(electricalReport(starter, right).issues, []);
+  assert.equal(electricalReport(starter, right).audio.microphones[0].channel, "right");
 });

@@ -10,7 +10,8 @@ import {
   traceIssues,
   suggestTrace,
   corner,
-  autoRoute,
+  electricalReport,
+  requiredTraceWidth,
 } from "./circuit.ts";
 import type { Module, Connection, Trace } from "./catalog.ts";
 
@@ -22,6 +23,8 @@ export function PCB({
   onNodes,
   onTraces,
   onBoard,
+  routing,
+  onAutoRoute,
 }: {
   nodes: Module[];
   connections: Connection[];
@@ -30,6 +33,8 @@ export function PCB({
   onNodes: (nodes: Module[]) => void;
   onTraces: (traces: Trace[]) => void;
   onBoard: (board: { width: number; height: number }) => void;
+  routing: boolean;
+  onAutoRoute: (width: number) => void;
 }) {
   const [wire, setWire] = useState(connections[0]?.id || "");
   const [layer, setLayer] = useState<Trace["layer"]>("F.Cu");
@@ -47,6 +52,7 @@ export function PCB({
   );
   const selected = connections.find((c) => c.id === wire);
   const issues = boardIssues(nodes, connections, traces, board);
+  const electrical = electricalReport(nodes, connections);
   return (
     <div className="pcb-layout">
       <aside className="panel tools">
@@ -300,12 +306,12 @@ export function PCB({
       <aside className="panel tools">
         <span className="eyebrow">ROUTING / 布线</span>
         <h2>连接决定走线</h2>
-        <button className="primary" disabled={!connections.length} onClick={() => {
-          const result = autoRoute(nodes, connections, traces, board, width);
-          onTraces(result.traces);
+        {electrical.issues.length > 0 && <p role="alert">电气检查未通过，暂停布线：{electrical.issues.join("；")}</p>}
+        <button className="primary" disabled={routing || !connections.length || electrical.issues.length > 0} onClick={() => {
+          onAutoRoute(width);
           setDraft(null);
-          setHint(`自动布线完成：${result.traces.length} 根已布，${result.failed.length} 根未布通。未布通时请调整布局或约束后重新自动布线。`);
-        }}>自动布线全部网络</button>
+          setHint("正在重新规划全部自动走线，未布通时请调整布局或约束。");
+        }}>{routing ? "自动布线中…" : "自动布线全部网络"}</button>
         {connections.some((c) => !traces.some((t) => t.connection === c.id)) &&
           <details><summary>未布通网络 / {connections.length - traces.length}</summary>
             <ul>{connections.filter((c) => !traces.some((t) => t.connection === c.id)).map((c) =>
@@ -352,9 +358,9 @@ export function PCB({
           />
         </label>
         <button
-          disabled={!selected}
+          disabled={routing || !selected || electrical.issues.length > 0}
           onClick={() => {
-            const result = suggestTrace(nodes, connections, traces, board, { connection: wire, layer, width, points: [] });
+            const result = suggestTrace(nodes, connections, traces, board, { connection: wire, layer, width: Math.max(width, requiredTraceWidth(nodes, connections, selected!)), points: [] });
             if (!result) {
               setHint("未找到满足间距的短路径。请调整布局、切换铜层或手动添加路径点；没有保存违规走线。");
               return;
@@ -365,9 +371,9 @@ export function PCB({
           }}
         >尝试避障布线</button>
         <button
-          disabled={!selected}
+          disabled={routing || !selected || electrical.issues.length > 0}
           onClick={() =>
-            setDraft({ connection: wire, layer, width, points: [] })
+            setDraft({ connection: wire, layer, width: Math.max(width, requiredTraceWidth(nodes, connections, selected!)), points: [] })
           }
         >
           开始 / 重画连线
@@ -396,7 +402,7 @@ export function PCB({
           删除所选走线
         </button>
         <h3>几何 DRC</h3>
-        <p>最小线宽 0.2 mm · 铜间距 0.25 mm · 铜到板边 0.5 mm。通孔焊盘在双面均参与避障。红色虚线表示布局改变后失效的走线。</p>
+        <p>信号 0.4 mm · 3.3V 0.5 mm · 负载 0.8 mm · 5V / GND 1.2 mm；铜间距 0.25 mm，铜到板边 0.5 mm。线宽为项目布线目标，制造前仍需结合铜厚、温升和回流布局复核。</p>
         <p>{issues.length ? issues.join("；") : "当前已布铜线未发现上述几何冲突；不代表完成布线或可以生产。"}</p>
         <div className="notice">
           当前为 2.54 mm 连接器布局草稿，不是厂商模块封装。尚无过孔、完整 ERC /

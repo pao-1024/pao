@@ -2,17 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { compileHardware, hardwareDesign } from "./src/hardware.ts";
 import { referenceConnections } from "./src/circuit.ts";
+import { completeProject } from "./src/catalog.ts";
 
 test("tscircuit renders the selected modules and current pin connections", async () => {
-  const nodes = [
+  const nodes = completeProject([
     { id: 1, type: "esp", x: 0, y: 0 },
     { id: 2, type: "oled", x: 400, y: 0 },
-  ];
+  ]);
   const connections = referenceConnections(nodes);
   const result = await compileHardware(nodes, connections);
   assert.match(result.svg, /<svg/);
   const components = result.json.filter((e) => e.type === "source_component");
-  assert.deepEqual(components.map((c) => c.name).sort(), ["U1", "U2"]);
+  assert.deepEqual(components.map((c) => c.name).sort(), ["U1", "U2", "U3"]);
   assert.equal(
     result.json.filter((e) => e.type === "source_trace").length,
     connections.length,
@@ -33,4 +34,5 @@ test("tscircuit renders the selected modules and current pin connections", async
     () => hardwareDesign(nodes, [{ id: "bad", a: "1:missing", b: "2:SDA" }]),
     /未知引脚/,
   );
+  await assert.rejects(() => compileHardware(nodes, connections.filter((c) => c.b !== "2:RST")), /电气检查未通过/);
 });

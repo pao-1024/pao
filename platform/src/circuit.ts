@@ -1,370 +1,27 @@
-import type {
-  Module,
-  ModuleType,
-  Connection,
-  Point,
-  Trace,
-} from "./catalog.ts";
-type Pin = {
-  id: string;
-  name: string;
-  side: number;
-  row: number;
-  kind: string;
-  required: boolean;
-  blocked?: boolean;
-};
-// ESP32 header names follow the vendored Espressif symbol and hardware/README.md.
-const j1 = [
-  "3V3",
-  "3V3",
-  "CHIP_PU",
-  "GPIO4",
-  "GPIO5",
-  "GPIO6",
-  "GPIO7",
-  "GPIO15",
-  "GPIO16",
-  "GPIO17",
-  "GPIO18",
-  "GPIO8",
-  "GPIO3",
-  "GPIO46",
-  "GPIO9",
-  "GPIO10",
-  "GPIO11",
-  "GPIO12",
-  "GPIO13",
-  "GPIO14",
-  "5V",
-  "GND",
-];
-const j3 = [
-  "GND",
-  "GPIO43",
-  "GPIO44",
-  "GPIO1",
-  "GPIO2",
-  "GPIO42",
-  "GPIO41",
-  "GPIO40",
-  "GPIO39",
-  "GPIO38",
-  "GPIO37",
-  "GPIO36",
-  "GPIO35",
-  "GPIO0",
-  "GPIO45",
-  "GPIO48",
-  "GPIO47",
-  "GPIO21",
-  "GPIO20",
-  "GPIO19",
-  "GND",
-  "GND",
-];
-const reserved = new Set([
-  "CHIP_PU",
-  "GPIO0",
-  "GPIO3",
-  "GPIO45",
-  "GPIO46",
-  "GPIO19",
-  "GPIO20",
-  "GPIO35",
-  "GPIO36",
-  "GPIO37",
-  "GPIO48",
-]);
-export const pinSets: Record<ModuleType, Pin[]> = {
-  esp: [j1, j3].flatMap((row, side) =>
-    row.map((name, i) => ({
-      id: `J${side ? 3 : 1}-${i + 1}`,
-      name,
-      side,
-      row: i,
-      kind:
-        name === "GND"
-          ? "gnd"
-          : name === "3V3"
-            ? "v33"
-            : name === "5V"
-              ? "v5"
-              : "io",
-      required: false,
-      blocked: reserved.has(name),
-    })),
-  ),
-  oled: modulePins(
-    ["VIN", "3V3", "GND", "RST", "SCL", "SDA"],
-    ["v33", "v33", "gnd", "in", "in", "io"],
-  ).map((p) => ({
-    ...p,
-    required: !["3V3", "RST"].includes(p.id),
-    blocked: p.id === "3V3",
-  })),
-  mic: modulePins(
-    ["VDD", "GND", "SEL", "WS", "BCLK", "DOUT"],
-    ["v33", "gnd", "gnd", "in", "in", "out"],
-  ),
-  speaker: modulePins(
-    [
-      "VIN",
-      "GND",
-      "SD_MODE",
-      "GAIN",
-      "DIN",
-      "BCLK",
-      "LRC",
-      "OUT_PLUS",
-      "OUT_MINUS",
-    ],
-    ["v33", "gnd", "v33", "gnd", "in", "in", "in", "power-out", "power-out"],
-  ),
-  motor: modulePins(
-    [
-      "VMOTOR",
-      "GND",
-      "AIN1",
-      "AIN2",
-      "BIN1",
-      "BIN2",
-      "SLP",
-      "FLT",
-      "AOUT1",
-      "AOUT2",
-      "BOUT1",
-      "BOUT2",
-    ],
-    [
-      "v5",
-      "gnd",
-      "in",
-      "in",
-      "in",
-      "in",
-      "in",
-      "out",
-      "power-out",
-      "power-out",
-      "power-out",
-      "power-out",
-    ],
-  ).map((p) => ({ ...p, required: p.id !== "FLT" })),
-};
-function modulePins(names: string[], kinds: string[]): Pin[] {
-  return names.map((name, i) => ({
-    id: name,
-    name,
-    kind: kinds[i],
-    side: 0,
-    row: i,
-    required: true,
-  }));
-}
-export function endpoint(node: number, pin: string) {
-  return `${node}:${pin}`;
-}
-export function resolvePin(nodes: Module[], key: string) {
-  const [id, pinId] = key.split(":");
-  const node = nodes.find((n) => n.id === Number(id));
-  const pin = node && pinSets[node.type]?.find((p) => p.id === pinId);
-  return pin && node ? { node, pin } : null;
-}
-
-export function nets(
-  nodes: Module[],
-  connections: Pick<Connection, "a" | "b">[],
-) {
-  const parent = new Map<string, string>();
-  const find = (k: string): string => {
-    if (!parent.has(k)) parent.set(k, k);
-    if (parent.get(k) !== k) parent.set(k, find(parent.get(k)!));
-    return parent.get(k)!;
-  };
-  const join = (a: string, b: string) => parent.set(find(a), find(b));
-  // Duplicate supply pins on one DevKit are electrically the same net.
-  for (const n of nodes) {
-    for (const name of ["3V3", "GND"]) {
-      const pins = pinSets[n.type].filter(
-        (p) => n.type === "esp" && p.name === name,
-      );
-      pins
-        .slice(1)
-        .forEach((p) => join(endpoint(n.id, pins[0].id), endpoint(n.id, p.id)));
-    }
-  }
-  for (const c of connections)
-    if (resolvePin(nodes, c.a) && resolvePin(nodes, c.b)) join(c.a, c.b);
-  const groups = new Map<string, string[]>();
-  for (const key of parent.keys()) {
-    const root = find(key);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root)!.push(key);
-  }
-  return [...groups.values()];
-}
-export function connectionError(
-  nodes: Module[],
-  connections: Pick<Connection, "a" | "b">[],
-  a: string,
-  b: string,
-) {
-  const pa = resolvePin(nodes, a),
-    pb = resolvePin(nodes, b);
-  if (!pa || !pb) return "引脚不存在";
-  if (a === b) return "不能连接同一个引脚";
-  if (
-    connections.some(
-      (c) => (c.a === a && c.b === b) || (c.a === b && c.b === a),
-    )
-  )
-    return "这两个引脚已经连接";
-  if (pa.pin.blocked || pb.pin.blocked)
-    return "该引脚在当前板型保留，或其板载电源输出尚未建模";
-  const merged = nets(nodes, [...connections, { a, b }]).find((g) =>
-    g.includes(a),
-  )!;
-  const pins = merged.map((k) => resolvePin(nodes, k)!.pin);
-  const rails = new Set(
-    pins
-      .filter((p) => ["gnd", "v33", "v5"].includes(p.kind))
-      .map((p) => p.kind),
-  );
-  if (rails.size > 1) return "拒绝连接：不能短接 GND、3.3 V 和 5 V 网络";
-  if (
-    rails.size &&
-    pins.some((p) => ["io", "in", "out", "power-out"].includes(p.kind))
-  )
-    return "此编辑器不允许把信号端直接接到电源网络";
-  if (pins.some((p) => p.kind === "power-out"))
-    return "功率输出需连接匹配负载；当前模块库未提供负载模型";
-  if (pins.filter((p) => p.kind === "out").length > 1)
-    return "不能将多个输出端连接在同一网络";
-  return "";
-}
-export function referenceConnections(nodes: Module[]): Connection[] {
-  const esp = nodes.find((n) => n.type === "esp");
-  if (!esp) return [];
-  const map: Partial<Record<ModuleType, Record<string, string>>> = {
-    oled: { GND: "GND", VIN: "3V3", SDA: "GPIO41", SCL: "GPIO42" },
-    mic: {
-      VDD: "3V3",
-      GND: "GND",
-      SEL: "GND",
-      WS: "GPIO4",
-      BCLK: "GPIO5",
-      DOUT: "GPIO6",
-    },
-    speaker: {
-      VIN: "3V3",
-      GND: "GND",
-      SD_MODE: "3V3",
-      GAIN: "GND",
-      DIN: "GPIO7",
-      BCLK: "GPIO15",
-      LRC: "GPIO16",
-    },
-    motor: {
-      AIN1: "GPIO11",
-      AIN2: "GPIO12",
-      BIN1: "GPIO13",
-      BIN2: "GPIO14",
-      GND: "GND",
-    },
-  };
-  const result = [];
-  for (const n of nodes) {
-    for (const [pin, name] of Object.entries(map[n.type] || {})) {
-      const ep = pinSets.esp.find((p) => p.name === name)!;
-      result.push({
-        id: `${esp.id}-${n.id}-${pin}`,
-        a: endpoint(esp.id, ep.id),
-        b: endpoint(n.id, pin),
-      });
-    }
-  }
-  return result;
-}
-export function missingPins(
-  nodes: Module[],
-  connections: Pick<Connection, "a" | "b">[],
-) {
-  return nodes.flatMap((n) =>
-    pinSets[n.type]
-      .filter(
-        (p) =>
-          p.required &&
-          !connections.some(
-            (c) => c.a === endpoint(n.id, p.id) || c.b === endpoint(n.id, p.id),
-          ),
-      )
-      .map((p) => endpoint(n.id, p.id)),
-  );
-}
-
-export function autoConnect(nodes: Module[], existing: Connection[]) {
-  const connections = [...existing];
-  const issues: string[] = [];
-  if (nodes.filter((n) => n.type === "esp").length !== 1)
-    return { connections, issues: ["自动接线需要且仅支持一个 ESP32 主控；请调整模块选择。"] };
-  for (const c of referenceConnections(nodes)) {
-    const target = resolvePin(nodes, c.b)!;
-    if (connections.some((wire) => wire.a === c.b || wire.b === c.b)) continue;
-    if (nodes.filter((n) => n.type === target.node.type).length > 1) {
-      issues.push(`${target.node.type} 存在多个模块，地址或接口分配尚未支持，未自动并联`);
-      continue;
-    }
-    const source = resolvePin(nodes, c.a)!;
-    if (source.pin.kind === "io" && connections.some((wire) => wire.a === c.a || wire.b === c.a)) {
-      issues.push(`${pinLabel(nodes, c.a)} 已被占用，保留原连接`);
-      continue;
-    }
-    const error = connectionError(nodes, connections, c.a, c.b);
-    if (error) issues.push(`${pinLabel(nodes, c.b)}：${error}`);
-    else connections.push(c);
-  }
-  for (const key of missingPins(nodes, connections))
-    issues.push(`${pinLabel(nodes, key)} 尚无可用自动连接规则或匹配负载`);
-  return { connections, issues: [...new Set(issues)] };
-}
-export function pinLabel(nodes: Module[], key: string) {
-  const p = resolvePin(nodes, key);
-  return p
-    ? `#${p.node.id} ${p.node.type.toUpperCase()} · ${p.pin.name}${p.node.type === "esp" ? ` (${p.pin.id})` : ""}`
-    : key;
-}
-export function netColor(
-  nodes: Module[],
-  connections: Pick<Connection, "a" | "b">[],
-  key: string,
-) {
-  const group = nets(nodes, connections).find((g) => g.includes(key)) || [key];
-  const kinds = group.map((k) => resolvePin(nodes, k)?.pin.kind);
-  return kinds.includes("gnd")
-    ? "#64756c"
-    : kinds.includes("v33")
-      ? "#c5793b"
-      : kinds.includes("v5")
-        ? "#bd4d4d"
-        : "#398b88";
-}
+import type { Module, Connection, Point, Trace } from "./catalog.ts";
+import { pinSets, endpoint, resolvePin, nets, pinLabel, requiredTraceWidth, electricalReport, referenceConnections } from "./electrical.ts";
+export { pinSets, endpoint, resolvePin, nets, pinLabel, requiredTraceWidth, electricalReport, missingPins, referenceConnections, autoConnect, connectionError, netColor } from "./electrical.ts";
 
 // Carrier connector pads, not verified module footprints. Dimensions are in mm.
 export function placement(node: Module, index: number): Point {
-  return (
-    node.placement || {
-      x: node.type === "esp" ? 12 : 55,
-      y: node.type === "esp" ? 10 : 12 + Math.max(0, index - 1) * 18,
-    }
-  );
+  // Place connectors by their assigned header side, with power and loads below.
+  return node.placement || {
+    esp: { x: 50, y: 10 },
+    oled: { x: 105, y: 22 },
+    mic: { x: 8, y: 12 },
+    speaker: { x: 8, y: 40 },
+    supply: { x: 110, y: 80 },
+    speakerLoad: { x: 35, y: 50 },
+    motor: { x: 8, y: 68 },
+    dcMotor: { x: 8 + 32 * Math.max(0, index - 7), y: 90 },
+  }[node.type];
 }
 export function padPoint(nodes: Module[], key: string): Point {
   const p = resolvePin(nodes, key);
   if (!p) throw Error("未知焊盘端点");
   const pos = placement(p.node, nodes.indexOf(p.node));
   return {
-    x: pos.x + (p.node.type === "esp" ? p.pin.side * 25.4 : p.pin.row * 2.54),
+    x: pos.x + (p.node.type === "esp" ? p.pin.side * 22.86 : p.pin.row * 2.54),
     y: pos.y + (p.node.type === "esp" ? p.pin.row * 2.54 : 0),
   };
 }
@@ -409,6 +66,8 @@ export function traceIssues(nodes: Module[], connections: Connection[], traces: 
   if (!c) return ["走线没有对应连接"];
   if (!Number.isFinite(trace.width) || trace.width < boardRules.minWidth || trace.width > 2)
     return ["线宽须在 0.2–2 mm 范围内"];
+  const minimum = requiredTraceWidth(nodes, connections, c);
+  if (trace.width < minimum) return [`此网络线宽至少 ${minimum} mm（电源 / 负载布线规则）`];
   const points = routePoints(nodes, c, trace);
   if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ["走线坐标无效"];
   const issues: string[] = [];
@@ -556,21 +215,33 @@ function gridRoute(nodes: Module[], connections: Connection[], traces: Trace[],
 }
 export function autoRoute(nodes: Module[], connections: Connection[], existing: Trace[],
   board: { width: number; height: number }, width = 0.4) {
+  const electrical = electricalReport(nodes, connections);
+  if (electrical.issues.length) return { traces: existing, failed: connections.filter((c) => !existing.some((t) => t.connection === c.id)), issues: electrical.issues };
   // Replan generated copper as a whole; keep only explicitly edited, valid routes fixed.
   const manual = existing.filter((t) => !t.automatic);
-  const traces = manual.filter((t) => !traceIssues(nodes, connections, manual, board, t).length);
-  const failed: Connection[] = [];
-  for (const c of [...connections].reverse()) {
-    if (traces.some((t) => t.connection === c.id)) continue;
-    let route: Trace | null = null;
-    for (const layer of ["F.Cu", "B.Cu"] as const) {
-      route = suggestTrace(nodes, connections, traces, board, { connection: c.id, layer, width, points: [] });
-      if (route) break;
+  const fixed = manual.filter((t) => !traceIssues(nodes, connections, manual, board, t).length);
+  const rank = new Map(referenceConnections(nodes).map((c, i) => [c.id, i]));
+  let order = [...connections].sort((a, b) => (rank.get(b.id) ?? connections.length) - (rank.get(a.id) ?? connections.length) || a.id.localeCompare(b.id));
+  let best = { traces: fixed, failed: connections };
+  // Rip up generated copper and prioritize blocked nets; manually edited copper stays fixed.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const traces = [...fixed], failed: Connection[] = [];
+    for (const c of order) {
+      if (traces.some((t) => t.connection === c.id)) continue;
+      let route: Trace | null = null;
+      for (const layer of ["F.Cu", "B.Cu"] as const) {
+        route = suggestTrace(nodes, connections, traces, board, { connection: c.id, layer, width: Math.max(width, requiredTraceWidth(nodes, connections, c)), points: [] });
+        if (route) break;
+      }
+      if (route) traces.push({ ...route, automatic: true });
+      else failed.push(c);
     }
-    if (route) traces.push({ ...route, automatic: true });
-    else failed.push(c);
+    if (failed.length < best.failed.length) best = { traces, failed };
+    if (!failed.length || !traces.length) break;
+    const blocked = new Set(failed.map((c) => c.id));
+    order = [...failed, ...order.filter((c) => !blocked.has(c.id))];
   }
-  return { traces, failed };
+  return { ...best, issues: [] as string[] };
 }
 
 export function boardIssues(

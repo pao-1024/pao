@@ -22,3 +22,22 @@
 - `motor.svg`：`Adafruit DRV8833 DC-Stepper Motor Driver.fzpz`，Adafruit #3297；https://learn.adafruit.com/adafruit-drv8833-dc-stepper-motor-driver-breakout-board/pinouts
 
 端子别名：SPH0645 的 DATA / SELECT 对应面板 DOUT / SEL；MAX98357A 的 LRCLK / VO+ / VO− 对应 LRC / OUT_PLUS / OUT_MINUS；DRV8833 的 PWRIN / NFAULT / !SLEEP 对应 VMOTOR / FLT / SLP。DRV8833 的 VM、ASEN、BSEN 没有在此编辑器开放。不能把该驱动或 SPH0645 当作 PAO 原板型的 MX1508 / INMP441。
+
+## 新增电源与负载
+
+以下照片直接引用厂商 CDN，用于型号识别，版权归原厂商，未复制到本仓库，也不适用上述 Fritzing SVG 的许可。加载需要网络。
+
+- Adafruit #1466（5V/4A 电源）：https://www.adafruit.com/product/1466 ，图片 https://cdn-shop.adafruit.com/970x728/1466-10.jpg 。套件同时需要 #368 中心正极 2.1mm DC 转接端子：https://www.adafruit.com/product/368 。
+- Adafruit #1314（4Ω/3W 扬声器）：https://www.adafruit.com/product/1314 ，图片 https://cdn-shop.adafruit.com/970x728/1314-07.jpg 。
+- Pololu #992（100:1 Micro Metal Gearmotor LP 6V）：https://www.pololu.com/product/992 ，图片取自 https://www.pololu.com/product/992/pictures ，官方标称 6V 堵转电流 0.36A（外推值，不允许持续堵转）。
+
+## 电气规则依据
+
+- ESP32-S3-DevKitC-1 v1.1 原理图：https://dl.espressif.com/dl/schematics/SCH_ESP32-S3-DevKitC-1_V1.1_20221130.pdf 。RGB LED 接 GPIO38；供电方式互斥。
+- 乐鑫尺寸图：https://dl.espressif.com/dl/schematics/esp_idf/DXF_ESP32-S3-DevKitC-1_V1.1_20220429.pdf 。板宽 25.4mm，排针距两侧板边各 1.27mm，因此两排中心距 22.86mm。
+- OLED 旧版原理图：https://github.com/adafruit/Adafruit-128x32-I2C-OLED-Breakout-PCB/blob/8bcc38f98dbe399188a83ac2f394942b9bbe6e80/Adafruit%20OLED%20128x32%20Mono%20I2C.sch 。接口 R8/R9 上拉接 VIN，BSS138 在内部 3.3V 与接口之间转换；RST 有板载上拉，但旧版仍按官方接线由主控执行复位。不要混用带自动复位的新 STEMMA QT 版本。
+- MAX98357A 电源、配置与差分输出：https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts 。
+- SPH0645 供电、BCLK 与 SEL：https://learn.adafruit.com/adafruit-i2s-mems-microphone-breakout/pinouts 。
+- DRV8833 默认休眠、开漏 FLT 和每通道 1A 默认限流：https://learn.adafruit.com/adafruit-drv8833-dc-stepper-motor-driver-breakout-board/pinouts 。
+
+`electrical.ts` 中主控、OLED、麦克风的电流为项目预留额度，功放按厂商推荐 800mA，电机按 360mA/台保守预留。温升、USB 供电隔离状态与实物波形不由静态规则证明。

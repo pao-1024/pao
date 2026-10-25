@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { pinSets, resolvePin } from "./circuit.ts";
+import { pinSets, resolvePin, electricalReport } from "./circuit.ts";
 import { partFor } from "./catalog.ts";
 import type { Module, Connection } from "./catalog.ts";
 
@@ -38,6 +38,8 @@ export async function compileHardware(
   nodes: Module[],
   connections: Connection[],
 ) {
+  const electrical = electricalReport(nodes, connections);
+  if (electrical.issues.length) throw Error(`电气检查未通过：${electrical.issues.join("；")}`);
   const [{ Circuit }, { convertCircuitJsonToSchematicSvg }] = await Promise.all(
     [import("@tscircuit/core"), import("circuit-to-svg")],
   );

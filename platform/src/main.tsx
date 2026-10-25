@@ -9,8 +9,9 @@ import {
   missingPins,
   pinLabel,
   boardIssues,
+  electricalReport,
 } from "./circuit.ts";
-import { catalog, partFor, starter } from "./catalog.ts";
+import { catalog, partFor, starter, defaultBoard, completeProject, moduleImage } from "./catalog.ts";
 import type { Module, ModuleType, Connection, Trace } from "./catalog.ts";
 import { hardwareSource } from "./hardware.ts";
 import { Assembly } from "./Assembly.tsx";
@@ -47,13 +48,15 @@ function App() {
   const [connections, setConnections] = useState<Connection[]>(() =>
     referenceConnections(starter),
   );
-  const [traces, setTraces] = useState<Trace[]>(() =>
-    autoRoute(starter, referenceConnections(starter), [], { width: 100, height: 80 }).traces,
-  );
-  const [board, setBoard] = useState({ width: 100, height: 80 });
+  const [traces, setTraces] = useState<Trace[]>([]);
+  const [routing, setRouting] = useState(false);
+  const [routeRequest, setRouteRequest] = useState(0);
+  const [routeWidth, setRouteWidth] = useState(0.4);
+  const [board, setBoard] = useState(defaultBoard);
   const [selected, setSelected] = useState<number | null>(1);
   const [selectedWire, setSelectedWire] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [connectionIssue, setConnectionIssue] = useState("");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
   const [message, setMessage] = useState("添加模块后自动接线并尝试双面布线；未完成项会明确列出。");
@@ -66,7 +69,7 @@ function App() {
   );
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState("");
-  const serial = useRef(4);
+  const serial = useRef(Math.max(...starter.map((n) => n.id)));
   const newProject = useRef<HTMLDialogElement>(null);
   const worker = useRef<Worker | null>(null);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -74,7 +77,32 @@ function App() {
   const unconnected = missingPins(nodes, connections);
   const part = nodes.find((n) => n.id === selected);
   const wire = connections.find((c) => c.id === selectedWire);
-  const autoIssues = autoConnect(nodes, connections).issues;
+  const electrical = electricalReport(nodes, connections);
+  const autoIssues = electrical.issues;
+  const geometry = JSON.stringify(nodes.map(({ id, type, placement }) => ({ id, type, placement })));
+  const manualRoutes = JSON.stringify(traces.filter((t) => !t.automatic));
+  useEffect(() => {
+    const manual: Trace[] = JSON.parse(manualRoutes);
+    setTraces(manual);
+    if (electricalReport(nodes, connections).issues.length) { setRouting(false); return; }
+    setRouting(true);
+    let disposed = false;
+    const router = new Worker(new URL("./routing.worker.ts", import.meta.url), { type: "module" });
+    const timer = setTimeout(() => { router.terminate(); setRouting(false); setMessage("自动布线超过 45 秒，已停止；请减少模块或调整布局。"); }, 45000);
+    router.onmessage = (event: MessageEvent<{ result?: ReturnType<typeof autoRoute>; error?: string }>) => {
+      if (disposed) return;
+      clearTimeout(timer); router.terminate(); setRouting(false);
+      if (event.data.error) setMessage(`布线失败：${event.data.error}`);
+      else if (event.data.result) {
+        const result = event.data.result;
+        setTraces(result.traces);
+        setMessage(result.issues.length ? result.issues.join("；") : `自动布线完成：${result.traces.length} 根已布，${result.failed.length} 根待调整布局。`);
+      }
+    };
+    router.onerror = (event) => { clearTimeout(timer); router.terminate(); setRouting(false); setMessage(`布线失败：${event.message}`); };
+    router.postMessage({ nodes, connections, traces: manual, board, width: routeWidth });
+    return () => { disposed = true; clearTimeout(timer); router.terminate(); };
+  }, [geometry, connections, board, manualRoutes, routeRequest, routeWidth]);
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [page]);
@@ -82,7 +110,7 @@ function App() {
     const change = () => setPage(route());
     window.addEventListener("hashchange", change);
     const cancel = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPending(null);
+      if (e.key === "Escape") { setPending(null); setConnectionIssue(""); }
     };
     window.addEventListener("keydown", cancel);
     return () => {
@@ -110,21 +138,24 @@ function App() {
       id: ++serial.current,
       type,
       x: Math.max(20, Math.min(1140, x)),
-      y: Math.max(30, Math.min(700, y)),
+      y: Math.max(30, Math.min(1800, y)),
     };
-    const nextNodes = [...nodes, n];
-    setNodes(nextNodes);
+    const nextNodes = completeProject([...nodes, n]);
+    if (nextNodes.length > 20) { setMessage("补齐电源和负载后超出 20 个模块，请减少模块。"); return; }
     automate(nextNodes);
     setSelected(n.id);
     setSelectedWire(null);
   }
   function automate(nextNodes = nodes) {
-    const connected = autoConnect(nextNodes, connections);
-    const routed = autoRoute(nextNodes, connected.connections, traces, board);
+    const completed = completeProject(nextNodes);
+    if (completed.length > 20) { setMessage("补齐必要器件后超过模块上限。"); return; }
+    serial.current = Math.max(serial.current, ...completed.map((n) => n.id));
+    const connected = autoConnect(completed, connections);
+    setNodes(completed);
     setConnections(connected.connections);
-    setTraces(routed.traces);
     setPending(null);
-    setMessage(`自动接线：新增 ${connected.connections.length - connections.length} 根连接；PCB 已布 ${routed.traces.length} 根，${routed.failed.length} 根未布通。已有连接和合规人工走线已保留，自动走线已重新规划。`);
+    setConnectionIssue("");
+    setMessage(connected.issues.length ? `电气检查有 ${connected.issues.length} 项待解决，暂停自动布线：${connected.issues.join("；")}` : `自动接线完成：${connected.connections.length} 根连接，正在自动布线。`);
   }
   function removeWire(id: string) {
     setConnections(connections.filter((c) => c.id !== id));
@@ -147,6 +178,7 @@ function App() {
     setMessage("已移除模块、关联连接与 PCB 走线。");
   }
   function pin(key: string) {
+    setConnectionIssue("");
     if (!pending) {
       setPending(key);
       setMessage(`起点 ${pinLabel(nodes, key)}，请选择终点。`);
@@ -154,6 +186,7 @@ function App() {
     }
     const error = connectionError(nodes, connections, pending, key);
     if (error) {
+      setConnectionIssue(error);
       setMessage(error);
       return;
     }
@@ -169,6 +202,7 @@ function App() {
       setBuildError("请先添加模块。");
       return;
     }
+    if (electrical.issues.length) { setBuildError(`电气检查未通过：${electrical.issues.join("；")}`); return; }
     worker.current?.terminate();
     clearTimeout(timeout.current);
     setBuilding(true);
@@ -212,6 +246,7 @@ function App() {
           connections,
           board,
           traces,
+          electrical,
           firmware,
           notice:
             "模块接口设计与载板草稿；不是可制造 PCB，未适配或运行当前组合的固件。",
@@ -367,21 +402,24 @@ function App() {
                     onClick={() => {
                       setPending(null);
                       setMessage(
-                        `${unconnected.length} 个必接端子待接；未检查供电预算、上拉或信号完整性。`,
+                        electrical.issues.length ? electrical.issues.join("；") : "模块电气规则通过：供电、公共地、负载、复位及总线角色已检查。",
                       );
                     }}
                   >
                     检查连接
                   </button>
-                  <button disabled={!pending} onClick={() => setPending(null)}>
+                  <button disabled={!pending} onClick={() => { setPending(null); setConnectionIssue(""); }}>
                     取消接线
                   </button>
                 </div>
               </div>
               <div className="notice">
-                添加模块即按内置引脚规则自动连接并尝试 PCB 双面布线；手动接线仅用于覆盖默认设计。
-                {autoIssues.length > 0 && <p>自动接线待解决：{autoIssues.join("；")}</p>}
-                <p>PCB 已布 {traces.length} / {connections.length} 根。未布通的网络在 PCB 页列出，不会以违规铜线替代。</p>
+                {connectionIssue && <p role="alert">拒绝连接：{connectionIssue}</p>}
+                添加模块自动补齐电源和匹配负载，连接复位、使能与总线；电气检查通过后才开始 PCB 布线。
+                <p role="status">{autoIssues.length ? `电气待解决：${autoIssues.join("；")}` : "模块电气规则通过"}</p>
+                {electrical.budgets.map((b) => <p key={b.source}>{pinLabel(nodes, b.source)} · {b.voltage}V · 预算 {b.demandMa} / {b.capacityMa}mA</p>)}
+                <details><summary>接线与固件初始化条件</summary><ul>{electrical.requirements.map((r) => <li key={r}>{r}</li>)}</ul></details>
+                <p>{routing ? "正在后台自动布线，可继续操作模块。" : `PCB 已布 ${traces.length} / ${connections.length} 根。未布通的网络在 PCB 页列出。`}</p>
               </div>
               <div className="workbench">
                 <aside className="library">
@@ -396,7 +434,7 @@ function App() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                   <div className="filters">
-                    {["全部", "主控", "显示", "音频", "执行器"].map((c) => (
+                    {["全部", "主控", "显示", "音频", "执行器", "电源", "负载"].map((c) => (
                       <button
                         key={c}
                         aria-pressed={category === c}
@@ -423,7 +461,7 @@ function App() {
                       >
                         <div className="module-image">
                           <img
-                            src={`/modules/${c.image}`}
+                            src={moduleImage(c.type)}
                             alt={c.model}
                             draggable={false}
                           />
@@ -440,7 +478,7 @@ function App() {
                   </div>
                   {!matches.length && <p className="empty">没有匹配器件。</p>}
                   <p className="caption">
-                    图像来自 Espressif 与 Adafruit 官方资料。
+                    图像来自 Espressif、Adafruit 与 Pololu 官方资料。
                     <a href="/modules/SOURCES.md" target="_blank">
                       来源与许可 ↗
                     </a>
@@ -482,7 +520,7 @@ function App() {
                       <span className="eyebrow">MODULE / U{part.id}</span>
                       <img
                         className="inspector-image"
-                        src={`/modules/${partFor(part.type).image}`}
+                        src={moduleImage(part.type)}
                         alt={partFor(part.type).name}
                       />
                       <h2>{partFor(part.type).name}</h2>
@@ -511,14 +549,14 @@ function App() {
                             <input
                               type="number"
                               min={20}
-                              max={axis === "x" ? 1140 : 700}
+                              max={axis === "x" ? 1140 : 1800}
                               value={Math.round(part[axis])}
                               onChange={(e) => {
                                 const v = Number(e.target.value);
                                 if (
                                   e.target.value !== "" &&
                                   v >= 20 &&
-                                  v <= (axis === "x" ? 1140 : 700)
+                                  v <= (axis === "x" ? 1140 : 1800)
                                 )
                                   setNodes(
                                     nodes.map((n) =>
@@ -578,7 +616,7 @@ function App() {
                   </button>
                 </div>
                 <p className="caption">
-                  示例是信号连接草稿，不是完整可上电电路。功率输出需接匹配负载，电源能力与器件驱动需另行验证。
+                  模块电气检查覆盖供电范围与预算、公共地、差分负载、复位、使能及总线角色；实物仍需按导出的初始化条件核对驱动与波形。
                 </p>
                 <div className="table-scroll">
                   <table>
@@ -661,6 +699,8 @@ function App() {
                     此草稿不编译、不随画布自动改引脚，也不会运行于 PAO
                     模拟器。Agent 固件生成在规划中。
                   </p>
+                  <details><summary>当前设计的 GPIO / 电气配置</summary><pre className="runtime-log">{JSON.stringify(electrical, null, 2)}</pre></details>
+                  <button onClick={() => download("electrical-contract.json", JSON.stringify(electrical, null, 2), "application/json")}>导出 GPIO 与初始化条件</button>
                   <textarea
                     className="source"
                     aria-label="固件草稿"
@@ -731,6 +771,8 @@ function App() {
                 onNodes={setNodes}
                 onTraces={setTraces}
                 onBoard={setBoard}
+                routing={routing}
+                onAutoRoute={(width) => { setRouteWidth(width); setRouteRequest((v) => v + 1); }}
               />
             </>
           )}
@@ -759,7 +801,7 @@ function App() {
                   <span className="badge">待验证</span>
                   <h2>实物与电气</h2>
                   <p>
-                    {unconnected.length} 个必接端子待接，
+                    {autoIssues.length} 项模块电气问题，{unconnected.length} 个必接端子待接，
                     {boardIssues(nodes, connections, traces, board).length}{" "}
                     项布局与铜线几何问题。基础检查不代表完整 ERC / DRC。
                   </p>
@@ -852,7 +894,7 @@ function App() {
             setNodes([]);
             setConnections([]);
             setTraces([]);
-            setBoard({ width: 100, height: 80 });
+            setBoard(defaultBoard);
             setPending(null);
             setSelected(null);
             setSelectedWire(null);

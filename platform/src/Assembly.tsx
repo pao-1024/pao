@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { CSSProperties, PointerEvent } from "react";
 import { pinSets, endpoint, netColor, resolvePin } from "./circuit.ts";
-import { partFor } from "./catalog.ts";
+import { partFor, catalog, moduleImage } from "./catalog.ts";
 import type { Module, Connection, ModuleType } from "./catalog.ts";
 
 // Terminal strips are a logical breakout, not a claim about physical header order.
@@ -49,7 +49,7 @@ export function Assembly({
     onMove(
       d.id,
       Math.max(20, Math.min(1140, d.originX + (e.clientX - d.x) / zoom)),
-      Math.max(30, Math.min(700, d.originY + (e.clientY - d.y) / zoom)),
+      Math.max(30, Math.min(1800, d.originY + (e.clientY - d.y) / zoom)),
     );
   }
   return (
@@ -76,7 +76,7 @@ export function Assembly({
         onDrop={(e) => {
           e.preventDefault();
           const type = e.dataTransfer.getData("pao/module") as ModuleType;
-          if (!["esp", "oled", "mic", "speaker", "motor"].includes(type))
+          if (!catalog.some((p) => p.type === type))
             return;
           const r = e.currentTarget.getBoundingClientRect();
           onAdd(
@@ -86,12 +86,12 @@ export function Assembly({
           );
         }}
       >
-        <div style={{ width: 1440 * zoom, height: 1250 * zoom }}>
+        <div style={{ width: 1440 * zoom, height: Math.max(1250, ...nodes.map((n) => n.y + 650)) * zoom }}>
           <div className="circuit" style={{ transform: `scale(${zoom})` }}>
             <svg
               className="wiring"
               width="1440"
-              height="1250"
+              height={Math.max(1250, ...nodes.map((n) => n.y + 650))}
               aria-label="引脚连线"
             >
               {connections.map((c) => {
@@ -160,7 +160,7 @@ export function Assembly({
                   </button>
                   <img
                     className="physical-part"
-                    src={`/modules/${part.image}`}
+                    src={moduleImage(n.type)}
                     alt={`${part.maker} ${part.model} 实物外观`}
                     draggable={false}
                   />
