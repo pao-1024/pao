@@ -59,9 +59,9 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
+    // 续发速度只取消旧任务和定时器，不能先清零 PWM，否则连续加速会周期性断动力。
     // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
-    void StopChassisLocked(const char* status) {
-        chassis_.drive(0, 0);
+    void ResetMotionLocked(const char* status) {
         chassis_deadline_ = 0;
         distance_active_ = false;
         ++chassis_generation_;
@@ -72,28 +72,33 @@ private:
         }
     }
 
+    void StopChassisLocked(const char* status) {
+        chassis_.drive(0, 0);
+        ResetMotionLocked(status);
+    }
+
     uint32_t DriveChassis(int forward, int turn, int duration_ms) {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
         if (forward != 0 || turn != 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
-            chassis_.drive(forward / 100.0f, turn / 100.0f);
         }
+        chassis_.drive(forward / 100.0f, turn / 100.0f);
         ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
         return chassis_generation_;
     }
 
     void DriveWheels(int left, int right, int duration_ms) {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
         if (left != 0 || right != 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
-            chassis_.driveWheels(left / 100.0f, right / 100.0f);
         }
+        chassis_.driveWheels(left / 100.0f, right / 100.0f);
         ESP_LOGI(TAG, "Wheel drive: left=%d right=%d duration_ms=%d", left, right, duration_ms);
     }
 
