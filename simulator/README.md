@@ -80,11 +80,17 @@ PAO 板型在 GPIO8 检测到至少 10µs 的 Trig 脉冲后，向 GPIO9 发送�
 启动器传入 `--max-lag 4`，仿真在静音时追回落后。实时麦克风按原顺序排队，保留全部采样，
 不通过丢弃旧音频追赶实时；持续低于实时速度时，队列占用和交互延迟仍会增长。
 WebSocket 的音频输入和输出同样保序排队，页面长时间不读取时会增加内存占用。
-3D 场景下方提供左右轮独立控制量调节；“摇杆与直行校正”打开固件遥控页，可保存行驶、旋转上限和直行补偿比例，
+3D 场景下方可打开固件遥控页，使用方向按钮并调整输出渐变和左右轮比例，
 具体步骤见[板型说明](../firmware/boards/pao/README.md#网页遥控)。
 终端按 Ctrl+C 退出并保存 `interactive.bin`。每次启动都加载当前固件构建的镜像段，
 并保留 Flash 中的 NVS，避免一直运行旧固件；删除该文件即可使用保存的身份重新生成 Flash。
 `task simulator:install` 只安装依赖并构建模拟器和网页，`task simulator:check` 检查启动身份的生成与复用、脚本、React 类型、音频封包、SSD1306 和底盘解码，以及小车位姿和发射器电量计算。
+
+底盘端到端验收可在固件和模拟器构建后启动 `task simulator:run`，另开终端以 Node.js 24
+依次执行 `node simulator/chassis-acceptance.mjs exercise`、`restart-zero`、`restart-final`。
+`exercise` 预期全新模拟器状态的默认配置；已有状态可先备份并移走 `tmp/esp32sim-full-flow`。
+每个阶段之间用 Ctrl+C 结束模拟器，再以相同命令启动；保留同一个 `interactive.bin`，
+脚本会检查实际 PWM 变化、运动停止和 NVS 在两次重启后的恢复。
 
 设备说话或聆听时再次说“小炮小炮”可打断。旧构建目录保留旧 sdkconfig 时唤醒词不会更新，
 需在 ESP-IDF 配置界面修改，或移走 `tmp/build/<base-commit>/` 后重新构建。

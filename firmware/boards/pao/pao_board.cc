@@ -12,7 +12,6 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
-#include "settings.h"
 
 #include <driver/i2c_master.h>
 #include <esp_check.h>
@@ -21,9 +20,11 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <freertos/task.h>
+#include <nvs.h>
 #include <wifi_manager.h>
 
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
@@ -32,11 +33,24 @@
 
 #define TAG "PaoBoard"
 
+namespace {
+constexpr char kMotionNamespace[] = "pao_motion";
+constexpr char kMotionKey[] = "config";
+constexpr uint32_t kMotionConfigVersion = 1;
+
+struct StoredMotionConfig {
+    uint32_t version;
+    ChassisConfig config;
+};
+}  // namespace
+
 extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
 extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
+    enum class MotionCommand { Move, Rotate };
+
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
     // 左轮安装方向与右轮相反，交换输入使正速度均表示车体前进。
@@ -44,6 +58,7 @@ private:
     Chassis chassis_{left_motor_, right_motor_};
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
+    std::mutex motion_config_mutex_;
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
@@ -63,7 +78,7 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
-    // 续发速度只取消旧任务和定时器，不能先清零 PWM，否则连续加速会周期性断动力。
+    // 续发指令只取消旧任务和定时器，不能先清零 PWM，否则加速会周期性中断。
     // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
     void ResetMotionLocked(const char* status) {
         chassis_deadline_ = 0;
@@ -77,53 +92,90 @@ private:
     }
 
     void StopChassisLocked(const char* status) {
-        chassis_.drive(0, 0);
+        chassis_.stop();
         ResetMotionLocked(status);
     }
 
-    uint32_t DriveChassis(int forward, int turn, int duration_ms) {
+    uint32_t StopChassis() {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
-        ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
-        if (forward != 0 || turn != 0) {
-            const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
-            chassis_deadline_ = esp_timer_get_time() + duration_us;
-            ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
-        }
-        chassis_.drive(forward / 100.0f, turn / 100.0f);
-        ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
+        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
         return chassis_generation_;
     }
 
-    void DriveWheels(int left, int right, int duration_ms) {
+    void RunChassis(MotionCommand motion, int speed, int duration_ms) {
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         ResetMotionLocked(distance_active_ ? "cancelled" : "idle");
-        if (left != 0 || right != 0) {
+        if (duration_ms > 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
         }
-        chassis_.driveWheels(left / 100.0f, right / 100.0f);
-        ESP_LOGI(TAG, "Wheel drive: left=%d right=%d duration_ms=%d", left, right, duration_ms);
+        if (motion == MotionCommand::Move) {
+            chassis_.move(speed / 100.0f);
+        } else {
+            chassis_.rotate(speed / 100.0f);
+        }
+        ESP_LOGI(TAG, "Chassis %s: speed=%d duration_ms=%d",
+                 motion == MotionCommand::Move ? "move" : "rotate", speed, duration_ms);
     }
 
-    void SaveWheelCalibration() {
-        const auto [left, right] = chassis_.wheelCalibration();
-        Settings settings("chassis", true);
-        settings.SetInt("left_gain", left);
-        settings.SetInt("right_gain", right);
-        ESP_LOGI(TAG, "Wheel calibration saved: left=%d right=%d permille", left, right);
+    void LoadMotionConfig() {
+        nvs_handle_t handle;
+        const auto opened = nvs_open(kMotionNamespace, NVS_READONLY, &handle);
+        if (opened == ESP_ERR_NVS_NOT_FOUND) {
+            return;
+        }
+        if (opened != ESP_OK) {
+            ESP_LOGW(TAG, "Cannot open motion config: %s", esp_err_to_name(opened));
+            return;
+        }
+        StoredMotionConfig saved = {};
+        size_t size = sizeof(saved);
+        const auto error = nvs_get_blob(handle, kMotionKey, &saved, &size);
+        nvs_close(handle);
+        if (error == ESP_ERR_NVS_NOT_FOUND) {
+            return;
+        }
+        if (error != ESP_OK || size != sizeof(saved) ||
+            saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
+            ESP_LOGW(TAG, "Invalid motion config; using defaults");
+        }
+    }
+
+    esp_err_t SaveMotionConfig(const ChassisConfig& config) {
+        if (!Chassis::validConfig(config)) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        std::lock_guard<std::mutex> lock(motion_config_mutex_);
+        const auto current = chassis_.config();
+        if (current.ramp_time_ms == config.ramp_time_ms &&
+            current.left_scale == config.left_scale && current.right_scale == config.right_scale) {
+            return ESP_OK;
+        }
+        nvs_handle_t handle;
+        auto error = nvs_open(kMotionNamespace, NVS_READWRITE, &handle);
+        if (error != ESP_OK) {
+            return error;
+        }
+        const StoredMotionConfig saved = {kMotionConfigVersion, config};
+        error = nvs_set_blob(handle, kMotionKey, &saved, sizeof(saved));
+        if (error == ESP_OK) {
+            error = nvs_commit(handle);
+        }
+        nvs_close(handle);
+        if (error == ESP_OK) {
+            chassis_.setConfig(config);
+        }
+        return error;
     }
 
     ToolResult MoveForward(int distance_cm, int speed) {
-        const auto generation = DriveChassis(0, 0, 0);
+        const auto generation = StopChassis();
         float initial_cm = 0;
         const auto error = ultrasonic_.readDistanceCm(initial_cm);
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         if (generation != chassis_generation_) {
             return std::unexpected("运动已被新的底盘指令取消");
-        }
-        if (chassis_.speedLimits().first == 0) {
-            return std::unexpected("行驶上限为 0，无法按距离前进；请先在网页调整速度上限");
         }
         if (error != ESP_OK) {
             motion_status_ = "sensor_error";
@@ -140,7 +192,7 @@ private:
         motion_status_ = "moving";
         chassis_deadline_ = esp_timer_get_time() + 15000000;
         ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
-        chassis_.drive(speed / 100.0f, 0);
+        chassis_.move(speed / 100.0f);
         xTaskNotifyGive(distance_task_);
         ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, speed);
         return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
@@ -197,13 +249,7 @@ private:
             }
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
-        Settings settings("chassis");
-        if (!chassis_.setWheelCalibration(settings.GetInt("left_gain", 1000), settings.GetInt("right_gain", 1000))) {
-            ESP_LOGW(TAG, "Invalid wheel calibration; using defaults");
-        }
-        if (!chassis_.setSpeedLimits(settings.GetInt("max_linear", 100), settings.GetInt("max_turn", 30))) {
-            ESP_LOGW(TAG, "Invalid speed limits; using defaults");
-        }
+        LoadMotionConfig();
         if (xTaskCreate([](void* arg) {
                 static_cast<PaoBoard*>(arg)->RunDistanceControl();
             }, "distance_move", 4096, this, 5, &distance_task_) != pdPASS) {
@@ -211,27 +257,35 @@ private:
         }
 
         auto& mcp = McpServer::GetInstance();
-        mcp.AddTool("self.chassis.drive",
+        mcp.AddTool("self.chassis.move",
             "是什么：小车的两轮底盘，左右各一个直流电机。\n"
-            "能做什么：让小车前进、后退、边走边转弯或原地旋转，行驶指定时长后自动停下。"
-            "用户说走、开、前进、后退、倒车、左转、右转、掉头、转圈时调用。"
-            "新指令会立即替换正在执行的运动。\n"
+            "能做什么：让小车前进或后退，指定时长后自动停下。用户说走、前进、后退、倒车时调用。"
+            "新指令替换正在执行的运动；速度是 PWM 占空比，不能保证直线或准确距离。\n"
             "参数：\n"
-            "- forward（必填，整数 -100 到 100）：前后速度百分比，正数前进，负数后退，0 不前后移动。\n"
-            "- turn（必填，整数 -100 到 100）：转向百分比，正数左转，负数右转，0 不转向；"
-            "forward 为 0、turn 不为 0 时原地旋转。forward 和 turn 都为 0 时立即停止。\n"
+            "- speed（必填，整数 -100 到 100）：正数前进，负数后退，0 平滑停车。\n"
             "- duration_ms（可选，整数 100 到 15000，默认 1000）：行驶毫秒数，到时自动停止；"
-            "超过 15000 会报错且不执行，需要更久请分多次调用。\n"
-            "forward 和 turn 均受网页保存的行驶/旋转速度上限约束，100 也不能绕过上限。"
-            "控制量影响电机占空比，不代表实际距离或转过的角度。\n"
-            "按厘米前进请使用 self.chassis.move_forward。\n"
-            "返回：true 表示已开始执行。",
-            PropertyList({Property("forward", kPropertyTypeInteger, -100, 100),
-                          Property("turn", kPropertyTypeInteger, -100, 100),
+            "超过 15000 会报错且不执行。按厘米前进请使用 self.chassis.move_forward。\n"
+            "返回：true 表示已接受指令。",
+            PropertyList({Property("speed", kPropertyTypeInteger, -100, 100),
                           Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
             [this](const PropertyList& properties) -> ReturnValue {
-                DriveChassis(properties["forward"].value<int>(), properties["turn"].value<int>(),
-                             properties["duration_ms"].value<int>());
+                RunChassis(MotionCommand::Move, properties["speed"].value<int>(),
+                           properties["duration_ms"].value<int>());
+                return true;
+            });
+        mcp.AddTool("self.chassis.rotate",
+            "是什么：小车的两轮底盘。\n"
+            "能做什么：让小车原地旋转，指定时长后自动停下。用户说左转、右转、掉头、转圈时调用。"
+            "新指令替换正在执行的运动；旋转速度是 PWM 占空比，不代表准确角度。\n"
+            "参数：\n"
+            "- speed（必填，整数 -100 到 100）：俯视小车时，正数逆时针、负数顺时针，0 平滑停车。\n"
+            "- duration_ms（可选，整数 100 到 15000，默认 1000）：旋转毫秒数，到时自动停止。\n"
+            "返回：true 表示已接受指令。",
+            PropertyList({Property("speed", kPropertyTypeInteger, -100, 100),
+                          Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
+            [this](const PropertyList& properties) -> ReturnValue {
+                RunChassis(MotionCommand::Rotate, properties["speed"].value<int>(),
+                           properties["duration_ms"].value<int>());
                 return true;
             });
         mcp.AddTool("self.chassis.stop",
@@ -242,12 +296,12 @@ private:
             "返回：true 表示已停止。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
-                DriveChassis(0, 0, 0);
+                StopChassis();
                 return true;
             });
         mcp.AddTool("self.chassis.move_forward",
             "是什么：通过前方超声波距离变化反馈控制小车直行。用户要求前进多少厘米时调用。\n"
-            "参数：distance_cm 必填整数 1..390；speed 可选整数 1..100，默认 50，为相对行驶上限的速度百分比。\n"
+            "参数：distance_cm 必填整数 1..390；speed 可选整数 1..100，默认 50，为前进占空比百分比。\n"
             "以前方同一静止反射物的起始距离减当前距离估算前进量，到达后停车；"
             "必须有稳定反射物，不支持空旷环境里程测量、倒退或转弯。"
             "目标位置必须保留至少 10cm；空间不足或起始测距失败直接报错且不启动。"
@@ -411,6 +465,16 @@ private:
         return true;
     }
 
+    static bool QueryFloat(const char* query, const char* key, float& out) {
+        char value[24];
+        if (httpd_query_key_value(query, key, value, sizeof(value)) != ESP_OK) {
+            return false;
+        }
+        char* end = nullptr;
+        out = std::strtof(value, &end);
+        return end != value && *end == '\0' && std::isfinite(out) && out >= 0 && out <= 1;
+    }
+
     static esp_err_t Reply(httpd_req_t* req, const char* status, const char* type, const char* body) {
         httpd_resp_set_status(req, status);
         httpd_resp_set_type(req, type);
@@ -431,59 +495,47 @@ private:
         return static_cast<PaoBoard*>(req->user_ctx);
     }
 
+    struct CommandResult {
+        std::string error;
+        bool internal = false;
+    };
+
     // HTTP 和 WebSocket 共用指令校验与执行，避免两个入口的运动约束发生偏差。
-    std::string ControlCommand(const std::string& path, const char* query) {
-        int forward, turn, duration_ms, left, right, distance_cm, speed, linear;
-        if (path == "/api/drive") {
-            if (!QueryInt(query, "forward", 0, -100, 100, forward) || !QueryInt(query, "turn", 0, -100, 100, turn) ||
+    CommandResult ControlCommand(const std::string& path, const char* query) {
+        int duration_ms, distance_cm, speed, ramp_time_ms;
+        if (path == "/api/move" || path == "/api/rotate") {
+            if (!QueryInt(query, "speed", -101, -100, 100, speed) || speed == -101 ||
                 !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
-                return "forward/turn 取 -100..100，duration_ms 取 100..15000";
+                return {"speed 取 -100..100，duration_ms 取 100..15000"};
             }
-            DriveChassis(forward, turn, duration_ms);
+            RunChassis(path == "/api/move" ? MotionCommand::Move : MotionCommand::Rotate, speed, duration_ms);
         } else if (path == "/api/stop") {
-            DriveChassis(0, 0, 0);
-        } else if (path == "/api/speed_limits") {
-            if (!QueryInt(query, "linear", -1, 0, 100, linear) || !QueryInt(query, "turn", -1, 0, 100, turn)) {
-                return "linear/turn 均为必填整数，取 0..100";
+            StopChassis();
+        } else if (path == "/api/motion-config") {
+            ChassisConfig config;
+            if (!QueryInt(query, "ramp_time_ms", -1, 0, 3000, ramp_time_ms) || ramp_time_ms < 0 ||
+                !QueryFloat(query, "left_scale", config.left_scale) ||
+                !QueryFloat(query, "right_scale", config.right_scale)) {
+                return {"参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1"};
             }
-            std::lock_guard<std::mutex> lock(chassis_mutex_);
-            StopChassisLocked(distance_active_ ? "cancelled" : "idle");
-            chassis_.setSpeedLimits(linear, turn);
-            Settings settings("chassis", true);
-            settings.SetInt("max_linear", linear);
-            settings.SetInt("max_turn", turn);
-            ESP_LOGI(TAG, "Speed limits saved: linear=%d turn=%d percent", linear, turn);
-        } else if (path == "/api/wheels") {
-            if (!QueryInt(query, "left", 0, -100, 100, left) || !QueryInt(query, "right", 0, -100, 100, right) ||
-                !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
-                return "left/right 取 -100..100，duration_ms 取 100..15000";
+            config.ramp_time_ms = ramp_time_ms;
+            const auto saved = SaveMotionConfig(config);
+            if (saved != ESP_OK) {
+                ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
+                return {"运动配置保存失败，请重试", true};
             }
-            DriveWheels(left, right, duration_ms);
-        } else if (path == "/api/calibrate" || path == "/api/calibration/reset") {
-            if (path == "/api/calibrate" &&
-                (!QueryInt(query, "forward", 0, 1, 100, forward) || !QueryInt(query, "turn", 0, -100, 100, turn))) {
-                return "需要向前微调的 forward/turn";
-            }
-            std::lock_guard<std::mutex> lock(chassis_mutex_);
-            StopChassisLocked(distance_active_ ? "cancelled" : "idle");
-            if (path == "/api/calibration/reset") {
-                chassis_.setWheelCalibration(1000, 1000);
-            } else if (!chassis_.calibrateForward(forward / 100.0f, turn / 100.0f)) {
-                return "请先向前微调至走直；两轮都须向前，修正比例不能低于 10%";
-            }
-            SaveWheelCalibration();
         } else if (path == "/api/move_forward") {
             if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm) || !QueryInt(query, "speed", 50, 1, 100, speed)) {
-                return "distance_cm 取 1..390，speed 取 1..100";
+                return {"distance_cm 取 1..390，speed 取 1..100"};
             }
             const auto result = MoveForward(distance_cm, speed);
-            if (!result) { return result.error(); }
+            if (!result) { return {result.error()}; }
         } else if (path == "/api/launcher/fire") {
             FireLauncher();
         } else {
-            return "未知控制指令";
+            return {"未知控制指令"};
         }
-        return "";
+        return {};
     }
 
     static esp_err_t HttpControl(httpd_req_t* req) {
@@ -492,18 +544,26 @@ private:
         if (error != ESP_OK && error != ESP_ERR_NOT_FOUND) { return BadRequest(req, "查询参数过长"); }
         const std::string uri(req->uri);
         const auto result = Self(req)->ControlCommand(uri.substr(0, uri.find('?')), query);
-        return result.empty() ? Ok(req) : BadRequest(req, result.c_str());
+        if (result.error.empty()) { return Ok(req); }
+        return result.internal
+                   ? Reply(req, "500 Internal Server Error", "text/plain; charset=utf-8", result.error.c_str())
+                   : BadRequest(req, result.error.c_str());
     }
 
-    cJSON* ReadControlStatus() {
-        const auto [left, right] = chassis_.wheelCalibration();
-        const auto [linear, turn] = chassis_.speedLimits();
+    cJSON* ReadMotionConfig() {
+        const auto config = chassis_.config();
         auto* result = cJSON_CreateObject();
-        cJSON_AddNumberToObject(result, "left_gain_permille", left);
-        cJSON_AddNumberToObject(result, "right_gain_permille", right);
-        cJSON_AddNumberToObject(result, "max_linear_percent", linear);
-        cJSON_AddNumberToObject(result, "max_turn_percent", turn);
+        cJSON_AddNumberToObject(result, "ramp_time_ms", config.ramp_time_ms);
+        cJSON_AddNumberToObject(result, "left_scale", config.left_scale);
+        cJSON_AddNumberToObject(result, "right_scale", config.right_scale);
         return result;
+    }
+
+    static esp_err_t HttpMotionConfig(httpd_req_t* req) {
+        CJsonUniquePtr result(Self(req)->ReadMotionConfig());
+        CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
+        if (!text) { return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode config"); }
+        return Reply(req, "200 OK", "application/json", text.get());
     }
 
     static esp_err_t WebSocketControl(httpd_req_t* req) {
@@ -528,17 +588,19 @@ private:
         auto* board = Self(req);
         CJsonUniquePtr response(cJSON_CreateObject());
         cJSON_AddNumberToObject(response.get(), "id", id->valueint);
-        std::string error;
+        CommandResult result;
         if (std::strcmp(path->valuestring, "/api/status") == 0) {
-            cJSON_AddItemToObject(response.get(), "data", board->ReadControlStatus());
+            cJSON_AddItemToObject(response.get(), "data", board->ReadMotionConfig());
+        } else if (std::strcmp(path->valuestring, "/api/motion-config") == 0 && query->valuestring[0] == '\0') {
+            cJSON_AddItemToObject(response.get(), "data", board->ReadMotionConfig());
         } else if (std::strcmp(path->valuestring, "/api/distance") == 0) {
             cJSON_AddItemToObject(response.get(), "data", board->ReadDistance());
         } else {
-            error = board->ControlCommand(path->valuestring, query->valuestring);
-            cJSON_AddBoolToObject(response.get(), "data", error.empty());
+            result = board->ControlCommand(path->valuestring, query->valuestring);
+            cJSON_AddBoolToObject(response.get(), "data", result.error.empty());
         }
-        cJSON_AddBoolToObject(response.get(), "ok", error.empty());
-        if (!error.empty()) { cJSON_AddStringToObject(response.get(), "error", error.c_str()); }
+        cJSON_AddBoolToObject(response.get(), "ok", result.error.empty());
+        if (!result.error.empty()) { cJSON_AddStringToObject(response.get(), "error", result.error.c_str()); }
         CJsonStringUniquePtr text(cJSON_PrintUnformatted(response.get()));
         if (!text) { return ESP_ERR_NO_MEM; }
         frame.type = HTTPD_WS_TYPE_TEXT;
@@ -566,18 +628,12 @@ private:
             {"/", HTTP_GET, [](httpd_req_t* req) {
                 return Reply(req, "200 OK", "text/html; charset=utf-8", kControlPage);
             }, this},
-            {"/api/status", HTTP_GET, [](httpd_req_t* req) {
-                CJsonUniquePtr result(Self(req)->ReadControlStatus());
-                CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
-                if (!text) { return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode status"); }
-                return Reply(req, "200 OK", "application/json", text.get());
-            }, this},
-            {"/api/drive", HTTP_POST, HttpControl, this},
+            {"/api/status", HTTP_GET, HttpMotionConfig, this},
+            {"/api/motion-config", HTTP_GET, HttpMotionConfig, this},
+            {"/api/motion-config", HTTP_POST, HttpControl, this},
+            {"/api/move", HTTP_POST, HttpControl, this},
+            {"/api/rotate", HTTP_POST, HttpControl, this},
             {"/api/stop", HTTP_POST, HttpControl, this},
-            {"/api/speed_limits", HTTP_POST, HttpControl, this},
-            {"/api/wheels", HTTP_POST, HttpControl, this},
-            {"/api/calibrate", HTTP_POST, HttpControl, this},
-            {"/api/calibration/reset", HTTP_POST, HttpControl, this},
             {"/api/distance", HTTP_GET, [](httpd_req_t* req) {
                 CJsonUniquePtr result(Self(req)->ReadDistance());
                 CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));

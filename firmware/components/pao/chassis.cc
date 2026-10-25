@@ -4,105 +4,154 @@
 #include <cmath>
 
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "motor.h"
+
+namespace {
+constexpr TickType_t kUpdateTicks = pdMS_TO_TICKS(20);
+
+float approach(float current, float target, float step) {
+    return current + std::clamp(target - current, -step, step);
+}
+}  // namespace
 
 Chassis::Chassis(Motor& left, Motor& right) : left_(left), right_(right) {
     if (&left_ == &right_) {
         ESP_ERROR_CHECK(ESP_ERR_INVALID_ARG);
     }
-    drive(0, 0);
+    left_.setSpeed(0);
+    right_.setSpeed(0);
+    task_stopped_ = xSemaphoreCreateBinary();
+    ESP_ERROR_CHECK(task_stopped_ ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(taskEntry, "chassis", 4096, this, 5, &task_) == pdPASS
+                        ? ESP_OK : ESP_ERR_NO_MEM);
 }
 
 Chassis::~Chassis() {
-    drive(0, 0);
-}
-
-void Chassis::drive(float forward, float turn) {
-    if (!std::isfinite(forward) || !std::isfinite(turn)) {
-        forward = 0;
-        turn = 0;
+    stop();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        running_ = false;
     }
-    forward = std::clamp(forward, -1.0f, 1.0f);
-    turn = std::clamp(turn, -1.0f, 1.0f);
-    const auto [left, right] = Mix(forward, turn);
-    driveWheels(left, right);
+    xTaskNotifyGive(task_);
+    xSemaphoreTake(task_stopped_, portMAX_DELAY);
+    vSemaphoreDelete(task_stopped_);
 }
 
-std::pair<float, float> Chassis::Mix(float forward, float turn) {
-    // 差速量随前进速度减小：原地（forward=0）时为 turn，全速时减半，
-    // 使边走边转时内侧轮仍同向转动，而不是停住或反转。
-    const float steer = turn * (1.0f - 0.5f * std::fabs(forward));
-    const float left_speed = forward - steer;
-    const float right_speed = forward + steer;
-    const float scale = std::max({1.0f, std::fabs(left_speed), std::fabs(right_speed)});
-    return {left_speed / scale, right_speed / scale};
+bool Chassis::validConfig(const ChassisConfig& config) {
+    return config.ramp_time_ms <= 3000 && std::isfinite(config.left_scale) &&
+           std::isfinite(config.right_scale) && config.left_scale >= 0 &&
+           config.left_scale <= 1 && config.right_scale >= 0 && config.right_scale <= 1;
 }
 
-void Chassis::driveWheels(float left, float right) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!std::isfinite(left) || !std::isfinite(right)) {
-        left = right = 0;
-    }
-    const auto [limited_left, limited_right] = Limit(std::clamp(left, -1.0f, 1.0f), std::clamp(right, -1.0f, 1.0f));
-    left_.setSpeed(limited_left * left_gain_ / 1000.0f);
-    right_.setSpeed(limited_right * right_gain_ / 1000.0f);
-}
-
-std::pair<float, float> Chassis::Limit(float left, float right) const {
-    // 分别缩放平移和差速分量，使直接控制两轮也不能绕过速度上限；之后再补偿电机差异。
-    const float linear = (left + right) * 0.5f * linear_limit_ / 100.0f;
-    const float turn = (right - left) * 0.5f * turn_limit_ / 100.0f;
-    return {linear - turn, linear + turn};
-}
-
-bool Chassis::setSpeedLimits(int linear, int turn) {
-    if (linear < 0 || linear > 100 || turn < 0 || turn > 100) {
+bool Chassis::setConfig(const ChassisConfig& config) {
+    if (!validConfig(config)) {
         return false;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    linear_limit_ = linear;
-    turn_limit_ = turn;
+    config_ = config;
+    if (config_.ramp_time_ms == 0) {
+        advanceLocked(0);
+    }
+    xTaskNotifyGive(task_);
     return true;
 }
 
-std::pair<int, int> Chassis::speedLimits() {
+ChassisConfig Chassis::config() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    return {linear_limit_, turn_limit_};
+    return config_;
 }
 
-bool Chassis::setWheelCalibration(int left, int right) {
-    if (left < 100 || left > 1000 || right < 100 || right > 1000) {
-        return false;
+void Chassis::setMotion(Motion motion, float speed) {
+    if (!std::isfinite(speed)) {
+        speed = 0;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    left_gain_ = left;
-    right_gain_ = right;
-    return true;
+    requested_ = motion;
+    target_speed_ = std::clamp(speed, -1.0f, 1.0f);
+    if (config_.ramp_time_ms == 0) {
+        advanceLocked(0);
+    }
+    xTaskNotifyGive(task_);
 }
 
-std::pair<int, int> Chassis::wheelCalibration() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return {left_gain_, right_gain_};
+void Chassis::move(float speed) {
+    setMotion(Motion::Move, speed);
 }
 
-bool Chassis::calibrateForward(float forward, float turn) {
-    if (!std::isfinite(forward) || !std::isfinite(turn) || forward <= 0 || forward > 1 || std::fabs(turn) > 1) {
-        return false;
-    }
+void Chassis::rotate(float speed) {
+    setMotion(Motion::Rotate, speed);
+}
+
+void Chassis::stop() {
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto mixed = Mix(forward, turn);
-    const auto [left, right] = Limit(mixed.first, mixed.second);
-    if (left <= 0 || right <= 0) {
-        return false;
+    requested_ = Motion::Stopped;
+    active_ = Motion::Stopped;
+    target_speed_ = 0;
+    current_speed_ = 0;
+    writeMotorsLocked();
+}
+
+void Chassis::taskEntry(void* arg) {
+    static_cast<Chassis*>(arg)->run();
+    vTaskDelete(nullptr);
+}
+
+void Chassis::run() {
+    int64_t last_update = esp_timer_get_time();
+    while (true) {
+        ulTaskNotifyTake(pdTRUE, kUpdateTicks);
+        const int64_t now = esp_timer_get_time();
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!running_) {
+            break;
+        }
+        advanceLocked(std::max<int64_t>(0, now - last_update) / 1000000.0f);
+        last_update = now;
     }
-    // 用户已用这组转向补偿走直；合并现有校正后归一化，避免要求电机超额输出。
-    const float l = left * left_gain_, r = right * right_gain_;
-    const float scale = std::max(l, r);
-    const int left_gain = std::lround(l / scale * 1000), right_gain = std::lround(r / scale * 1000);
-    if (left_gain < 100 || right_gain < 100) {
-        return false;
+    xSemaphoreGive(task_stopped_);
+}
+
+void Chassis::advanceLocked(float elapsed_seconds) {
+    const float step = config_.ramp_time_ms == 0
+                           ? 2.0f : elapsed_seconds * 1000.0f / config_.ramp_time_ms;
+    if (current_speed_ == 0) {
+        applied_left_scale_ = config_.left_scale;
+        applied_right_scale_ = config_.right_scale;
+    } else {
+        applied_left_scale_ = approach(applied_left_scale_, config_.left_scale, step);
+        applied_right_scale_ = approach(applied_right_scale_, config_.right_scale, step);
     }
-    left_gain_ = left_gain;
-    right_gain_ = right_gain;
-    return true;
+
+    if (active_ != requested_) {
+        current_speed_ = approach(current_speed_, 0, step);
+        if (current_speed_ == 0) {
+            active_ = requested_;
+            if (config_.ramp_time_ms == 0) {
+                current_speed_ = target_speed_;
+            }
+        }
+    } else if (current_speed_ * target_speed_ < 0) {
+        current_speed_ = approach(current_speed_, 0, step);
+        if (current_speed_ == 0 && config_.ramp_time_ms == 0) {
+            current_speed_ = target_speed_;
+        }
+    } else {
+        current_speed_ = approach(current_speed_, target_speed_, step);
+    }
+    writeMotorsLocked();
+}
+
+void Chassis::writeMotorsLocked() {
+    const float left = current_speed_ * applied_left_scale_ *
+                       (active_ == Motion::Rotate ? -1.0f : 1.0f);
+    const float right = current_speed_ * applied_right_scale_;
+    if (left != last_left_output_) {
+        left_.setSpeed(left);
+        last_left_output_ = left;
+    }
+    if (right != last_right_output_) {
+        right_.setSpeed(right);
+        last_right_output_ = right;
+    }
 }

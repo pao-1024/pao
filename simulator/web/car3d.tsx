@@ -55,8 +55,6 @@ export function Car3D(props: Props) {
   const [distance, setDistance] = useState("20");
   const requestedDistance = Number(distance);
   const [reading, setReading] = useState("");
-  const [leftWheel, setLeftWheel] = useState(0);
-  const [rightWheel, setRightWheel] = useState(0);
   async function request(path: string, method = "GET") {
     try {
       const response = await fetch(`http://127.0.0.1:8081${path}`, { method });
@@ -371,13 +369,7 @@ export function Car3D(props: Props) {
       <button onClick={() => void request("/api/distance")}>测距 / 进度</button>
       <output aria-live="polite">{reading}</output>
     </div>
-    <div className="car3d-ranging">
-      <span>左右轮独立调速 · 受行驶/旋转上限与直行校正约束</span>
-      <label>左轮 <input aria-label="左轮速度" type="range" min="-100" max="100" value={leftWheel} onChange={event => setLeftWheel(event.target.valueAsNumber)} /> {leftWheel}%</label>
-      <label>右轮 <input aria-label="右轮速度" type="range" min="-100" max="100" value={rightWheel} onChange={event => setRightWheel(event.target.valueAsNumber)} /> {rightWheel}%</label>
-      <button onClick={() => void request(`/api/wheels?left=${leftWheel}&right=${rightWheel}&duration_ms=1000`, "POST")}>运行 1 秒</button>
-      <a href="http://127.0.0.1:8081/#calibrate" target="_blank" rel="noreferrer">摇杆与直行校正</a>
-    </div>
+    <div className="car3d-ranging"><a href="http://127.0.0.1:8081/" target="_blank" rel="noreferrer">方向遥控与运动校准</a></div>
     <div className="car3d-reset"><button className="small" onClick={() => overview.current()}>全场</button><button className="small" onClick={() => reset.current()}>跟车</button></div>
     </div>
   </div>;
