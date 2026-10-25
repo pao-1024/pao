@@ -12,6 +12,7 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
+#include "settings.h"
 
 #include <driver/i2c_master.h>
 #include <esp_check.h>
@@ -24,6 +25,7 @@
 
 #include <atomic>
 #include <cstdlib>
+#include <cstdio>
 #include <mutex>
 
 #define TAG "PaoBoard"
@@ -80,6 +82,26 @@ private:
         }
         ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
         return chassis_generation_;
+    }
+
+    void DriveWheels(int left, int right, int duration_ms) {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
+        if (left != 0 || right != 0) {
+            const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
+            chassis_deadline_ = esp_timer_get_time() + duration_us;
+            ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
+            chassis_.driveWheels(left / 100.0f, right / 100.0f);
+        }
+        ESP_LOGI(TAG, "Wheel drive: left=%d right=%d duration_ms=%d", left, right, duration_ms);
+    }
+
+    void SaveWheelCalibration() {
+        const auto [left, right] = chassis_.wheelCalibration();
+        Settings settings("chassis", true);
+        settings.SetInt("left_gain", left);
+        settings.SetInt("right_gain", right);
+        ESP_LOGI(TAG, "Wheel calibration saved: left=%d right=%d permille", left, right);
     }
 
     ToolResult MoveForward(int distance_cm, int speed) {
@@ -162,6 +184,10 @@ private:
             }
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
+        Settings settings("chassis");
+        if (!chassis_.setWheelCalibration(settings.GetInt("left_gain", 1000), settings.GetInt("right_gain", 1000))) {
+            ESP_LOGW(TAG, "Invalid wheel calibration; using defaults");
+        }
         if (xTaskCreate([](void* arg) {
                 static_cast<PaoBoard*>(arg)->RunDistanceControl();
             }, "distance_move", 4096, this, 5, &distance_task_) != pdPASS) {
@@ -371,7 +397,7 @@ private:
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.server_port = 80;
         config.ctrl_port = 32769;
-        config.max_uri_handlers = 8;
+        config.max_uri_handlers = 10;
         config.lru_purge_enable = true;
         if (httpd_start(&control_server_, &config) != ESP_OK) {
             ESP_LOGE(TAG, "Control server failed to start");
@@ -383,7 +409,10 @@ private:
                 return Reply(req, "200 OK", "text/html; charset=utf-8", kControlPage);
             }, this},
             {"/api/status", HTTP_GET, [](httpd_req_t* req) {
-                return Reply(req, "200 OK", "application/json", "{}");
+                const auto [left, right] = Self(req)->chassis_.wheelCalibration();
+                char status[80];
+                std::snprintf(status, sizeof(status), "{\"left_gain_permille\":%d,\"right_gain_permille\":%d}", left, right);
+                return Reply(req, "200 OK", "application/json", status);
             }, this},
             {"/api/drive", HTTP_POST, [](httpd_req_t* req) {
                 int forward, turn, duration_ms;
@@ -396,6 +425,37 @@ private:
             }, this},
             {"/api/stop", HTTP_POST, [](httpd_req_t* req) {
                 Self(req)->DriveChassis(0, 0, 0);
+                return Ok(req);
+            }, this},
+            {"/api/wheels", HTTP_POST, [](httpd_req_t* req) {
+                int left, right, duration_ms;
+                if (!QueryInt(req, "left", 0, -100, 100, left) || !QueryInt(req, "right", 0, -100, 100, right) ||
+                    !QueryInt(req, "duration_ms", 1000, 100, 15000, duration_ms)) {
+                    return BadRequest(req, "left/right 取 -100..100，duration_ms 取 100..15000");
+                }
+                Self(req)->DriveWheels(left, right, duration_ms);
+                return Ok(req);
+            }, this},
+            {"/api/calibrate", HTTP_POST, [](httpd_req_t* req) {
+                int forward, turn;
+                if (!QueryInt(req, "forward", 0, 1, 100, forward) || !QueryInt(req, "turn", 0, -100, 100, turn)) {
+                    return BadRequest(req, "需要向前微调的 forward/turn");
+                }
+                auto* board = Self(req);
+                std::lock_guard<std::mutex> lock(board->chassis_mutex_);
+                board->StopChassisLocked(board->distance_active_ ? "cancelled" : "idle");
+                if (!board->chassis_.calibrateForward(forward / 100.0f, turn / 100.0f)) {
+                    return BadRequest(req, "请先向前微调至走直；两轮都须向前，修正比例不能低于 10%");
+                }
+                board->SaveWheelCalibration();
+                return Ok(req);
+            }, this},
+            {"/api/calibration/reset", HTTP_POST, [](httpd_req_t* req) {
+                auto* board = Self(req);
+                std::lock_guard<std::mutex> lock(board->chassis_mutex_);
+                board->StopChassisLocked(board->distance_active_ ? "cancelled" : "idle");
+                board->chassis_.setWheelCalibration(1000, 1000);
+                board->SaveWheelCalibration();
                 return Ok(req);
             }, this},
             {"/api/distance", HTTP_GET, [](httpd_req_t* req) {

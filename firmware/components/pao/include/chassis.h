@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <utility>
 
 class Motor;
 
@@ -18,9 +19,18 @@ public:
     // drive(0, 0) 滑行停止；有限越界值限幅，任一非有限值使两轮停止。
     // 不能在 ISR 中调用。
     void drive(float forward, float turn);
+    void driveWheels(float left, float right);
+
+    // 修正比例以千分比保存，仅允许减速校正；返回 false 时保持原校正。
+    bool setWheelCalibration(int left, int right);
+    std::pair<int, int> wheelCalibration();
+    bool calibrateForward(float forward, float turn);
 
 private:
     Motor& left_;
     Motor& right_;
     std::mutex mutex_;
+    int left_gain_ = 1000;
+    int right_gain_ = 1000;
+    static std::pair<float, float> Mix(float forward, float turn);
 };
