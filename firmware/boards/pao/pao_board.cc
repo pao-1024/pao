@@ -126,14 +126,34 @@ private:
         McpServer::GetInstance().AddTool("self.launcher.fire",
             "是什么：小车上的电磁炮（电磁发射器），常供电并自动充能，固件只能按下它的发射按钮。\n"
             "能做什么：开炮，立即发射一次。用户说开炮、开火、发射、射击、打一发、biu 一下时调用。"
-            "发射后电磁炮需要约 10 秒重新充满，间隔太短的一发威力不足甚至打空；"
-            "要连续开多炮就调用多次，每次间隔约 10 秒。固件无法得知是否已充满，也没有充能或断电工具。\n"
+            "要连续开多炮就调用多次。没有充能或断电工具。\n"
             "参数：无。\n"
             "返回：true 表示已发射。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
                 FireLauncher();
                 return true;
+            });
+    }
+
+    void InitializeNetworkTools() {
+        McpServer::GetInstance().AddTool("self.network.get_access_info",
+            "是什么：查询小车当前的 IP 地址和网页后台访问地址。\n"
+            "能做什么：用户问你的 IP 是多少、后台地址是什么、怎么打开遥控页面时调用，"
+            "将返回的 IP 和完整后台地址告诉用户，后台需要在同一局域网内访问。\n"
+            "参数：无。\n"
+            "返回：当前 IP 地址和后台访问地址；未联网或后台未启动时返回错误。",
+            PropertyList(),
+            [this](const PropertyList&) -> ToolResult {
+                auto& wifi = WifiManager::GetInstance();
+                if (!wifi.IsConnected()) {
+                    return std::unexpected("设备尚未连接 Wi-Fi，无法提供 IP 和后台访问地址。");
+                }
+                const auto ip = wifi.GetIpAddress();
+                if (control_server_ == nullptr) {
+                    return std::unexpected("设备 IP 地址：" + ip + "；网页后台未启动，暂时无法访问。");
+                }
+                return "IP 地址：" + ip + "\n后台访问地址：http://" + ip + "/";
             });
     }
 
@@ -337,6 +357,7 @@ public:
         }
         InitializeChassisTools();
         InitializeLauncherTools();
+        InitializeNetworkTools();
         InitializeStandbyTool();
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
