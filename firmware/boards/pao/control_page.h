@@ -101,7 +101,7 @@ function syncMotion(force=false){const dir=selectedDir();markDirection(dir);
     queueMotion("/api/chassis",{action:directions[dir],duration_ms:400});
     lastSent=now;lastDir=dir;currentDir=dir}}
 function clearControls(){pointerDir=null;held.clear();currentDir=null;lastDir=null;pendingMotion=null;markDirection(null)}
-function emergencyStop(){clearControls();queueMotion("/api/chassis",{action:"emergency_stop"})}
+function emergencyStop(){clearControls();call("/api/chassis",{action:"emergency_stop"}).catch(reportError)}
 for(const button of document.querySelectorAll(".direction")){
   button.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();pointerDir=button.dataset.dir;
     button.setPointerCapture(e.pointerId);syncMotion(true)};
@@ -148,7 +148,7 @@ addEventListener("keydown",e=>{if(e.target instanceof Element&&e.target.closest(
 addEventListener("keyup",e=>{if(keys[e.code]){held.delete(e.code);syncMotion(true)}});
 addEventListener("blur",emergencyStop);
 document.addEventListener("visibilitychange",()=>{if(document.hidden)emergencyStop()});
-addEventListener("pagehide",()=>{fetch("/api/chassis?action=emergency_stop",{method:"POST",keepalive:true}).catch(()=>{})});
+addEventListener("pagehide",emergencyStop);
 async function pollDistance(connection){if(socket!==connection||connection.readyState!==WebSocket.OPEN)return;
   const output=$("distance");try{const state=await call("/api/distance");
     const valid=!state.error&&Number.isFinite(state.distance_cm);

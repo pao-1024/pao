@@ -4,10 +4,12 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { ControlClient } from "./control.ts";
 import { MAX_SPEED, motion } from "./protocol.ts";
 import type { Pose, World } from "./protocol.ts";
 
 type Props = { left: number; right: number; charging: boolean; firing: boolean; energy: number; shots: number; world: World | null };
+type DistanceReading = { distance_cm: number | null; error: string | null; motion_status: string; moved_cm: number };
 
 const WHEEL_RADIUS = 0.36, TRAIL = 900, SHOT_SPEED = 9, SHOT_LIFE = 1.6;
 const BACKGROUND = 0x080b10, ACCENT = new THREE.Color(0x4cc2ff), CHARGE = new THREE.Color(0xffa63d);
@@ -55,15 +57,20 @@ export function Car3D(props: Props) {
   const [distance, setDistance] = useState("20");
   const requestedDistance = Number(distance);
   const [reading, setReading] = useState("");
-  async function request(path: string, method = "GET") {
+  const control = useRef<ControlClient | null>(null);
+  useEffect(() => {
+    const client = control.current = new ControlClient("ws://127.0.0.1:8081/ws");
+    return () => { control.current = null; client.close(); };
+  }, []);
+  async function request(path: string, params?: Record<string, string | number>) {
     try {
-      const response = await fetch(`http://127.0.0.1:8081${path}`, { method });
-      const text = await response.text();
-      if (!response.ok) throw new Error(text);
-      setReading(path === "/api/distance" ? (() => {
-        const result = JSON.parse(text);
-        return `${result.distance_cm == null ? result.error : `${result.distance_cm.toFixed(1)} cm`} · ${result.motion_status} · 已走 ${result.moved_cm.toFixed(1)} cm`;
-      })() : "指令已接受，点击测距查看进度");
+      if (!control.current) throw Error("遥控未连接");
+      const result = await control.current.request<DistanceReading | true>(path, params);
+      if (result === true) setReading("指令已接受，点击测距查看进度");
+      else {
+        const distance = result.distance_cm == null ? result.error : `${result.distance_cm.toFixed(1)} cm`;
+        setReading(`${distance} · ${result.motion_status} · 已走 ${result.moved_cm.toFixed(1)} cm`);
+      }
     } catch (error) { setReading(error instanceof Error ? error.message : String(error)); }
   }
 
@@ -364,8 +371,8 @@ export function Car3D(props: Props) {
     <div className="car3d-ranging">
       <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"}</span>
       <label>前进 <input aria-label="前进厘米数" type="number" min="1" max="390" value={distance} onChange={event => setDistance(event.target.value)} /> cm</label>
-      <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request(`/api/move_forward?distance_cm=${requestedDistance}`, "POST")}>前进</button>
-      <button onClick={() => void request("/api/chassis?action=emergency_stop", "POST")}>停止</button>
+      <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request("/api/move_forward", { distance_cm: requestedDistance })}>前进</button>
+      <button onClick={() => void request("/api/chassis", { action: "emergency_stop" })}>停止</button>
       <button onClick={() => void request("/api/distance")}>测距 / 进度</button>
       <output aria-live="polite">{reading}</output>
     </div>

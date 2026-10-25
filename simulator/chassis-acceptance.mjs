@@ -2,6 +2,7 @@
 // Run against a booted PAO simulator. Its WebSocket carries decoded MCPWM outputs
 // from the production firmware; each phase is separated by a simulator restart.
 import assert from 'node:assert/strict';
+import { ControlClient } from './web/control.ts';
 
 const phase = process.argv[2];
 if (!['exercise', 'restart-zero', 'restart-final'].includes(phase)) {
@@ -9,7 +10,7 @@ if (!['exercise', 'restart-zero', 'restart-final'].includes(phase)) {
   process.exit(2);
 }
 
-const control = 'http://127.0.0.1:8081';
+const control = new ControlClient('ws://127.0.0.1:8081/ws', 30000);
 const traces = [];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const closeTo = (value, expected, tolerance = 0.07) =>
@@ -33,26 +34,16 @@ async function waitSim(seconds) {
   return waitFor(trace => trace.time >= start + seconds, `${seconds}s of simulator time`);
 }
 
-async function request(path, params, method = 'POST', expectedStatus = 200) {
-  const query = new URLSearchParams(params ?? {}).toString();
-  const url = control + path + (query ? `?${query}` : '');
-  const response = await fetch(url, { method, signal: AbortSignal.timeout(30000) });
-  if (response.status !== expectedStatus) {
-    assert.fail(`${url}: expected ${expectedStatus}, got ${response.status}: ${await response.text()}`);
-  }
-  return response;
-}
-
 async function config() {
-  return (await request('/api/motion-config', null, 'GET')).json();
+  return control.request('/api/motion-config');
 }
 
 async function action(name, duration_ms = 3000) {
-  await request('/api/chassis', { action: name, duration_ms });
+  await control.request('/api/chassis', { action: name, duration_ms });
 }
 
 async function saveConfig(settings) {
-  await request('/api/motion-config', settings);
+  await control.request('/api/motion-config', settings);
   const loaded = await config();
   assert.equal(loaded.ramp_time_ms, settings.ramp_time_ms);
   closeTo(loaded.left_scale, settings.left_scale, 0.00001);
@@ -131,11 +122,11 @@ async function exercise() {
   console.log('PASS: immediate stop');
 
   await saveConfig({ ramp_time_ms: 1000, left_scale: 1, right_scale: 1 });
-  await request('/api/move_forward', { distance_cm: 20 });
+  await control.request('/api/move_forward', { distance_cm: 20 });
   await waitFor(trace => trace.left > 0.1 && trace.right > 0.1, 'distance move through new chassis');
   await action('emergency_stop');
   await waitFor(stopped, 'distance move cancellation');
-  const distance = await (await request('/api/distance', null, 'GET')).json();
+  const distance = await control.request('/api/distance');
   assert.equal(distance.motion_status, 'cancelled');
   console.log('PASS: distance move uses new chassis and stop cancels it');
 
@@ -152,11 +143,12 @@ async function exercise() {
     { ramp_time_ms: 3001, left_scale: 0, right_scale: 1 },
     { ramp_time_ms: 0, left_scale: 'nan', right_scale: 1 },
     { ramp_time_ms: 0, left_scale: 0 },
-  ]) await request('/api/motion-config', invalid, 'POST', 400);
+  ]) await assert.rejects(control.request('/api/motion-config', invalid), /参数需为/);
   assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1,
     move_output: 50, rotate_output: 60 });
-  await request('/api/drive', { forward: 20, turn: 20 }, 'POST', 404);
-  console.log('PASS: invalid values do not alter config; old drive route is absent');
+  await assert.rejects(control.request('/api/drive', { forward: 20, turn: 20 }), /未知控制指令/);
+  await assert.rejects(control.request('/api/status'), /未知控制指令/);
+  console.log('PASS: invalid values do not alter config; unused commands are absent');
 }
 
 async function restartZero() {
@@ -192,5 +184,6 @@ try {
   if (phase === 'restart-zero') await restartZero();
   if (phase === 'restart-final') await restartFinal();
 } finally {
+  control.close();
   socket?.close();
 }
