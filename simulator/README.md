@@ -24,6 +24,13 @@
 
 ## 启动
 
+也可使用 PAO Studio 的仿真页管理本地环境、构建、启停和日志：运行
+`task platform:dev`，在“仿真”页点击“准备环境 / 重新构建”。
+对应命令 `task simulator:prepare` 将 ESP-IDF 6.0.1 和工具链安装到本工作目录
+`tmp/esp-idf`、`tmp/idf-tools`，再构建固件与模拟器，不改变 EIM 的选择。
+这个入口仍需要本机安装 Git、Python、Task、pnpm、Rust 及 C/C++ 构建工具。
+首次下载、安装、编译需要联网；日志保留具体错误，失败后可以重新执行。
+
 需要 Git、Python 3.10+、Task、Node.js 24+、pnpm 10.32.1 和稳定版 Rust 工具链。
 ESP-IDF 使用主固件相同的 EIM 入口；先安装并选择 SDK，或激活已有 SDK 环境。
 首次需要联网下载源码、组件及模拟器依赖，后续复用缓存。
@@ -36,7 +43,8 @@ task simulator:run
 ```
 
 启动器从已激活 ESP-IDF 环境的 `ESP_ROM_ELF_DIR` 自动定位 `esp32s3_rev0_rom.elf`；
-未激活时，通过 `eim run` 读取当前选中环境的 ROM 目录。
+未激活时优先读取 `task simulator:prepare` 安装到 `tmp/idf-tools` 的 ROM，
+没有本地 ROM 时通过 `eim run` 读取当前选中环境的 ROM 目录。
 需要使用其他 ROM 时，可运行 `task simulator:run -- --rom '<ROM ELF 的绝对路径>'`。
 首次启动自动生成本地单播 MAC 和 UUID，保存到 `tmp/esp32sim-full-flow/identity.json`，
 后续每次启动复用同一身份，无需手动传入设备参数。

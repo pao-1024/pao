@@ -347,11 +347,98 @@ export function routePoints(
   connection: Pick<Connection, "a" | "b">,
   trace: Pick<Trace, "points">,
 ) {
-  return [
+  const anchors = [
     padPoint(nodes, connection.a),
     ...trace.points,
     padPoint(nodes, connection.b),
   ];
+  return anchors.flatMap((p, i) => i ? corner(anchors[i - 1], p).slice(1) : [p]);
+}
+
+// Routing anchors expand to horizontal/vertical + 45-degree copper segments.
+export function corner(a: Point, b: Point): Point[] {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const diagonal = Math.min(Math.abs(dx), Math.abs(dy));
+  const elbow = { x: a.x + Math.sign(dx) * diagonal, y: a.y + Math.sign(dy) * diagonal };
+  return [a, elbow, b].filter((p, i, list) => !i || Math.hypot(p.x - list[i - 1].x, p.y - list[i - 1].y) > 1e-8);
+}
+
+export const boardRules = { clearance: 0.25, edge: 0.5, padRadius: 0.8, minWidth: 0.2 };
+function pointDistance(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+function segmentDistance(a: Point, b: Point, c: Point, d: Point) {
+  const cross = (p: Point, q: Point, r: Point) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0) return 0;
+  return Math.min(pointDistance(a, c, d), pointDistance(b, c, d), pointDistance(c, a, b), pointDistance(d, a, b));
+}
+function segments(points: Point[]) {
+  return points.slice(1).map((b, i) => [points[i], b] as const);
+}
+export function traceIssues(nodes: Module[], connections: Connection[], traces: Trace[],
+  board: { width: number; height: number }, trace: Trace): string[] {
+  const c = connections.find((c) => c.id === trace.connection);
+  if (!c) return ["走线没有对应连接"];
+  if (!Number.isFinite(trace.width) || trace.width < boardRules.minWidth || trace.width > 2)
+    return ["线宽须在 0.2–2 mm 范围内"];
+  const points = routePoints(nodes, c, trace);
+  if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ["走线坐标无效"];
+  const issues: string[] = [];
+  const margin = trace.width / 2 + boardRules.edge;
+  if (points.some((p) => p.x < margin || p.y < margin || p.x > board.width - margin || p.y > board.height - margin))
+    issues.push("铜线距板边不足 0.5 mm（含线宽）");
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i - 1], b = points[i], d = points[i + 1];
+    if ((b.x - a.x) * (d.x - b.x) + (b.y - a.y) * (d.y - b.y) < -1e-8)
+      issues.push("走线存在折返或锐角，请调整拐点");
+  }
+  const net = new Set(nets(nodes, connections).find((g) => g.includes(c.a)) || [c.a, c.b]);
+  const copper = segments(points);
+  for (const node of nodes) for (const pin of pinSets[node.type]) {
+    const key = endpoint(node.id, pin.id);
+    if (net.has(key)) continue;
+    const pad = padPoint(nodes, key);
+    if (copper.some(([a, b]) => pointDistance(pad, a, b) < boardRules.padRadius + trace.width / 2 + boardRules.clearance - 1e-8))
+      issues.push(`距异网焊盘 ${pinLabel(nodes, key)} 不足 0.25 mm`);
+  }
+  for (const other of traces) {
+    if (other.connection === trace.connection || other.layer !== trace.layer) continue;
+    const oc = connections.find((c) => c.id === other.connection);
+    if (!oc || net.has(oc.a)) continue;
+    const threshold = (other.width + trace.width) / 2 + boardRules.clearance;
+    if (segments(routePoints(nodes, oc, other)).some(([c, d]) =>
+      copper.some(([a, b]) => segmentDistance(a, b, c, d) < threshold - 1e-8)))
+      issues.push(`与同层异网走线 ${other.connection} 的净距不足 0.25 mm`);
+  }
+  return [...new Set(issues)];
+}
+
+// Try short doglegs first; failure is explicit rather than accepting an obstructed route.
+export function suggestTrace(nodes: Module[], connections: Connection[], traces: Trace[],
+  board: { width: number; height: number }, trace: Trace): Trace | null {
+  const connection = connections.find((c) => c.id === trace.connection);
+  if (!connection) return null;
+  const a = padPoint(nodes, connection.a), b = padPoint(nodes, connection.b);
+  const candidates: Point[][] = [[], [{ x: a.x, y: b.y }], [{ x: b.x, y: a.y }]];
+  for (let offset = 2; offset <= Math.max(board.width, board.height); offset += 2) {
+    for (const sign of [-1, 1]) {
+      candidates.push([{ x: a.x + offset * sign, y: a.y }, { x: a.x + offset * sign, y: b.y }]);
+      candidates.push([{ x: a.x, y: a.y + offset * sign }, { x: b.x, y: a.y + offset * sign }]);
+    }
+  }
+  // Escape a dense header sideways and approach the destination from above/below.
+  for (const dx of [-2, 2, -4, 4, -8, 8, -16, 16])
+    for (const dy of [-2, 2, -4, 4, -8, 8, -16, 16]) {
+      candidates.push([{ x: a.x + dx, y: a.y }, { x: a.x + dx, y: b.y + dy }, { x: b.x, y: b.y + dy }]);
+      candidates.push([{ x: a.x, y: a.y + dy }, { x: b.x + dx, y: a.y + dy }, { x: b.x + dx, y: b.y }]);
+    }
+  for (const points of candidates) {
+    const candidate = { ...trace, points };
+    if (!traceIssues(nodes, connections, traces, board, candidate).length) return candidate;
+  }
+  return null;
 }
 export function boardIssues(
   nodes: Module[],
@@ -364,21 +451,23 @@ export function boardIssues(
     for (const p of pinSets[n.type]) {
       const pt = padPoint(nodes, endpoint(n.id, p.id));
       if (
-        pt.x < 1 ||
-        pt.y < 1 ||
-        pt.x > board.width - 1 ||
-        pt.y > board.height - 1
+        pt.x < boardRules.padRadius + boardRules.edge ||
+        pt.y < boardRules.padRadius + boardRules.edge ||
+        pt.x > board.width - boardRules.padRadius - boardRules.edge ||
+        pt.y > board.height - boardRules.padRadius - boardRules.edge
       )
         issues.push(
-          `${pinLabel(nodes, endpoint(n.id, p.id))} 焊盘越界或距板边不足 1 mm`,
+          `${pinLabel(nodes, endpoint(n.id, p.id))} 焊盘铜皮距板边不足 0.5 mm`,
         );
     }
   for (const t of traces) {
-    const c = connections.find((c) => c.id === t.connection);
-    if (!c) continue;
-    for (const p of routePoints(nodes, c, t))
-      if (p.x < 0 || p.y < 0 || p.x > board.width || p.y > board.height)
-        issues.push(`走线 ${t.connection} 超出板框`);
+    issues.push(...traceIssues(nodes, connections, traces, board, t).map((issue) => `走线 ${t.connection}：${issue}`));
+  }
+  const pads = nodes.flatMap((n) => pinSets[n.type].map((p) => endpoint(n.id, p.id)));
+  for (let i = 0; i < pads.length; i++) for (let j = i + 1; j < pads.length; j++) {
+    const a = padPoint(nodes, pads[i]), b = padPoint(nodes, pads[j]);
+    if (Math.hypot(a.x - b.x, a.y - b.y) < 2 * boardRules.padRadius + boardRules.clearance)
+      issues.push(`焊盘重叠或间距不足：${pinLabel(nodes, pads[i])} / ${pinLabel(nodes, pads[j])}`);
   }
   return [...new Set(issues)];
 }

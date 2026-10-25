@@ -7,6 +7,9 @@ import {
   pinLabel,
   routePoints,
   boardIssues,
+  traceIssues,
+  suggestTrace,
+  corner,
 } from "./circuit.ts";
 import type { Module, Connection, Trace } from "./catalog.ts";
 
@@ -39,7 +42,7 @@ export function PCB({
     return () => window.removeEventListener("keydown", cancel);
   }, []);
   const [hint, setHint] = useState(
-    "选择连接并开始布线；点击板内放置拐点，再点击目标焊盘。",
+    "选择连接尝试避障布线，或手动放置路径点；线段自动约束为 45° / 90°。",
   );
   const selected = connections.find((c) => c.id === wire);
   const issues = boardIssues(nodes, connections, traces, board);
@@ -187,6 +190,7 @@ export function PCB({
               const a = padPoint(nodes, c.a),
                 b = padPoint(nodes, c.b),
                 t = traces.find((t) => t.connection === c.id);
+              const invalid = t && traceIssues(nodes, connections, traces, board, t).length > 0;
               return t ? (
                 <polyline
                   key={c.id}
@@ -194,8 +198,9 @@ export function PCB({
                     .map((p) => `${p.x},${p.y}`)
                     .join(" ")}
                   fill="none"
-                  stroke={t.layer === "F.Cu" ? "#eb8a69" : "#78b7e0"}
+                  stroke={invalid ? "#ff405c" : t.layer === "F.Cu" ? "#eb8a69" : "#78b7e0"}
                   strokeWidth={t.width}
+                  strokeDasharray={invalid ? ".8 .4" : undefined}
                 />
               ) : (
                 <line
@@ -213,6 +218,7 @@ export function PCB({
             {draft && selected && (
               <polyline
                 points={[padPoint(nodes, selected.a), ...draft.points]
+                  .flatMap((p, i, points) => i ? corner(points[i - 1], p).slice(1) : [p])
                   .map((p) => `${p.x},${p.y}`)
                   .join(" ")}
                 fill="none"
@@ -231,12 +237,17 @@ export function PCB({
                       setHint("请点击当前连接的目标焊盘。");
                       return;
                     }
+                    const errors = traceIssues(nodes, connections, traces, board, draft);
+                    if (errors.length) {
+                      setHint(`拒绝保存：${errors.join("；")}`);
+                      return;
+                    }
                     onTraces([
                       ...traces.filter((t) => t.connection !== wire),
                       draft,
                     ]);
                     setDraft(null);
-                    setHint("已保存走线；尚未执行完整 DRC。");
+                    setHint("已保存：通过线宽、板边、异网焊盘、同层铜线间距与转角检查。");
                   };
                   return (
                     <g key={key}>
@@ -282,7 +293,7 @@ export function PCB({
           </svg>
         </div>
         <p role="status">
-          {draft && selected ? `布线中 → ${pinLabel(nodes, selected.b)}` : hint}
+          {draft && selected && `布线中 → ${pinLabel(nodes, selected.b)}。`}{hint}
         </p>
       </section>
       <aside className="panel tools">
@@ -329,6 +340,19 @@ export function PCB({
           />
         </label>
         <button
+          disabled={!selected}
+          onClick={() => {
+            const result = suggestTrace(nodes, connections, traces, board, { connection: wire, layer, width, points: [] });
+            if (!result) {
+              setHint("未找到满足间距的短路径。请调整布局、切换铜层或手动添加路径点；没有保存违规走线。");
+              return;
+            }
+            onTraces([...traces.filter((t) => t.connection !== wire), result]);
+            setDraft(null);
+            setHint("已生成并检查避障路径；虚线是待布网络，不是铜线。");
+          }}
+        >尝试避障布线</button>
+        <button
           className="primary"
           disabled={!selected}
           onClick={() =>
@@ -360,8 +384,9 @@ export function PCB({
         >
           删除所选走线
         </button>
-        <h3>基础检查</h3>
-        <p>{issues.length ? issues.join("；") : "未发现板边或走线越界。"}</p>
+        <h3>几何 DRC</h3>
+        <p>最小线宽 0.2 mm · 铜间距 0.25 mm · 铜到板边 0.5 mm。通孔焊盘在双面均参与避障。红色虚线表示布局改变后失效的走线。</p>
+        <p>{issues.length ? issues.join("；") : "当前已布铜线未发现上述几何冲突；不代表完成布线或可以生产。"}</p>
         <div className="notice">
           当前为 2.54 mm 连接器布局草稿，不是厂商模块封装。尚无过孔、完整 ERC /
           DRC 或 Gerber；不能据此打板。

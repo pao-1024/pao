@@ -11,12 +11,17 @@ import uuid
 SPEC = importlib.util.spec_from_file_location("run_esp32sim", Path(__file__).with_name("run-esp32sim.py"))
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
+TEST_TEMP = runner.ROOT / "tmp/temp"
+TEST_TEMP.mkdir(parents=True, exist_ok=True)
 
 
 class RomTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=TEST_TEMP)
         self.addCleanup(self.temp.cleanup)
+        self.root = patch.object(runner, "ROOT", Path(self.temp.name))
+        self.root.start()
+        self.addCleanup(self.root.stop)
         self.rom_dir = Path(self.temp.name) / "ROM files"
         self.rom_dir.mkdir()
         self.rom = self.rom_dir / "esp32s3_rev0_rom.elf"
@@ -33,6 +38,15 @@ class RomTests(unittest.TestCase):
     def test_activated_environment_does_not_need_eim(self):
         runner.os.environ["ESP_ROM_ELF_DIR"] = str(self.rom_dir)
         with patch.object(runner.subprocess, "run", side_effect=AssertionError("EIM invoked")):
+            self.assertEqual(runner.find_rom(), self.rom.resolve())
+
+    def test_project_local_rom_is_used_without_eim(self):
+        local = runner.ROOT / "tmp/idf-tools/tools/esp-rom-elfs/20241011/esp32s3_rev0_rom.elf"
+        local.parent.mkdir(parents=True)
+        local.touch()
+        with patch.object(runner.subprocess, "run", side_effect=AssertionError("EIM invoked")):
+            self.assertEqual(runner.find_rom(), local.resolve())
+            runner.os.environ["ESP_ROM_ELF_DIR"] = str(self.rom_dir)
             self.assertEqual(runner.find_rom(), self.rom.resolve())
 
     def test_selected_eim_environment_is_used_despite_log_output(self):
@@ -70,7 +84,7 @@ class RomTests(unittest.TestCase):
 
 class IdentityTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=TEST_TEMP)
         self.addCleanup(self.temp.cleanup)
         self.state = Path(self.temp.name) / "state"
 

@@ -314,7 +314,7 @@ function App() {
                   <span className="badge">已实现 / 固定板型</span>
                   <h2>PAO 虚拟原型</h2>
                   <p>
-                    连接本地 esp32sim
+                    在工作台准备环境、构建并启停 esp32sim，
                     运行正式固件，观测音频、总线与日志。自由组装设计尚未接入该运行时。
                   </p>
                 </article>
@@ -699,7 +699,7 @@ function App() {
                   <span className="eyebrow">PCB / 载板设计草稿</span>
                   <h1>从连接关系，到板上布局。</h1>
                 </div>
-                <span className="badge">可用 · 手动布线草稿</span>
+                <span className="badge">可用 · 约束布线与几何检查</span>
               </div>
               <PCB
                 nodes={nodes}
@@ -739,7 +739,7 @@ function App() {
                   <p>
                     {unconnected.length} 个必接端子待接，
                     {boardIssues(nodes, connections, traces, board).length}{" "}
-                    项布局边界问题。基础检查不代表完整 ERC / DRC。
+                    项布局与铜线几何问题。基础检查不代表完整 ERC / DRC。
                   </p>
                 </article>
                 <article>

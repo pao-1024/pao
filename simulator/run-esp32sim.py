@@ -19,6 +19,10 @@ def find_rom(rom=None):
     """Use an explicit ROM or the ROM tools from the active ESP-IDF environment."""
     if rom is None:
         directory = os.environ.get("ESP_ROM_ELF_DIR")
+        if not directory:
+            local = sorted((ROOT / "tmp/idf-tools/tools/esp-rom-elfs").glob("*/esp32s3_rev0_rom.elf"))
+            if local:
+                return local[-1].resolve()
         if not directory and shutil.which("eim"):
             result = subprocess.run(
                 ["eim", "run", 'printf "\\nPAO_SIM_ROM_DIR=%s\\n" "$ESP_ROM_ELF_DIR"'],

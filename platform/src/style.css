@@ -1228,3 +1228,13 @@ dialog .actions {
     transition: none !important;
   }
 }
+.runtime-log {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 20px;
+  background: #172c28;
+  color: #dce8db;
+  font: 12px/1.6 monospace;
+}
