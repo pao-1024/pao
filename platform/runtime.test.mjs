@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { allowedRequest } from "./runtime.ts";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
-import { iterateApplication } from "./agent.ts";
+import { iterateApplication, verifyApplication } from "./agent.ts";
 import { validateAgent } from "./src/agent-spec.ts";
+import { UnsupportedHardware } from "./src/hardware-plan.ts";
 
 test("runtime actions reject cross-origin requests, DNS rebinding and missing action header", () => {
   const request = { method: "POST", headers: { host: "127.0.0.1:4173", origin: "http://127.0.0.1:4173", "x-pao-studio": "1" } };
@@ -39,6 +40,10 @@ test("Agent stops at its repair budget and cancellation starts no further work",
   await assert.rejects(iterateApplication({ prompt: "x", signal: controller.signal, update: () => {},
     generate: async () => { calls++; controller.abort(); throw Error("cancel"); }, build: async () => assert.fail(), verify: async () => assert.fail() }), /abort/i);
   assert.equal(calls, 1);
+  calls = 0;
+  await assert.rejects(iterateApplication({ prompt: "camera", signal: new AbortController().signal, update: () => {},
+    generate: async () => { calls++; throw new UnsupportedHardware("没有摄像头"); }, build: async () => assert.fail(), verify: async () => assert.fail() }), /没有摄像头/);
+  assert.equal(calls, 1);
 });
 
 test("Agent validates generated code and bounded scenario contracts", () => {
@@ -47,6 +52,32 @@ test("Agent validates generated code and bounded scenario contracts", () => {
     { ...application, scenarios: [] }, { ...application, scenarios: [step, { ...step, durationMs: -1 }] },
     { ...application, scenarios: [step, { ...step, motorA: 100 }] }, { ...application, scenarios: [step, { ...step, label: "中文" }] }])
     assert.throws(() => validateAgent(value));
+});
+
+test("SIL receives the initial snapshot delivered in the same turn as WebSocket open", async () => {
+  const Original = globalThis.WebSocket;
+  class SnapshotSocket {
+    static OPEN = 1;
+    readyState = 0; time = 0; running = false;
+    constructor() {
+      queueMicrotask(() => {
+        this.readyState = 1; this.onopen();
+        this.onmessage?.({ data: JSON.stringify({ t: "serial", src: "uart0", data: "STUDIO READY\n" }) });
+      });
+    }
+    emit() {
+      this.time += 100;
+      this.onmessage({ data: JSON.stringify({ t: "serial", src: "uart0", data: `STUDIO AGENT time_ms=${this.time} running=${+this.running} level=0 alarm=0 volume=0 tone=0 motor_a=0 motor_b=0 label=${this.running ? "RUN" : "PAUSED"}\n` }) });
+    }
+    send(text) { this.running = JSON.parse(text).line === "app-run"; this.emit(); this.timer ??= setInterval(() => this.emit(), 5); }
+    close() { clearInterval(this.timer); this.readyState = 3; }
+  }
+  globalThis.WebSocket = SnapshotSocket;
+  try {
+    const result = await verifyApplication({ mic: null, amp: null, motor: null, oled: null },
+      { ...application, scenarios: [{ ...step, label: "RUN" }, { ...step, label: "RUN" }] }, AbortSignal.timeout(1000));
+    assert.match(result, /暂停归零/);
+  } finally { globalThis.WebSocket = Original; }
 });
 
 test("browser microphone resamples across blocks and packs the selected physical channel", () => {

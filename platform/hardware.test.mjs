@@ -4,6 +4,40 @@ import { compileHardware, hardwareDesign } from "./src/hardware.ts";
 import { referenceConnections } from "./src/circuit.ts";
 import { completeProject, starter } from "./src/catalog.ts";
 import { firmwareProject } from "./src/firmware.ts";
+import { assembleHardware, validateHardwarePlan, UnsupportedHardware } from "./src/hardware-plan.ts";
+import { buildHardware } from "./agent.ts";
+import { boardIssues, electricalReport } from "./src/circuit.ts";
+import { fileURLToPath } from "node:url";
+
+const plan = (types) => ({ supported: true, title: "设计", summary: "按需选型", modules: types.map((type) => ({ type, reason: "需求所需" })), sharedI2s: false, board: { width: 140, height: 100 } });
+
+test("hardware selection creates distinct BOMs and complete electrical dependencies", () => {
+  const motor = assembleHardware(plan(["motor", "esp", "oled"]));
+  assert.deepEqual(motor.nodes.map((n) => n.type), ["esp", "oled", "motor", "supply", "dcMotor", "dcMotor"]);
+  const loads = motor.nodes.filter((n) => n.type === "dcMotor");
+  assert.notDeepEqual(loads[0].placement, loads[1].placement);
+  assert.deepEqual(boardIssues(motor.nodes, motor.connections, [], motor.board), []);
+  assert.deepEqual(electricalReport(motor.nodes, motor.connections).issues, []);
+  const audio = assembleHardware({ ...plan(["esp", "oled", "mic", "speaker"]), sharedI2s: true });
+  assert.deepEqual(audio.nodes.map((n) => n.type), ["esp", "oled", "mic", "speaker", "supply", "speakerLoad"]);
+  assert.equal(firmwareProject({ ...audio, application: { kind: "diagnostic" } }).spec.sharedI2s, true);
+  assert.deepEqual(electricalReport(audio.nodes, audio.connections).issues, []);
+  for (const value of [plan(["esp", "camera"]), plan(["esp", "esp"]), plan(["mic"]), { ...plan(["esp"]), sharedI2s: true }, { ...plan(["esp"]), board: { width: 20, height: 20 } }])
+    assert.throws(() => validateHardwarePlan(value));
+  assert.throws(() => validateHardwarePlan({ supported: false, summary: "缺少摄像头" }), UnsupportedHardware);
+});
+
+test("hardware worker produces checked copper and a real schematic, and can be cancelled", async () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const result = await buildHardware(root, { ...plan(["esp", "oled", "mic", "speaker", "motor"]), sharedI2s: true }, new AbortController().signal, () => {});
+  assert.equal(result.traces.length, result.connections.length);
+  assert.deepEqual(boardIssues(result.nodes, result.connections, result.traces, result.board), []);
+  assert.match(result.schematic.svg, /<svg/);
+  assert.equal(result.schematic.json.filter((e) => e.type === "source_component").length, 9);
+  const controller = new AbortController();
+  await assert.rejects(buildHardware(root, plan(["esp", "oled", "mic", "speaker", "motor"]), controller.signal,
+    (phase) => { if (phase === "routing") controller.abort(); }), /abort/i);
+});
 
 test("tscircuit renders the selected modules and current pin connections", async () => {
   const nodes = completeProject([

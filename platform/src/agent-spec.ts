@@ -6,6 +6,8 @@ export const agentApi = `struct StudioOutput { int volume; int toneHz; int motor
 // Called every ~20ms. level is absolute PCM16 peak (0..32768). now_ms is monotonic guest time.
 // volume: microphone passthrough 0..100%; toneHz: 0=silence or 100..2000Hz (overrides passthrough).
 // motorA/B: -50..50 percent. alarm: status flag. label: string literal of 1..20 uppercase A-Z/spaces.
+// motorA=30 means 30% PWM duty, NOT 30% of the safety limit (do not scale it to 15).
+// alarm is independent of running/motion: leave it false unless the requirement asks for an alarm.
 // Persistent state may use static locals; reset it while !running. Return zero outputs while paused.
 // The platform ALREADY implements I2S RX/TX (including shared clocks), OLED drawing, and motor PWM.
 // Your returned volume/toneHz/label/motor fields are applied to real guest drivers automatically.
@@ -14,6 +16,9 @@ export const agentApi = `struct StudioOutput { int volume; int toneHz; int motor
 // The platform supplies <algorithm>, <cmath>, <cstdint>. Use only available hardware; no invented sensors.
 // Return a complete function, not markdown. Never redefine StudioOutput or app_main.
 // Scenarios form an ordered test sequence from fresh startup, with constant PCM level per step.
+// The platform sends app-run BEFORE the first scenario. ALL scenario steps run with running=true.
+// Do not put paused/boot states in scenarios; the platform checks app-pause and zero outputs afterwards.
+// Apps without input transitions may use two steady-state RUN steps. Set level=0 when no mic exists.
 // Expected fields are outputs at the END of each step, not transient events. Include a baseline and a transition.`;
 
 export const agentSchema = {

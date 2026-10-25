@@ -19,6 +19,8 @@ import { PCB } from "./PCB.tsx";
 import { Simulator } from "./Simulator.tsx";
 import { firmwareProject, defaultApplication } from "./firmware.ts";
 import type { Application } from "./firmware.ts";
+import type { HardwareResult } from "./hardware-plan.ts";
+import type { AgentApplication } from "./agent-spec.ts";
 import firmwareMain from "../firmware/main/main.cpp?raw";
 import "./style.css";
 
@@ -53,6 +55,7 @@ function App() {
   );
   const [traces, setTraces] = useState<Trace[]>([]);
   const [application, setApplication] = useState<Application | null>(null);
+  const [appliedDesignId, setAppliedDesignId] = useState("");
   const activeApplication = application ?? defaultApplication(nodes);
   const [routing, setRouting] = useState(false);
   const [routeRequest, setRouteRequest] = useState(0);
@@ -78,6 +81,8 @@ function App() {
   const newProject = useRef<HTMLDialogElement>(null);
   const worker = useRef<Worker | null>(null);
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const acceptedRoutes = useRef("");
+  const acceptedSource = useRef("");
   const source = hardwareSource(nodes, connections);
   const unconnected = missingPins(nodes, connections);
   const part = nodes.find((n) => n.id === selected);
@@ -86,7 +91,11 @@ function App() {
   const autoIssues = electrical.issues;
   const geometry = JSON.stringify(nodes.map(({ id, type, placement }) => ({ id, type, placement })));
   const manualRoutes = JSON.stringify(traces.filter((t) => !t.automatic));
+  const workspaceKey = JSON.stringify([name, nodes, connections, board, manualRoutes, activeApplication]);
   useEffect(() => {
+    const input = JSON.stringify([geometry, connections, board, manualRoutes, routeRequest, routeWidth]);
+    if (acceptedRoutes.current === input) { setRouting(false); return; }
+    acceptedRoutes.current = "";
     const manual: Trace[] = JSON.parse(manualRoutes);
     setTraces(manual);
     if (electricalReport(nodes, connections).issues.length) { setRouting(false); return; }
@@ -126,7 +135,7 @@ function App() {
   useEffect(() => {
     worker.current?.terminate();
     clearTimeout(timeout.current);
-    setResult(null);
+    if (source !== acceptedSource.current) { acceptedSource.current = ""; setResult(null); }
     setBuilding(false);
     setBuildError("");
     return () => {
@@ -134,6 +143,18 @@ function App() {
       clearTimeout(timeout.current);
     };
   }, [source]);
+  function applyAgentDesign(hardware: HardwareResult, app: AgentApplication, id: string) {
+    const geometry = JSON.stringify(hardware.nodes.map(({ id, type, placement }) => ({ id, type, placement })));
+    acceptedRoutes.current = JSON.stringify([geometry, hardware.connections, hardware.board, "[]", routeRequest, 0.4]);
+    acceptedSource.current = hardware.source;
+    worker.current?.terminate(); clearTimeout(timeout.current);
+    setNodes(hardware.nodes); setConnections(hardware.connections); setBoard(hardware.board); setTraces(hardware.traces);
+    setRouteWidth(0.4); setRouting(false); setResult(hardware.schematic); setTab("schematic"); setBuilding(false); setBuildError("");
+    setName(hardware.plan.title); setApplication(app); setAppliedDesignId(id);
+    serial.current = Math.max(...hardware.nodes.map((n) => n.id));
+    setSelected(hardware.nodes[0].id); setSelectedWire(null); setPending(null); setConnectionIssue("");
+    setMessage(`整机设计已应用：${hardware.nodes.length} 个模块、${hardware.connections.length} 根接线、${hardware.traces.length} 根铜线；固件已通过仿真验收。`);
+  }
   function add(type: ModuleType, x = 510, y = 80) {
     if (nodes.length >= 20) {
       setMessage("本地工作台最多放置 20 个模块。");
@@ -270,6 +291,8 @@ function App() {
           connections,
           board,
           traces,
+          schematic: result,
+          hardwareSource: source,
           electrical,
           application: activeApplication,
           firmware: { header: firmware, main: firmwareMain },
@@ -370,7 +393,7 @@ function App() {
                     进入模块工作台 →
                   </a>
                   <span className="hero-note">
-                    已接通业务固件生成与仿真修复；硬件选型与制造自动化仍在规划
+                    已接通模块选型、接线、载板与固件仿真；制造交付仍在规划
                   </span>
                 </div>
                 <img src="/modules/esp.png" alt="Espressif ESP32-S3 开发板" />
@@ -395,7 +418,7 @@ function App() {
                   <span className="badge">已实现 / Agent</span>
                   <h2>从需求到验证</h2>
                   <p>
-                    Agent 按当前接线编写业务 C++，自动编译、仿真并反馈错误修复。更多驱动、硬件在环（HIL）与制造资料检查仍在规划。
+                    Agent 按需求选择真实模块，自动接线、生成载板与业务 C++，编译仿真并反馈错误修复。更多驱动、HIL 与制造检查仍在规划。
                   </p>
                 </article>
               </div>
@@ -605,11 +628,12 @@ function App() {
                     <p>选择器件查看型号、端子与官方资料。</p>
                   )}
                   <div className="inspector-plan">
-                    <span className="badge planned">规划中</span>
+                    <span className="badge">已实现</span>
                     <h3>Agent 协同设计</h3>
                     <p>
-                      按需求自动选型与组装仍在规划。完成当前接线后，可在仿真页让 Agent 编写业务、编译并反馈错误修复。
+                      描述需求后自动选择内置真实模块，补齐电源与负载、接线和载板，并生成业务固件完成编译仿真。
                     </p>
+                    <a href="#simulation">描述需求，自动设计整机 →</a>
                   </div>
                 </aside>
               </div>
@@ -720,7 +744,7 @@ function App() {
               {tab === "firmware" && (
                 <>
                   <p className="notice">
-                    wiring.h 随当前接线与业务参数生成，和实时对讲、声音告警或模块诊断程序一起编译；在仿真页配置应用并启动匹配板型。
+                    wiring.h 随当前接线与业务参数生成，与 Agent 业务、实时对讲、声音告警或诊断程序一起编译；在仿真页启动匹配板型。
                   </p>
                   <details><summary>当前设计的 GPIO / 电气配置</summary><pre className="runtime-log">{JSON.stringify(electrical, null, 2)}</pre></details>
                   <button onClick={() => download("electrical-contract.json", JSON.stringify(electrical, null, 2), "application/json")}>导出 GPIO 与初始化条件</button>
@@ -732,7 +756,7 @@ function App() {
                       if (!response.ok) throw Error(result.error);
                       download("esp-idf-project.json", JSON.stringify(result.files, null, 2), "application/json");
                     } catch (error) { setBuildError(`固件源码导出失败：${error}`); }
-                  }}>导出完整 ESP-IDF 源文件 JSON</button>
+                  }}>导出完整工程源文件 JSON</button>
                   <textarea
                     className="source"
                     aria-label="生成的固件配置与程序"
@@ -808,7 +832,7 @@ function App() {
               />
             </>
           )}
-          {page === "simulation" && <Simulator nodes={nodes} connections={connections} application={activeApplication} onApplication={setApplication} onSharedI2s={shareAudioClock} />}
+          {page === "simulation" && <Simulator nodes={nodes} connections={connections} application={activeApplication} onApplication={setApplication} onSharedI2s={shareAudioClock} workspaceKey={workspaceKey} appliedDesignId={appliedDesignId} onDesign={applyAgentDesign} />}
           {page === "delivery" && (
             <>
               <div className="section-heading">

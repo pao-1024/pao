@@ -3,12 +3,14 @@ import { firmwareProject } from "./firmware.ts";
 import type { Application } from "./firmware.ts";
 import type { Module, Connection } from "./catalog.ts";
 import type { AgentApplication } from "./agent-spec.ts";
+import type { HardwareResult } from "./hardware-plan.ts";
+import { partFor, moduleImage } from "./catalog.ts";
 
 type Runtime = {
   state: string; log: string; active: boolean;
   artifacts: { firmware: boolean; emulator: boolean; web: boolean };
   project: { id: string; key: string; ready: boolean } | null;
-  agent?: { phase: string; attempt: number; log: string; designKey: string; error?: string; application?: AgentApplication };
+  agent?: { phase: string; attempt: number; log: string; designKey: string; id: string; originKey?: string; hardware?: HardwareResult; error?: string; application?: AgentApplication };
   agentModel?: string; agentProvider?: string;
 };
 const labels: Record<string, string> = {
@@ -126,7 +128,7 @@ function ReferenceSimulator() {
   );
 }
 
-type ProjectProps = { nodes: Module[]; connections: Connection[]; application: Application; onApplication: (app: Application) => void; onSharedI2s: (shared: boolean) => void };
+type ProjectProps = { nodes: Module[]; connections: Connection[]; application: Application; onApplication: (app: Application) => void; onSharedI2s: (shared: boolean) => void; workspaceKey: string; appliedDesignId: string; onDesign: (hardware: HardwareResult, app: AgentApplication, id: string) => void };
 export function Simulator(props: ProjectProps) {
   const [reference, setReference] = useState(false);
   return <><div className="actions">
@@ -135,7 +137,7 @@ export function Simulator(props: ProjectProps) {
   </div>{reference ? <ReferenceSimulator /> : <ProjectSimulator {...props} />}</>;
 }
 
-function ProjectSimulator({ nodes, connections, application, onApplication, onSharedI2s }: ProjectProps) {
+function ProjectSimulator({ nodes, connections, application, onApplication, onSharedI2s, workspaceKey, appliedDesignId, onDesign }: ProjectProps) {
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -155,17 +157,25 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
   const [micSamples, setMicSamples] = useState(0);
   const uart = useRef("");
   const [firmwareReady, setFirmwareReady] = useState(false);
-  const [prompt, setPrompt] = useState("声音超过 6000 时输出 880Hz 提示音，保持 400ms，屏幕显示 ALARM；安静时显示 LISTENING。");
+  const [prompt, setPrompt] = useState(application.kind === "agent" ? application.prompt : "声音超过 6000 时输出 880Hz 提示音，保持 400ms，屏幕显示 ALARM；安静时显示 LISTENING。");
+  const editedPrompt = useRef(false);
+  const [wholeDesign, setWholeDesign] = useState(true);
   const agent = runtime?.agent;
+  const agentActive = !!runtime?.active && !!agent && !["succeeded", "failed", "cancelled"].includes(agent.phase);
+  useEffect(() => {
+    if (!editedPrompt.current && agent?.phase === "succeeded" && agent.application) setPrompt(agent.application.prompt);
+  }, [agent?.phase, agent?.application?.prompt]);
   let generated: ReturnType<typeof firmwareProject> | undefined, invalid = "";
   try { generated = firmwareProject({ nodes, connections, application }); } catch (e) { invalid = String(e); }
   const key = generated ? JSON.stringify(generated.design) : "";
   const spec = generated?.spec;
   const designKey = generated ? JSON.stringify({ nodes: generated.design.nodes, connections: generated.design.connections }) : "";
   useEffect(() => {
-    if (agent?.phase === "succeeded" && agent.designKey === designKey && agent.application &&
-        (application.kind !== "agent" || JSON.stringify(application) !== JSON.stringify(agent.application))) onApplication(agent.application);
-  }, [agent, designKey, application, onApplication]);
+    if (agent?.phase !== "succeeded" || !agent.application) return;
+    if (agent.hardware) {
+      if (agent.originKey === workspaceKey && appliedDesignId !== agent.id) onDesign(agent.hardware, agent.application, agent.id);
+    } else if (agent.designKey === designKey && (application.kind !== "agent" || JSON.stringify(application) !== JSON.stringify(agent.application))) onApplication(agent.application);
+  }, [agent, designKey, application, onApplication, workspaceKey, appliedDesignId, onDesign]);
   const matching = !!key && runtime?.project?.key === key;
   const running = matching && runtime?.active && runtime.state === "starting";
   useEffect(() => {
@@ -244,12 +254,12 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
     connect();
     return () => { disposed = true; clearTimeout(timer); stopMicrophone(); ws?.close(); socket.current = null; void speaker.current?.close(); speaker.current = null; setListening(false); };
   }, [running, key]);
-  async function action(name: "prepare" | "build" | "project" | "stop" | "agent") {
+  async function action(name: "prepare" | "build" | "project" | "stop" | "agent" | "design") {
     setPending(true); setError("");
     try {
       const response = await fetch(`/api/runtime/${name}`, { method: "POST",
         headers: { "X-Pao-Studio": "1", "Content-Type": "application/json" },
-        body: ["build", "project", "agent"].includes(name) ? JSON.stringify({ nodes, connections, application, prompt }) : undefined });
+        body: name === "design" ? JSON.stringify({ prompt, originKey: workspaceKey }) : ["build", "project", "agent"].includes(name) ? JSON.stringify({ nodes, connections, application, prompt }) : undefined });
       const result = await response.json();
       if (!response.ok) throw Error(result.error);
       const status = await fetch("/api/runtime");
@@ -305,19 +315,24 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
   const agentState = Array.from(serial.matchAll(/STUDIO AGENT time_ms=\d+ running=(\d) level=(\d+) alarm=(\d)/g)).at(-1);
   const businessState = application.kind === "agent" ? agentState : appState?.slice(1);
   return <section className="simulation-page">
-    <div className="section-heading"><div><span className="eyebrow">WIRING → ESP-IDF → ESP32SIM</span>
-      <h1>让当前接线真正运行。</h1></div><span className="badge">{ready ? "当前固件已就绪 / 正在仿真" : connected ? "模拟器已连接 / 等待固件就绪" : labels[runtime?.state || ""] || "连接管理服务"}</span></div>
-    <div className="notice">按当前接线与业务参数生成 ESP-IDF 固件：实时对讲将麦克风数据经固件送至扬声器；声音告警由固件判断阈值、保持时间并驱动 OLED 与提示音。</div>
-    <div className="runtime-setup"><div><h3>用自然语言开发业务</h3>
+    <div className="section-heading"><div><span className="eyebrow">{wholeDesign ? "REQUIREMENT → BOM → WIRING → PCB → FIRMWARE → SIL" : "WIRING → ESP-IDF → ESP32SIM"}</span>
+      <h1>{wholeDesign ? "从需求到可运行的整机设计。" : "让当前接线真正运行。"}</h1></div><span className="badge">{ready ? "当前固件已就绪 / 正在仿真" : connected ? "模拟器已连接 / 等待固件就绪" : agentActive ? "Agent 任务执行中" : labels[runtime?.state || ""] || "连接管理服务"}</span></div>
+    <div className="notice">{wholeDesign ? "从真实模块选型开始，自动补齐电源和负载、连接真实引脚、生成载板与原理图，再编译固件并在匹配板型中验收。每个阶段都通过后，才应用到工作台。" : "按当前接线与业务参数生成 ESP-IDF 固件，业务在真实固件中执行，页面展示实际外设与遥测结果。"}</div>
+    <div className="runtime-setup"><div><h3>{wholeDesign ? "用自然语言设计设备" : "用自然语言开发业务"}</h3>
+      <div className="actions"><button aria-pressed={wholeDesign} disabled={!!runtime?.active} onClick={() => setWholeDesign(true)}>从需求设计整机</button><button aria-pressed={!wholeDesign} disabled={!!runtime?.active} onClick={() => setWholeDesign(false)}>保留当前接线写业务</button></div>
       <p>模型：{runtime?.agentModel || "auto/deepseek-v4.1-flash"} · {runtime?.agentProvider || "magpie"}。需求和当前接线发送至本机 Codex CLI 配置的模型服务，录音不发送给模型。</p>
-      <label>业务需求<textarea aria-label="Agent 业务需求" rows={4} maxLength={4000} value={prompt} onChange={(e) => setPrompt(e.target.value)} style={{ width: "100%" }} /></label>
-      <div className="actions"><button disabled={pending || !!runtime?.active || !prompt.trim()} onClick={() => void action("agent")}>生成、编译并自动验证</button>
+      <label>业务需求<textarea aria-label="Agent 业务需求" rows={4} maxLength={4000} value={prompt} onChange={(e) => { editedPrompt.current = true; setPrompt(e.target.value); }} style={{ width: "100%" }} /></label>
+      <div className="actions"><button disabled={pending || !!runtime?.active || !prompt.trim()} onClick={() => void action(wholeDesign ? "design" : "agent")}>{wholeDesign ? "自动选型、接线、PCB 并验证" : "生成、编译并自动验证"}</button>
         <button disabled={!runtime?.active} onClick={() => void action("stop")}>停止 Agent / 运行任务</button></div>
-      <p>保留当前引脚和驱动。Agent 编写业务 C++，平台编译并从 ROM 启动，注入明确标识的测试 PCM；失败最多修复三轮，验收步骤在首轮固定。成功后可接入真实麦克风继续运行。</p>
+      <p>{wholeDesign ? "从内置真实模块选型，补齐电源和负载、自动接线与生成载板，再编译仿真。通过后替换当前设计；执行中修改了工作区则保留修改。" : "保留当前引脚和驱动，生成业务 C++ 并编译仿真。"}失败最多修复三轮，首份有效业务验收步骤固定；测试 PCM 不会冒充真实麦克风。</p>
     </div><div><h3>Agent 执行结果</h3>
-      {agent ? <><p role="status">{({ generating: "生成业务源码", building: "编译固件", verifying: "仿真与场景验收", repairing: "反馈错误并修复", succeeded: "验收通过", failed: "执行失败", cancelled: "已停止" } as Record<string, string>)[agent.phase]} · 第 {agent.attempt} / 3 轮</p>
-        {agent.designKey !== designKey && <p role="alert">此结果属于其他接线，不能应用到当前设计。</p>}
-        {agent.application && <><p>{agent.application.summary}</p><details><summary>生成源码与验收场景</summary><pre className="runtime-log">{agent.application.source}{"\n\n"}{JSON.stringify(agent.application.scenarios, null, 2)}</pre></details></>}
+      {agent ? <><p role="status">{({ selecting: "选择硬件模块", wiring: "组装与电气接线", routing: "生成 PCB 铜线", schematic: "生成 tscircuit 原理图", generating: "生成业务源码", building: "编译固件", verifying: "仿真与场景验收", repairing: "反馈错误并修复", succeeded: "验收通过", failed: "执行失败", cancelled: "已停止" } as Record<string, string>)[agent.phase]} · 第 {agent.attempt} / 3 轮</p>
+        {agent.hardware ? <><p>{agent.hardware.plan.title} · {agent.hardware.nodes.length} 个模块 / {agent.hardware.connections.length} 根接线 / {agent.hardware.traces.length} 根铜线 · {agent.hardware.board.width}×{agent.hardware.board.height}mm 载板草稿</p>
+          <details><summary>选型理由与真实模块清单</summary>{agent.hardware.nodes.map((n) => <p key={n.id}><img src={moduleImage(n.type)} alt="" width={40} height={32} style={{ objectFit: "contain", verticalAlign: "middle" }} /> <a href={partFor(n.type).source} target="_blank" rel="noreferrer">{partFor(n.type).model}</a>：{agent.hardware!.plan.modules.find((m) => m.type === n.type)?.reason || "平台自动补齐必要电源或匹配负载"}</p>)}</details>
+          {agent.phase === "succeeded" && appliedDesignId !== agent.id && agent.application && <><p role="alert">工作区已变化，完整结果尚未覆盖当前设计。</p><button onClick={() => onDesign(agent.hardware!, agent.application!, agent.id)}>应用已生成的完整设计</button></>}
+          {appliedDesignId === agent.id && <p><a href="#assembly">查看真实模块与接线 →</a> · <a href="#code">原理图与硬件代码 →</a> · <a href="#pcb">已生成 PCB →</a></p>}
+        </> : agent.originKey === undefined && agent.designKey !== designKey && <p role="alert">此结果属于其他接线，不能应用到当前设计。</p>}
+        {agent.application && <><p>{agent.hardware?.plan.summary || agent.application.summary}</p><details><summary>生成源码与验收场景</summary><pre className="runtime-log">{agent.application.source}{"\n\n"}{JSON.stringify(agent.application.scenarios, null, 2)}</pre></details></>}
         {agent.error && <p role="alert">{agent.error}</p>}<pre className="runtime-log">{agent.log || "等待首轮执行结果"}</pre>
       </> : <p>尚未启动。需要本机安装并配置 Codex CLI，以及已准备好的仿真环境。</p>}
     </div></div>
@@ -327,11 +342,11 @@ function ProjectSimulator({ nodes, connections, application, onApplication, onSh
       {application.kind === "intercom" && <label>输出音量 / %<input aria-label="对讲输出音量" type="number" min={0} max={100} value={application.volume} onChange={(e) => onApplication({ ...application, volume: Number(e.target.value) })} /></label>}
       {application.kind === "sound-alarm" && <>{([['threshold', 'PCM 幅度阈值', 100, 30000], ['holdMs', '告警保持 / ms', 100, 10000], ['frequency', '提示音 / Hz', 100, 2000]] as const).map(([field, label, min, max]) =>
         <label key={field}>{label}<input aria-label={label} type="number" min={min} max={max} value={application[field]} onChange={(e) => onApplication({ ...application, [field]: Number(e.target.value) })} /></label>)}</>}
-    </div><div><h3>I²S 时钟</h3><p>{spec?.sharedI2s ? "共享 BCLK / WS，同一控制器全双工" : "独立 BCLK / WS，两个主控通道"}</p>
-      <button disabled={!spec?.mic || !spec?.amp || !!runtime?.active} onClick={() => onSharedI2s(!spec?.sharedI2s)}>{spec?.sharedI2s ? "恢复独立时钟接线" : "自动改为共享时钟接线"}</button>
+    </div><div><h3>I²S 时钟</h3><p>{spec?.mic && spec?.amp ? spec.sharedI2s ? "共享 BCLK / WS，同一控制器全双工" : "独立 BCLK / WS，两个主控通道" : spec?.mic || spec?.amp ? "单路 I²S 主控时钟" : "当前设计没有 I²S 模块"}</p>
+      {spec?.mic && spec?.amp && <button disabled={!!runtime?.active} onClick={() => onSharedI2s(!spec.sharedI2s)}>{spec.sharedI2s ? "恢复独立时钟接线" : "自动改为共享时钟接线"}</button>}
       <p>应用参数或时钟接线改变后，需要重新编译；业务计算在 ESP32 固件中执行。</p></div></div>
     {invalid && <p role="alert">{invalid}</p>}
-    {runtime?.project && !matching && <p role="alert">接线已变化，现有固件不匹配。请停止旧任务并重新生成编译。</p>}
+    {runtime?.project && !matching && !(agentActive && agent?.originKey !== undefined) && <p role="alert">当前工作区与已有固件不匹配；应用匹配的设计或重新编译后才能启动。</p>}
     <div className="runtime-setup"><div><h3>生成、编译与运行</h3>
       <p>首次准备下载本地 SDK 并构建模拟器。当前设计与构建缓存分别保存在 tmp/studio/，不同接线隔离 Flash。</p>
       <p>构建：{matching && runtime?.project?.ready ? `成功 · ${runtime.project.id.slice(0, 12)}` : "当前接线待编译"}</p>

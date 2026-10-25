@@ -7,8 +7,9 @@ import { fileURLToPath } from "node:url";
 import { createConnection } from "node:net";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
-import { agentModel, agentProvider, generateApplication, iterateApplication, verifyApplication, type AgentProgress } from "./agent.ts";
+import { agentModel, agentProvider, generateApplication, generateHardwarePlan, buildHardware, iterateApplication, verifyApplication, type AgentProgress } from "./agent.ts";
 import { agentApi } from "./src/agent-spec.ts";
+import type { HardwareResult } from "./src/hardware-plan.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function allowedRequest(req: IncomingMessage) {
@@ -31,10 +32,11 @@ function occupied(port: number): Promise<boolean> {
 export function runtimePlugin(): Plugin {
   let child: ChildProcess | undefined;
   let state = "idle", log = "", busy = false;
-  let agent: (AgentProgress & { designKey: string }) | null = null;
+  let agent: (AgentProgress & { designKey: string; id: string; originKey?: string; hardware?: HardwareResult }) | null = null;
   let agentController: AbortController | undefined;
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   let project: { id: string; key: string; spec: ReturnType<typeof firmwareProject>["spec"]; ready: boolean } | null = null;
+  let projectHardware: HardwareResult | undefined;
   const append = (data: unknown) => { log = (log + String(data)).slice(-48000); };
   function stop() {
     if (!child?.pid) return;
@@ -77,7 +79,7 @@ export function runtimePlugin(): Plugin {
       done(code === 0 && state !== "failed");
     }));
   }
-  function generate(value: unknown) {
+  function generate(value: unknown, hardware?: HardwareResult) {
     const generated = firmwareProject(value);
     const files: Record<string, string> = {};
     for (const name of ["CMakeLists.txt", "sdkconfig.defaults", "main/CMakeLists.txt", "main/main.cpp"])
@@ -88,16 +90,24 @@ export function runtimePlugin(): Plugin {
     files["board.json"] = JSON.stringify(generated.spec, null, 2);
     if (generated.design.application.kind === "agent")
       files["main/agent-app.h"] = `// Business API:\n${agentApi.split("\n").map((s) => `// ${s}`).join("\n")}\n${generated.design.application.source}\n`;
+    if (hardware) {
+      files["hardware-project.json"] = JSON.stringify({ ...hardware, application: generated.design.application }, null, 2);
+      files["hardware.tsx"] = hardware.source;
+      files["schematic.svg"] = hardware.schematic.svg;
+      files["circuit.json"] = JSON.stringify(hardware.schematic.json, null, 2);
+      files["pcb.json"] = JSON.stringify({ board: hardware.board, nodes: hardware.nodes, connections: hardware.connections, traces: hardware.traces }, null, 2);
+    }
     const key = JSON.stringify(generated.design);
     const id = createHash("sha256").update(JSON.stringify(files)).update(key).digest("hex");
     return { files, key, id, spec: generated.spec };
   }
-  function writeProject(generated: ReturnType<typeof generate>) {
+  function writeProject(generated: ReturnType<typeof generate>, hardware?: HardwareResult) {
     const directory = resolve(root, "tmp/studio", generated.id);
     mkdirSync(resolve(directory, "main"), { recursive: true });
     rmSync(resolve(directory, "ready.json"), { force: true });
     for (const [name, contents] of Object.entries(generated.files)) writeFileSync(resolve(directory, name), contents);
     project = { id: generated.id, key: generated.key, spec: generated.spec, ready: false };
+    projectHardware = hardware;
     return directory;
   }
   async function stopAndWait() {
@@ -107,25 +117,38 @@ export function runtimePlugin(): Plugin {
     stop();
     await ended;
   }
-  async function startAgent(value: { nodes: unknown; connections: unknown; prompt: string }) {
+  async function startAgent(value: { nodes?: unknown; connections?: unknown; prompt: string; originKey?: string }) {
     const controller = new AbortController(); agentController = controller;
-    const design = firmwareProject({ ...value, application: { kind: "diagnostic" } }).design;
-    const designKey = JSON.stringify({ nodes: design.nodes, connections: design.connections });
-    const directory = resolve(root, "tmp/agent", createHash("sha256").update(value.prompt + Date.now()).digest("hex"));
-    const update = (progress: AgentProgress) => { agent = { ...progress, designKey }; };
-    update({ phase: "generating", attempt: 1, log: "" });
+    let design = value.originKey === undefined ? firmwareProject({ ...value, application: { kind: "diagnostic" } }).design : undefined;
+    let designKey = design ? JSON.stringify({ nodes: design.nodes, connections: design.connections }) : "";
+    let hardware: HardwareResult | undefined;
+    const id = createHash("sha256").update(value.prompt + Date.now()).digest("hex");
+    const directory = resolve(root, "tmp/agent", id);
+    const update = (progress: AgentProgress) => { agent = { ...progress, designKey, id, originKey: value.originKey, hardware }; };
+    update({ phase: value.originKey === undefined ? "generating" : "selecting", attempt: 1, log: "" });
     try {
       mkdirSync(directory, { recursive: true });
       await iterateApplication({ prompt: value.prompt, signal: controller.signal, update,
-        generate: (feedback) => generateApplication(directory, value.prompt, firmwareProject(design).spec, feedback, controller.signal),
+        generate: async (feedback) => {
+          if (value.originKey !== undefined) {
+            const progress = { attempt: agent!.attempt, log: agent!.log };
+            update({ ...progress, phase: "selecting" });
+            const plan = await generateHardwarePlan(directory, value.prompt, feedback, controller.signal);
+            hardware = await buildHardware(root, plan, controller.signal, (phase) => update({ ...progress, phase }));
+            design = firmwareProject({ nodes: hardware.nodes, connections: hardware.connections, application: { kind: "diagnostic" } }).design;
+            designKey = JSON.stringify({ nodes: design.nodes, connections: design.connections });
+            update({ ...progress, phase: "generating" });
+          }
+          return generateApplication(directory, value.prompt, firmwareProject(design).spec, feedback, controller.signal);
+        },
         build: async (application) => {
           controller.signal.throwIfAborted();
-          const target = writeProject(generate({ ...design, application }));
+          const target = writeProject(generate({ ...design, application }, hardware), hardware);
           if (!await run("build", target)) throw Error(`编译失败：${log}`);
         },
         verify: async (application) => {
           controller.signal.throwIfAborted();
-          const generated = generate({ ...design, application });
+          const generated = generate({ ...design, application }, hardware);
           const target = resolve(root, "tmp/studio", generated.id);
           void run("project", target);
           try { return await verifyApplication(generated.spec, application, controller.signal); }
@@ -157,14 +180,15 @@ export function runtimePlugin(): Plugin {
       return send(200, { state, log, active: !!child || !!agentController, artifacts: artifacts(), project, agent, agentModel, agentProvider });
     if (req.method !== "POST") return send(405, { error: "Method not allowed" });
     if (req.url === "/api/runtime/stop") { agentController?.abort(); stop(); return send(200, { state }); }
-    if (!["/api/runtime/prepare", "/api/runtime/start", "/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent"].includes(req.url))
+    if (!["/api/runtime/prepare", "/api/runtime/start", "/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent", "/api/runtime/design"].includes(req.url))
       return send(404, { error: "Unknown runtime action" });
     if (((child || agentController) && req.url !== "/api/runtime/source") || busy) return send(409, { error: "已有构建或运行任务，请先停止或等待结束" });
     busy = true;
     try {
       let generated: ReturnType<typeof generate> | undefined;
-      let agentRequest: { nodes: unknown; connections: unknown; prompt: string } | undefined;
-      if (["/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent"].includes(req.url)) {
+      let hardwareForProject: HardwareResult | undefined;
+      let agentRequest: { nodes?: unknown; connections?: unknown; prompt: string; originKey?: string } | undefined;
+      if (["/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent", "/api/runtime/design"].includes(req.url)) {
         let body = "";
         for await (const chunk of req) {
           body += chunk.toString();
@@ -172,11 +196,20 @@ export function runtimePlugin(): Plugin {
         }
         try {
           const value = JSON.parse(body);
-          if (req.url === "/api/runtime/agent") {
+          if (req.url === "/api/runtime/design") {
+            if (typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > 4000) throw Error("请输入 1–4000 字的业务需求");
+            if (typeof value.originKey !== "string" || value.originKey.length > 48000) throw Error("工作区版本标识无效或过长");
+            agentRequest = { prompt: value.prompt, originKey: value.originKey };
+          } else if (req.url === "/api/runtime/agent") {
             if (typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > 4000) throw Error("请输入 1–4000 字的业务需求");
             generated = generate({ ...value, application: { kind: "diagnostic" } });
             agentRequest = { nodes: value.nodes, connections: value.connections, prompt: value.prompt };
-          } else generated = generate(value);
+          } else {
+            // Reuse hardware artifacts only for the exact successful full-design graph and application.
+            const matches = project?.key === JSON.stringify(firmwareProject(value).design);
+            hardwareForProject = matches ? projectHardware : undefined;
+            generated = generate(value, hardwareForProject);
+          }
         }
         catch (error) { return send(422, { error: String(error) }); }
         if (req.url === "/api/runtime/source") return send(200, generated);
@@ -191,16 +224,17 @@ export function runtimePlugin(): Plugin {
       if (generated) {
         const directory = resolve(root, "tmp/studio", generated.id);
         if (req.url === "/api/runtime/build") {
-          writeProject(generated);
+          writeProject(generated, hardwareForProject);
           run("build", directory);
         } else {
           if (!existsSync(resolve(directory, "ready.json")) || !existsSync(resolve(directory, "build/studio.elf")))
             return send(409, { error: "当前接线尚未成功编译，请重新生成并编译" });
           if (!artifacts().emulator) return send(409, { error: "缺少模拟器，请先准备环境" });
           project = { id: generated.id, key: generated.key, spec: generated.spec, ready: true };
+          projectHardware = hardwareForProject;
           run("project", directory);
         }
-      } else { project = null; run(req.url.endsWith("prepare") ? "prepare" : "start"); }
+      } else { project = null; projectHardware = undefined; run(req.url.endsWith("prepare") ? "prepare" : "start"); }
       send(202, { state });
     } catch (error) { send(500, { error: String(error) }); }
     finally { busy = false; }
