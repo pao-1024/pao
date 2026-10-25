@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
@@ -15,6 +16,12 @@
 
 static std::atomic<bool> app_running{false}, app_alarm{false};
 static std::atomic<int> input_level{0};
+#if APP_MODE == 3
+struct StudioOutput { int volume; int toneHz; int motorA; int motorB; bool alarm; const char *label; };
+#include "agent-app.h"
+static StudioOutput agent_output{0, 0, 0, 0, false, "PAUSED"};
+static std::atomic<int> agent_volume{0}, agent_tone{0};
+#endif
 
 [[maybe_unused]] static void output(gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_set_level(pin, 0));
@@ -45,6 +52,9 @@ static void display() {
         {0x07,0x08,0x70,0x08,0x07}, {0x61,0x51,0x49,0x45,0x43}
     };
     const char *title = !app_running ? "PAUSED" : APP_MODE == 1 ? "INTERCOM" : app_alarm ? "ALARM" : "LISTENING";
+#if APP_MODE == 3
+    title = agent_output.label;
+#endif
     for (int i = 0; title[i] && i < 20; ++i)
         if (title[i] >= 'A' && title[i] <= 'Z') std::memcpy(data + 1 + i * 6, font[title[i] - 'A'], 5);
     const int bar = std::min(128, input_level.load() * 128 / 32768);
@@ -121,7 +131,10 @@ static void audio(void *) {
 #endif
 #if HAS_AMP
         for (int i = 0; i < 480; ++i, ++frame) {
-#if APP_MODE == 1
+#if APP_MODE == 3
+            int32_t value = agent_tone ? (int32_t)(std::sin(frame * 6.283185307 * agent_tone / 48000) * 2000) * 65536 :
+                (input[i * 2 + MIC_CHANNEL] / 65536 * agent_volume / 100) * 65536;
+#elif APP_MODE == 1
             int32_t value = app_running ? (input[i * 2 + MIC_CHANNEL] / 65536 * APP_VOLUME / 100) * 65536 : 0;
 #elif APP_MODE == 2
             int32_t value = app_alarm ? (int32_t)(std::sin(frame * 6.283185307 * APP_ALARM_HZ / 48000) * 2000) * 65536 : 0;
@@ -193,7 +206,32 @@ extern "C" void app_main() {
     char line[80]; size_t length = 0;
     bool overflow = false;
     [[maybe_unused]] int64_t next_display = 0;
+#if APP_MODE == 3
+    int64_t next_agent_log = 0;
+#endif
     while (true) {
+#if APP_MODE == 3
+        const int64_t agent_now = esp_timer_get_time() / 1000;
+        agent_output = studio_step(app_running.load(), input_level.load(), agent_now);
+        if (!app_running) agent_output = {0, 0, 0, 0, false, "PAUSED"};
+        if (agent_output.volume < 0 || agent_output.volume > 100 || agent_output.toneHz < 0 || agent_output.toneHz > 2000 ||
+            (agent_output.toneHz > 0 && agent_output.toneHz < 100) || std::abs(agent_output.motorA) > 50 || std::abs(agent_output.motorB) > 50 ||
+            !agent_output.label || std::strlen(agent_output.label) > 20 ||
+            (!HAS_AMP && (agent_output.volume || agent_output.toneHz)) || (!HAS_MIC && agent_output.volume) ||
+            (!HAS_MOTOR && (agent_output.motorA || agent_output.motorB))) {
+            printf("STUDIO ERROR invalid Agent output\n"); abort();
+        }
+        agent_volume = agent_output.volume; agent_tone = agent_output.toneHz; app_alarm = agent_output.alarm;
+#if HAS_MOTOR
+        a.setSpeed(agent_output.motorA * MOTOR_A_POLARITY / 100.0f); b.setSpeed(agent_output.motorB * MOTOR_B_POLARITY / 100.0f);
+#endif
+        if (agent_now >= next_agent_log) {
+            printf("STUDIO AGENT time_ms=%lld running=%d level=%d alarm=%d volume=%d tone=%d motor_a=%d motor_b=%d label=%s\n",
+                (long long)agent_now, (int)app_running.load(), input_level.load(), (int)agent_output.alarm,
+                agent_output.volume, agent_output.toneHz, agent_output.motorA, agent_output.motorB, agent_output.label);
+            next_agent_log = agent_now + 100;
+        }
+#endif
 #if HAS_OLED && APP_MODE != 0
         const int64_t now = esp_timer_get_time();
         if (now >= next_display) { display(); next_display = now + 100000; }

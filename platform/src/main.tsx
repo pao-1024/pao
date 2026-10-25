@@ -370,7 +370,7 @@ function App() {
                     进入模块工作台 →
                   </a>
                   <span className="hero-note">
-                    Agent 自动设计与验证闭环尚在规划中
+                    已接通业务固件生成与仿真修复；硬件选型与制造自动化仍在规划
                   </span>
                 </div>
                 <img src="/modules/esp.png" alt="Espressif ESP32-S3 开发板" />
@@ -392,10 +392,10 @@ function App() {
                   </p>
                 </article>
                 <article>
-                  <span className="badge planned">规划中 / Agent</span>
+                  <span className="badge">已实现 / Agent</span>
                   <h2>从需求到验证</h2>
                   <p>
-                    Agent 从自然语言生成更多业务应用、根据运行证据迭代、硬件在环（HIL）与制造资料检查。
+                    Agent 按当前接线编写业务 C++，自动编译、仿真并反馈错误修复。更多驱动、硬件在环（HIL）与制造资料检查仍在规划。
                   </p>
                 </article>
               </div>
@@ -608,7 +608,7 @@ function App() {
                     <span className="badge planned">规划中</span>
                     <h3>Agent 协同设计</h3>
                     <p>
-                      根据需求选择模块、配置驱动、读取编译与仿真结果并迭代。当前由你完成组装。
+                      按需求自动选型与组装仍在规划。完成当前接线后，可在仿真页让 Agent 编写业务、编译并反馈错误修复。
                     </p>
                   </div>
                 </aside>

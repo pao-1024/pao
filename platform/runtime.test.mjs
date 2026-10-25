@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { allowedRequest } from "./runtime.ts";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { iterateApplication } from "./agent.ts";
+import { validateAgent } from "./src/agent-spec.ts";
 
 test("runtime actions reject cross-origin requests, DNS rebinding and missing action header", () => {
   const request = { method: "POST", headers: { host: "127.0.0.1:4173", origin: "http://127.0.0.1:4173", "x-pao-studio": "1" } };
@@ -11,6 +13,40 @@ test("runtime actions reject cross-origin requests, DNS rebinding and missing ac
   assert.equal(allowedRequest({ ...request, headers: { ...request.headers, host: "evil.example:4173" } }), false);
   assert.equal(allowedRequest({ ...request, headers: { host: request.headers.host, origin: request.headers.origin } }), false);
   assert.equal(allowedRequest({ method: "GET", headers: { host: "127.0.0.1:4173" } }), true);
+});
+
+const step = { name: "quiet", level: 0, durationMs: 500, alarm: false, volume: 0, toneHz: 0, motorA: 0, motorB: 0, label: "QUIET" };
+const application = { kind: "agent", prompt: "quiet", summary: "quiet", source: 'StudioOutput studio_step(bool, int, int64_t) { return {0,0,0,0,false,"QUIET"}; }', scenarios: [step, { ...step, name: "loud", level: 9000 }] };
+
+test("Agent repairs compilation and simulation errors without weakening acceptance", async () => {
+  const feedback = [], progress = []; let builds = 0, checks = 0;
+  const result = await iterateApplication({ prompt: "quiet", signal: new AbortController().signal, update: (s) => progress.push(s),
+    generate: async (error) => { feedback.push(error); return { ...application, scenarios: feedback.length > 1 ? [{ ...step, label: "CHEAT" }, step] : application.scenarios }; },
+    build: async () => { if (++builds === 1) throw Error("C++ missing symbol"); },
+    verify: async (app) => { assert.deepEqual(app.scenarios, application.scenarios); if (++checks === 1) throw Error("PCM expected 2000 actual 0"); return "PCM verified"; },
+  });
+  assert.match(feedback[1], /C\+\+ missing symbol/); assert.match(feedback[2], /PCM expected/);
+  assert.equal(builds, 3); assert.equal(checks, 2); assert.deepEqual(result.scenarios, application.scenarios);
+  assert.equal(progress.at(-1).phase, "succeeded"); assert.match(progress.at(-1).log, /PCM verified/);
+});
+
+test("Agent stops at its repair budget and cancellation starts no further work", async () => {
+  let calls = 0;
+  await assert.rejects(iterateApplication({ prompt: "x", signal: new AbortController().signal, update: () => {},
+    generate: async () => { calls++; throw Error("bad output"); }, build: async () => {}, verify: async () => "" }), /3 轮/);
+  assert.equal(calls, 3);
+  const controller = new AbortController(); calls = 0;
+  await assert.rejects(iterateApplication({ prompt: "x", signal: controller.signal, update: () => {},
+    generate: async () => { calls++; controller.abort(); throw Error("cancel"); }, build: async () => assert.fail(), verify: async () => assert.fail() }), /abort/i);
+  assert.equal(calls, 1);
+});
+
+test("Agent validates generated code and bounded scenario contracts", () => {
+  assert.deepEqual(validateAgent(application), application);
+  for (const value of [{ ...application, source: '#include "/etc/passwd"' }, { ...application, source: "void app_main() {}" },
+    { ...application, scenarios: [] }, { ...application, scenarios: [step, { ...step, durationMs: -1 }] },
+    { ...application, scenarios: [step, { ...step, motorA: 100 }] }, { ...application, scenarios: [step, { ...step, label: "中文" }] }])
+    assert.throws(() => validateAgent(value));
 });
 
 test("browser microphone resamples across blocks and packs the selected physical channel", () => {

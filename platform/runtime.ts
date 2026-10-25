@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { createConnection } from "node:net";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { agentModel, agentProvider, generateApplication, iterateApplication, verifyApplication, type AgentProgress } from "./agent.ts";
+import { agentApi } from "./src/agent-spec.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 export function allowedRequest(req: IncomingMessage) {
@@ -29,14 +31,23 @@ function occupied(port: number): Promise<boolean> {
 export function runtimePlugin(): Plugin {
   let child: ChildProcess | undefined;
   let state = "idle", log = "", busy = false;
+  let agent: (AgentProgress & { designKey: string }) | null = null;
+  let agentController: AbortController | undefined;
+  let stopTimer: ReturnType<typeof setTimeout> | undefined;
   let project: { id: string; key: string; spec: ReturnType<typeof firmwareProject>["spec"]; ready: boolean } | null = null;
   const append = (data: unknown) => { log = (log + String(data)).slice(-48000); };
   function stop() {
     if (!child?.pid) return;
+    const current = child;
     state = "stopping";
     // Interrupt the entire task tree, allowing the emulator to persist flash.
     try { process.kill(-child.pid, "SIGINT"); }
     catch (error) { append(`\n${error}\n`); }
+    stopTimer ??= setTimeout(() => {
+      if (child === current && current.pid) {
+        try { process.kill(-current.pid, "SIGKILL"); } catch (error) { append(`\n${error}\n`); }
+      }
+    }, 3000);
   }
   function run(action: "prepare" | "start" | "build" | "project", directory?: string) {
     log = "";
@@ -52,7 +63,10 @@ export function runtimePlugin(): Plugin {
     child.stdout?.on("data", append);
     child.stderr?.on("data", append);
     child.on("error", (error) => { append(error); state = "failed"; });
-    child.on("close", (code, signal) => {
+    const timeout = action === "build" ? setTimeout(() => { append("\n编译超过 5 分钟，已停止\n"); stop(); }, 300000) : undefined;
+    return new Promise<boolean>((done) => child!.on("close", (code, signal) => {
+      clearTimeout(timeout);
+      clearTimeout(stopTimer); stopTimer = undefined;
       if (action === "build" && project) {
         project.ready = code === 0 && state !== "stopping";
         if (project.ready) writeFileSync(resolve(directory!, "ready.json"), JSON.stringify({ key: project.key }));
@@ -60,7 +74,8 @@ export function runtimePlugin(): Plugin {
       state = state === "stopping" ? "idle" : code === 0 ? "idle" : "failed";
       append(`\n进程结束：${code ?? signal}\n`);
       child = undefined;
-    });
+      done(code === 0 && state !== "failed");
+    }));
   }
   function generate(value: unknown) {
     const generated = firmwareProject(value);
@@ -71,9 +86,56 @@ export function runtimePlugin(): Plugin {
     files["main/motor.cc"] = readFileSync(resolve(root, "firmware/components/pao/motor.cc"), "utf8");
     files["main/motor.h"] = readFileSync(resolve(root, "firmware/components/pao/include/motor.h"), "utf8");
     files["board.json"] = JSON.stringify(generated.spec, null, 2);
+    if (generated.design.application.kind === "agent")
+      files["main/agent-app.h"] = `// Business API:\n${agentApi.split("\n").map((s) => `// ${s}`).join("\n")}\n${generated.design.application.source}\n`;
     const key = JSON.stringify(generated.design);
     const id = createHash("sha256").update(JSON.stringify(files)).update(key).digest("hex");
     return { files, key, id, spec: generated.spec };
+  }
+  function writeProject(generated: ReturnType<typeof generate>) {
+    const directory = resolve(root, "tmp/studio", generated.id);
+    mkdirSync(resolve(directory, "main"), { recursive: true });
+    rmSync(resolve(directory, "ready.json"), { force: true });
+    for (const [name, contents] of Object.entries(generated.files)) writeFileSync(resolve(directory, name), contents);
+    project = { id: generated.id, key: generated.key, spec: generated.spec, ready: false };
+    return directory;
+  }
+  async function stopAndWait() {
+    const current = child;
+    if (!current) return;
+    const ended = new Promise<void>((done) => current.once("close", () => done()));
+    stop();
+    await ended;
+  }
+  async function startAgent(value: { nodes: unknown; connections: unknown; prompt: string }) {
+    const controller = new AbortController(); agentController = controller;
+    const design = firmwareProject({ ...value, application: { kind: "diagnostic" } }).design;
+    const designKey = JSON.stringify({ nodes: design.nodes, connections: design.connections });
+    const directory = resolve(root, "tmp/agent", createHash("sha256").update(value.prompt + Date.now()).digest("hex"));
+    const update = (progress: AgentProgress) => { agent = { ...progress, designKey }; };
+    update({ phase: "generating", attempt: 1, log: "" });
+    try {
+      mkdirSync(directory, { recursive: true });
+      await iterateApplication({ prompt: value.prompt, signal: controller.signal, update,
+        generate: (feedback) => generateApplication(directory, value.prompt, firmwareProject(design).spec, feedback, controller.signal),
+        build: async (application) => {
+          controller.signal.throwIfAborted();
+          const target = writeProject(generate({ ...design, application }));
+          if (!await run("build", target)) throw Error(`编译失败：${log}`);
+        },
+        verify: async (application) => {
+          controller.signal.throwIfAborted();
+          const generated = generate({ ...design, application });
+          const target = resolve(root, "tmp/studio", generated.id);
+          void run("project", target);
+          try { return await verifyApplication(generated.spec, application, controller.signal); }
+          catch (error) { throw Error(`${error}\n模拟器日志：${log.slice(-10000)}`); }
+          finally { await stopAndWait(); }
+        },
+      });
+    } catch (error) {
+      if (agent) agent = { ...agent, phase: controller.signal.aborted ? "cancelled" : "failed", error: String(error) };
+    } finally { await stopAndWait(); agentController = undefined; }
   }
   function artifacts() {
     let firmware = false;
@@ -92,34 +154,44 @@ export function runtimePlugin(): Plugin {
     const send = (code: number, data: unknown) => { res.statusCode = code; res.end(JSON.stringify(data)); };
     if (!allowedRequest(req)) return send(403, { error: "Only same-origin local studio requests are accepted" });
     if (req.method === "GET" && req.url === "/api/runtime")
-      return send(200, { state, log, active: !!child, artifacts: artifacts(), project });
+      return send(200, { state, log, active: !!child || !!agentController, artifacts: artifacts(), project, agent, agentModel, agentProvider });
     if (req.method !== "POST") return send(405, { error: "Method not allowed" });
-    if (req.url === "/api/runtime/stop") { stop(); return send(200, { state }); }
-    if (!["/api/runtime/prepare", "/api/runtime/start", "/api/runtime/build", "/api/runtime/project", "/api/runtime/source"].includes(req.url))
+    if (req.url === "/api/runtime/stop") { agentController?.abort(); stop(); return send(200, { state }); }
+    if (!["/api/runtime/prepare", "/api/runtime/start", "/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent"].includes(req.url))
       return send(404, { error: "Unknown runtime action" });
-    if ((child && req.url !== "/api/runtime/source") || busy) return send(409, { error: "已有构建或运行任务，请先停止或等待结束" });
+    if (((child || agentController) && req.url !== "/api/runtime/source") || busy) return send(409, { error: "已有构建或运行任务，请先停止或等待结束" });
     busy = true;
     try {
       let generated: ReturnType<typeof generate> | undefined;
-      if (["/api/runtime/build", "/api/runtime/project", "/api/runtime/source"].includes(req.url)) {
+      let agentRequest: { nodes: unknown; connections: unknown; prompt: string } | undefined;
+      if (["/api/runtime/build", "/api/runtime/project", "/api/runtime/source", "/api/runtime/agent"].includes(req.url)) {
         let body = "";
         for await (const chunk of req) {
           body += chunk.toString();
           if (body.length > 64000) return send(413, { error: "设计请求超过 64 KB" });
         }
-        try { generated = generate(JSON.parse(body)); }
+        try {
+          const value = JSON.parse(body);
+          if (req.url === "/api/runtime/agent") {
+            if (typeof value.prompt !== "string" || !value.prompt.trim() || value.prompt.length > 4000) throw Error("请输入 1–4000 字的业务需求");
+            generated = generate({ ...value, application: { kind: "diagnostic" } });
+            agentRequest = { nodes: value.nodes, connections: value.connections, prompt: value.prompt };
+          } else generated = generate(value);
+        }
         catch (error) { return send(422, { error: String(error) }); }
         if (req.url === "/api/runtime/source") return send(200, generated);
       }
       if (await occupied(8080) || await occupied(8081))
         return send(409, { error: "8080 / 8081 已被其他服务占用；请先关闭该服务，工作台不会接管或终止它" });
+      if (agentRequest) {
+        if (!artifacts().emulator || !existsSync(resolve(root, "tmp/esp-idf/export.sh"))) return send(409, { error: "请先准备本地仿真环境" });
+        void startAgent(agentRequest);
+        return send(202, { state: "generating" });
+      }
       if (generated) {
         const directory = resolve(root, "tmp/studio", generated.id);
         if (req.url === "/api/runtime/build") {
-          mkdirSync(resolve(directory, "main"), { recursive: true });
-          rmSync(resolve(directory, "ready.json"), { force: true });
-          for (const [name, contents] of Object.entries(generated.files)) writeFileSync(resolve(directory, name), contents);
-          project = { id: generated.id, key: generated.key, spec: generated.spec, ready: false };
+          writeProject(generated);
           run("build", directory);
         } else {
           if (!existsSync(resolve(directory, "ready.json")) || !existsSync(resolve(directory, "build/studio.elf")))
@@ -137,13 +209,15 @@ export function runtimePlugin(): Plugin {
     name: "pao-local-runtime",
     configureServer(server) {
       server.middlewares.use(handle);
-      process.once("exit", stop);
-      server.httpServer?.once("close", () => { process.removeListener("exit", stop); stop(); });
+      const shutdown = () => { agentController?.abort(); stop(); };
+      process.once("exit", shutdown);
+      server.httpServer?.once("close", () => { process.removeListener("exit", shutdown); shutdown(); });
     },
     configurePreviewServer(server) {
       server.middlewares.use(handle);
-      process.once("exit", stop);
-      server.httpServer.once("close", () => { process.removeListener("exit", stop); stop(); });
+      const shutdown = () => { agentController?.abort(); stop(); };
+      process.once("exit", shutdown);
+      server.httpServer.once("close", () => { process.removeListener("exit", shutdown); shutdown(); });
     },
   };
 }
