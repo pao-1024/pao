@@ -1,0 +1,391 @@
+import { useEffect, useState } from "react";
+import {
+  pinSets,
+  endpoint,
+  padPoint,
+  placement,
+  pinLabel,
+  routePoints,
+  boardIssues,
+} from "./circuit.ts";
+import type { Module, Connection, Trace } from "./catalog.ts";
+
+export function PCB({
+  nodes,
+  connections,
+  traces,
+  board,
+  onNodes,
+  onTraces,
+  onBoard,
+}: {
+  nodes: Module[];
+  connections: Connection[];
+  traces: Trace[];
+  board: { width: number; height: number };
+  onNodes: (nodes: Module[]) => void;
+  onTraces: (traces: Trace[]) => void;
+  onBoard: (board: { width: number; height: number }) => void;
+}) {
+  const [wire, setWire] = useState(connections[0]?.id || "");
+  const [layer, setLayer] = useState<Trace["layer"]>("F.Cu");
+  const [width, setWidth] = useState(0.4);
+  const [draft, setDraft] = useState<Trace | null>(null);
+  useEffect(() => {
+    const cancel = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDraft(null);
+    };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, []);
+  const [hint, setHint] = useState(
+    "选择连接并开始布线；点击板内放置拐点，再点击目标焊盘。",
+  );
+  const selected = connections.find((c) => c.id === wire);
+  const issues = boardIssues(nodes, connections, traces, board);
+  return (
+    <div className="pcb-layout">
+      <aside className="panel tools">
+        <span className="eyebrow">CARRIER BOARD / 载板草稿</span>
+        <h2>板框与连接器</h2>
+        <label>
+          板宽 / mm
+          <input
+            type="number"
+            min="60"
+            max="200"
+            value={board.width}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 60 && v <= 200) {
+                onBoard({ ...board, width: v });
+                setDraft(null);
+              }
+            }}
+          />
+        </label>
+        <label>
+          板高 / mm
+          <input
+            type="number"
+            min="60"
+            max="160"
+            value={board.height}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 60 && v <= 160) {
+                onBoard({ ...board, height: v });
+                setDraft(null);
+              }
+            }}
+          />
+        </label>
+        {nodes.map((n, i) => {
+          const p = placement(n, i);
+          return (
+            <fieldset key={n.id}>
+              <legend>
+                U{n.id} / {n.type}
+              </legend>
+              {(["x", "y"] as const).map((axis) => (
+                <label key={axis}>
+                  {axis.toUpperCase()} / mm
+                  <input
+                    type="number"
+                    min="0"
+                    max={axis === "x" ? board.width : board.height}
+                    value={p[axis]}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (
+                        e.target.value === "" ||
+                        !Number.isFinite(v) ||
+                        v < 0 ||
+                        v > (axis === "x" ? board.width : board.height)
+                      )
+                        return;
+                      onNodes(
+                        nodes.map((m) =>
+                          m.id === n.id
+                            ? { ...m, placement: { ...p, [axis]: v } }
+                            : m,
+                        ),
+                      );
+                      setDraft(null);
+                    }}
+                  />
+                </label>
+              ))}
+            </fieldset>
+          );
+        })}
+      </aside>
+      <section className="pcb-board">
+        <div className="bench-toolbar">
+          <span>
+            PCB / {board.width} × {board.height} mm
+          </span>
+          <span>
+            {traces.length} 已布 / {connections.length - traces.length} 待布
+          </span>
+        </div>
+        <div className="pcb-scroll">
+          <svg
+            id="pcb-board"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox={`-8 -8 ${board.width + 16} ${board.height + 16}`}
+            width={(board.width + 16) * 7}
+            height={(board.height + 16) * 7}
+            aria-label="PCB 布线画布"
+            onClick={(e) => {
+              if (!draft) return;
+              const svg = e.currentTarget;
+              const matrix = svg.getScreenCTM();
+              if (!matrix) return;
+              const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(
+                matrix.inverse(),
+              );
+              if (
+                p.x >= 0 &&
+                p.y >= 0 &&
+                p.x <= board.width &&
+                p.y <= board.height
+              )
+                setDraft({
+                  ...draft,
+                  points: [
+                    ...draft.points,
+                    { x: Math.round(p.x), y: Math.round(p.y) },
+                  ],
+                });
+            }}
+          >
+            <defs>
+              <pattern
+                id="pcb-grid"
+                width="2.54"
+                height="2.54"
+                patternUnits="userSpaceOnUse"
+              >
+                <circle cx="0" cy="0" r=".09" fill="#819c91" />
+              </pattern>
+            </defs>
+            <rect
+              width={board.width}
+              height={board.height}
+              rx="1"
+              fill="#204a40"
+              stroke="#bda66c"
+              strokeWidth=".3"
+            />
+            <rect
+              width={board.width}
+              height={board.height}
+              fill="url(#pcb-grid)"
+            />
+            {connections.map((c) => {
+              const a = padPoint(nodes, c.a),
+                b = padPoint(nodes, c.b),
+                t = traces.find((t) => t.connection === c.id);
+              return t ? (
+                <polyline
+                  key={c.id}
+                  points={routePoints(nodes, c, t)
+                    .map((p) => `${p.x},${p.y}`)
+                    .join(" ")}
+                  fill="none"
+                  stroke={t.layer === "F.Cu" ? "#eb8a69" : "#78b7e0"}
+                  strokeWidth={t.width}
+                />
+              ) : (
+                <line
+                  key={c.id}
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke={wire === c.id ? "#ffe4a0" : "#9cac91"}
+                  strokeDasharray="1 1"
+                  strokeWidth=".15"
+                />
+              );
+            })}
+            {draft && selected && (
+              <polyline
+                points={[padPoint(nodes, selected.a), ...draft.points]
+                  .map((p) => `${p.x},${p.y}`)
+                  .join(" ")}
+                fill="none"
+                stroke="#ffe4a0"
+                strokeWidth={draft.width}
+              />
+            )}
+            {nodes.map((n) => (
+              <g key={n.id}>
+                {pinSets[n.type].map((p) => {
+                  const key = endpoint(n.id, p.id),
+                    pt = padPoint(nodes, key);
+                  const finish = () => {
+                    if (!draft || !selected) return;
+                    if (key !== selected.b) {
+                      setHint("请点击当前连接的目标焊盘。");
+                      return;
+                    }
+                    onTraces([
+                      ...traces.filter((t) => t.connection !== wire),
+                      draft,
+                    ]);
+                    setDraft(null);
+                    setHint("已保存走线；尚未执行完整 DRC。");
+                  };
+                  return (
+                    <g key={key}>
+                      <g
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`PCB ${pinLabel(nodes, key)}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          finish();
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") finish();
+                        }}
+                      >
+                        <title>{pinLabel(nodes, key)}</title>
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="1.1"
+                          fill="transparent"
+                        />
+                        <circle cx={pt.x} cy={pt.y} r=".8" fill="#d5bd77" />
+                        <circle cx={pt.x} cy={pt.y} r=".35" fill="#204a40" />
+                      </g>
+                      <text
+                        x={pt.x + 1}
+                        y={pt.y - 0.7}
+                        fontSize="1"
+                        fill="#cee0d2"
+                        pointerEvents="none"
+                      >
+                        {p.name}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            ))}
+            <text x="3" y={board.height - 3} fontSize="1.8" fill="#b3cebd">
+              PAO STUDIO / CONNECTOR DRAFT / NOT FOR MANUFACTURE
+            </text>
+          </svg>
+        </div>
+        <p role="status">
+          {draft && selected ? `布线中 → ${pinLabel(nodes, selected.b)}` : hint}
+        </p>
+      </section>
+      <aside className="panel tools">
+        <span className="eyebrow">ROUTING / 布线</span>
+        <h2>连接决定走线</h2>
+        <label>
+          目标连接
+          <select
+            value={wire}
+            onChange={(e) => {
+              setWire(e.target.value);
+              setDraft(null);
+            }}
+          >
+            {connections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {pinLabel(nodes, c.a)} → {pinLabel(nodes, c.b)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          铜层
+          <select
+            value={layer}
+            onChange={(e) => setLayer(e.target.value as Trace["layer"])}
+          >
+            <option>F.Cu</option>
+            <option>B.Cu</option>
+          </select>
+        </label>
+        <label>
+          线宽 / mm
+          <input
+            type="number"
+            min="0.2"
+            max="2"
+            step=".1"
+            value={width}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 0.2 && v <= 2) setWidth(v);
+            }}
+          />
+        </label>
+        <button
+          className="primary"
+          disabled={!selected}
+          onClick={() =>
+            setDraft({ connection: wire, layer, width, points: [] })
+          }
+        >
+          开始 / 重画连线
+        </button>
+        <div className="actions">
+          <button
+            disabled={!draft}
+            onClick={() =>
+              setDraft((d) =>
+                d ? { ...d, points: d.points.slice(0, -1) } : null,
+              )
+            }
+          >
+            撤销拐点
+          </button>
+          <button disabled={!draft} onClick={() => setDraft(null)}>
+            取消
+          </button>
+        </div>
+        <button
+          onClick={() => {
+            onTraces(traces.filter((t) => t.connection !== wire));
+            setDraft(null);
+          }}
+        >
+          删除所选走线
+        </button>
+        <h3>基础检查</h3>
+        <p>{issues.length ? issues.join("；") : "未发现板边或走线越界。"}</p>
+        <div className="notice">
+          当前为 2.54 mm 连接器布局草稿，不是厂商模块封装。尚无过孔、完整 ERC /
+          DRC 或 Gerber；不能据此打板。
+        </div>
+        <button
+          onClick={() => {
+            const svg = document.getElementById("pcb-board");
+            if (svg) {
+              const blob = new Blob(
+                [new XMLSerializer().serializeToString(svg)],
+                { type: "image/svg+xml" },
+              );
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = "carrier-NOT-FOR-MANUFACTURE.svg";
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+          }}
+        >
+          导出布局 SVG
+        </button>
+      </aside>
+    </div>
+  );
+}

@@ -1,10 +1,12 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PAO Studio · 从想法到实物</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="editor.css"></head>
-<body>
-<aside class="rail"><a class="brand" href="#assembly" aria-label="PAO Studio">p<span>ao</span><i></i></a><nav id="nav"></nav><div class="rail-foot">LOCAL<br>PROTOTYPE<br><span>v0.1 / 设计预览</span></div></aside>
-<div class="shell"><header><div class="breadcrumb">个人工作空间 <span>/</span> <strong id="project-name">语音交互小车</strong><span class="tag">示例项目</span></div><div class="header-actions"><span id="saved">仅当前会话</span><button id="export-project">导出项目 ↓</button></div></header>
-<main id="app"></main><footer><span><i class="dot"></i> 本地交互原型 · 未连接 esp32sim</span><span>硬件与代码，同一份设计。 <b>PAO STUDIO</b></span></footer></div>
-<dialog id="new-project"><form method="dialog"><div class="eyebrow">NEW PROJECT</div><h2>让下一个想法发生。</h2><label>项目名称<input id="new-name" maxlength="60" required placeholder="例如：桌面天气站"></label><p class="muted">创建空白 ESP32 项目。你可以从模块库开始组装。</p><div class="dialog-actions"><button value="cancel" formnovalidate>取消</button><button class="primary" id="create-project" value="create">创建项目 →</button></div></form></dialog>
-<div id="toast" role="status"></div><script type="module" src="app.js"></script>
-</body></html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>PAO Studio · 可组合的硬件工作台</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

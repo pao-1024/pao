@@ -1,0 +1,24 @@
+version: "3"
+
+env:
+  TMPDIR: "{{.TASKFILE_DIR}}/../tmp/temp"
+
+tasks:
+  setup:
+    desc: 按锁文件安装 React 工作台与 tscircuit 引擎
+    cmds:
+      - mkdir -p "$TMPDIR"
+      - pnpm install --frozen-lockfile --store-dir ../tmp/pnpm-store
+  dev:
+    desc: 启动 React 硬件工作台（127.0.0.1:4173）
+    deps: [setup]
+    cmds:
+      - pnpm run dev
+  check:
+    desc: 类型检查、接线行为与真实 tscircuit 生成检查
+    cmds:
+      - pnpm run check
+  build:
+    desc: 构建到仓库 tmp/platform-dist
+    cmds:
+      - pnpm run build
