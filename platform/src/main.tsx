@@ -17,6 +17,8 @@ import { hardwareSource } from "./hardware.ts";
 import { Assembly } from "./Assembly.tsx";
 import { PCB } from "./PCB.tsx";
 import { Simulator } from "./Simulator.tsx";
+import { firmwareProject } from "./firmware.ts";
+import firmwareMain from "../firmware/main/main.cpp?raw";
 import "./style.css";
 
 const pages = [
@@ -60,9 +62,9 @@ function App() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
   const [message, setMessage] = useState("添加模块后自动接线并尝试双面布线；未完成项会明确列出。");
-  const [firmware, setFirmware] = useState(
-    "// 固件草稿：未编译，不会下发给 PAO 模拟器。\nvoid app_main(void) {\n}\n",
-  );
+  let firmware = "", firmwareError = "";
+  try { firmware = firmwareProject({ nodes, connections }).header; }
+  catch (error) { firmwareError = String(error); }
   const [tab, setTab] = useState<"source" | "schematic" | "firmware">("source");
   const [result, setResult] = useState<{ svg: string; json: unknown } | null>(
     null,
@@ -247,9 +249,9 @@ function App() {
           board,
           traces,
           electrical,
-          firmware,
+          firmware: { header: firmware, main: firmwareMain },
           notice:
-            "模块接口设计与载板草稿；不是可制造 PCB，未适配或运行当前组合的固件。",
+            "模块接口设计与载板草稿；不是可制造 PCB。诊断固件按当前接线生成，运行状态以仿真页面为准。",
         },
         null,
         2,
@@ -360,18 +362,17 @@ function App() {
                   </p>
                 </article>
                 <article>
-                  <span className="badge">已实现 / 固定板型</span>
-                  <h2>PAO 虚拟原型</h2>
+                  <span className="badge">已实现 / 软件在环</span>
+                  <h2>接线、固件、运行</h2>
                   <p>
-                    在工作台准备环境、构建并启停 esp32sim，
-                    运行正式固件，观测音频、总线与日志。自由组装设计尚未接入该运行时。
+                    按当前模块接线生成 ESP-IDF 诊断固件并编译，在匹配的 esp32sim 板型上观测 OLED、I²S、电机与 UART；另保留 PAO 灵矽语音参考板。
                   </p>
                 </article>
                 <article>
                   <span className="badge planned">规划中 / Agent</span>
                   <h2>从需求到验证</h2>
                   <p>
-                    模块契约、软硬件协同生成、软件在环（SIL）、硬件在环（HIL）与制造资料检查。
+                    Agent 生成业务应用、根据运行证据迭代、硬件在环（HIL）与制造资料检查。
                   </p>
                 </article>
               </div>
@@ -676,7 +677,7 @@ function App() {
                       ? "design.tsx"
                       : t === "schematic"
                         ? "原理图 / SVG"
-                        : "固件草稿"}
+                        : "生成固件"}
                   </button>
                 ))}
               </div>
@@ -696,16 +697,24 @@ function App() {
               {tab === "firmware" && (
                 <>
                   <p className="notice">
-                    此草稿不编译、不随画布自动改引脚，也不会运行于 PAO
-                    模拟器。Agent 固件生成在规划中。
+                    wiring.h 随当前接线生成，和 ESP-IDF 模块诊断应用一起编译；在仿真页启动匹配板型。业务逻辑自动生成仍在规划中。
                   </p>
                   <details><summary>当前设计的 GPIO / 电气配置</summary><pre className="runtime-log">{JSON.stringify(electrical, null, 2)}</pre></details>
                   <button onClick={() => download("electrical-contract.json", JSON.stringify(electrical, null, 2), "application/json")}>导出 GPIO 与初始化条件</button>
+                  <button disabled={!!firmwareError} onClick={async () => {
+                    try {
+                      const response = await fetch("/api/runtime/source", { method: "POST",
+                        headers: { "X-Pao-Studio": "1", "Content-Type": "application/json" }, body: JSON.stringify({ nodes, connections }) });
+                      const result = await response.json();
+                      if (!response.ok) throw Error(result.error);
+                      download("esp-idf-project.json", JSON.stringify(result.files, null, 2), "application/json");
+                    } catch (error) { setBuildError(`固件源码导出失败：${error}`); }
+                  }}>导出完整 ESP-IDF 源文件 JSON</button>
                   <textarea
                     className="source"
-                    aria-label="固件草稿"
-                    value={firmware}
-                    onChange={(e) => setFirmware(e.target.value)}
+                    aria-label="生成的固件配置与程序"
+                    readOnly
+                    value={firmwareError || `${firmware}\n// main/main.cpp\n${firmwareMain}`}
                   />
                 </>
               )}
@@ -726,8 +735,8 @@ function App() {
                 <button onClick={() => download("design.tsx", source)}>
                   下载 TSX
                 </button>
-                <button onClick={() => download("main.c", firmware)}>
-                  下载固件草稿
+                <button disabled={!!firmwareError} onClick={() => download("wiring.h", firmware)}>
+                  下载固件引脚配置
                 </button>
                 <button
                   disabled={!result}
@@ -776,7 +785,7 @@ function App() {
               />
             </>
           )}
-          {page === "simulation" && <Simulator />}
+          {page === "simulation" && <Simulator nodes={nodes} connections={connections} />}
           {page === "delivery" && (
             <>
               <div className="section-heading">
@@ -898,7 +907,6 @@ function App() {
             setPending(null);
             setSelected(null);
             setSelectedWire(null);
-            setFirmware("// 尚未生成固件\n");
             setMessage("空白项目已创建，请从器件库添加模块。");
             newProject.current?.close();
             location.hash = "assembly";

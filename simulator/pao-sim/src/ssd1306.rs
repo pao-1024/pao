@@ -19,10 +19,13 @@ impl Default for Ssd1306State {
 }
 impl Ssd1306State {
     pub fn pixels(&self) -> Vec<u16> {
-        (0..8192).map(|i| {
+        self.pixels_for(64)
+    }
+    pub fn pixels_for(&self, height: usize) -> Vec<u16> {
+        (0..128 * height).map(|i| {
             let (x, y) = (i % 128, i / 128);
             let column = if self.mirror_x { 127 - x } else { x };
-            let row = if self.mirror_y { 63 - y } else { y };
+            let row = if self.mirror_y { height - 1 - y } else { y };
             let row = (row + 64 + self.start_line as usize - self.offset as usize) % 64;
             let bit = self.ram[row / 8 * 128 + column] & (1 << (row % 8)) != 0;
             let visible = self.on && y <= self.multiplex as usize && (self.entire || (bit ^ self.inverse));
@@ -80,16 +83,23 @@ impl Ssd1306State {
 
 pub struct Ssd1306 {
     state: Arc<Mutex<Ssd1306State>>, pins: (u8, u8),
+    reset: Option<Arc<Mutex<bool>>>,
     control: bool, data: bool, continuation: bool, wrote_data: bool,
 }
 impl Ssd1306 {
     pub fn new(state: Arc<Mutex<Ssd1306State>>, pins: (u8, u8)) -> Self {
-        Self { state, pins, control: true, data: false, continuation: false, wrote_data: false }
+        Self { state, pins, reset: None, control: true, data: false, continuation: false, wrote_data: false }
+    }
+    pub fn with_reset(mut self, reset: Arc<Mutex<bool>>) -> Self {
+        self.reset = Some(reset); self
     }
 }
 impl I2cDevice for Ssd1306 {
     fn pins(&self) -> Option<(u8, u8)> { Some(self.pins) }
-    fn start(&mut self, read: bool) -> bool { self.control = true; self.wrote_data = false; !read }
+    fn start(&mut self, read: bool) -> bool {
+        self.control = true; self.wrote_data = false;
+        !read && self.reset.as_ref().is_none_or(|reset| *reset.lock().unwrap())
+    }
     fn write(&mut self, byte: u8) -> bool {
         if self.control {
             self.data = byte & 0x40 != 0; self.continuation = byte & 0x80 != 0; self.control = false;

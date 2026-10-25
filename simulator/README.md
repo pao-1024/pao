@@ -84,3 +84,7 @@ task simulator:run
 仿真覆盖主要功能，不模拟射频干扰、电气特性和声学环境；
 浮点初始估计值不保证与芯片逐位一致。独立的 Simulator CI 仅检查脚本、React 类型和音频封包，
 不编译或运行模拟器；主分支实机固件构建沿用仓库现有 CI。
+
+## 平台当前接线的诊断仿真
+
+React 工作台另提供按当前模块与接线生成 ESP-IDF 工程、编译并启动匹配虚拟板型的入口，见 [平台运行说明](../platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。该诊断固件与上述 PAO 灵矽语音参考固件分别管理，不会将参考板的运行结果视为当前接线的验证结果。
