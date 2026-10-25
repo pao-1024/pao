@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { firmwareProject } from "./firmware.ts";
+import type { Application } from "./firmware.ts";
 import type { Module, Connection } from "./catalog.ts";
 
 type Runtime = {
@@ -34,7 +35,7 @@ function ReferenceSimulator() {
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
   }, []);
-  const running = runtime?.active && runtime.state === "starting";
+  const running = runtime?.active && runtime.state === "starting" && !runtime.project;
   useEffect(() => {
     setConnected(false);
     if (!running) return;
@@ -85,6 +86,7 @@ function ReferenceSimulator() {
         当前运行 PAO 参考板：ESP32-S3、INMP441、SSD1306 128×64、MAX98357 与 MX1508。
         这是仓库固件的真实执行环境，不是当前自由组装画布的仿真；任意板型生成仍在规划中。
       </div>
+      {runtime?.active && runtime.project && <p role="status">当前正在运行自由组合应用，请停止任务后再启动 PAO 参考板。</p>}
       <div className="runtime-setup">
         <div>
           <h3>本地环境与构建</h3>
@@ -121,15 +123,16 @@ function ReferenceSimulator() {
   );
 }
 
-export function Simulator({ nodes, connections }: { nodes: Module[]; connections: Connection[] }) {
+type ProjectProps = { nodes: Module[]; connections: Connection[]; application: Application; onApplication: (app: Application) => void; onSharedI2s: (shared: boolean) => void };
+export function Simulator(props: ProjectProps) {
   const [reference, setReference] = useState(false);
   return <><div className="actions">
     <button aria-pressed={!reference} onClick={() => setReference(false)}>当前接线 / 生成固件</button>
     <button aria-pressed={reference} onClick={() => setReference(true)}>PAO 参考板 / 灵矽语音</button>
-  </div>{reference ? <ReferenceSimulator /> : <ProjectSimulator nodes={nodes} connections={connections} />}</>;
+  </div>{reference ? <ReferenceSimulator /> : <ProjectSimulator {...props} />}</>;
 }
 
-function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections: Connection[] }) {
+function ProjectSimulator({ nodes, connections, application, onApplication, onSharedI2s }: ProjectProps) {
   const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -143,8 +146,14 @@ function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections
   const screen = useRef<HTMLCanvasElement>(null);
   const speaker = useRef<AudioContext | null>(null);
   const nextAudio = useRef(0);
+  const microphone = useRef<{ stream?: MediaStream; context?: AudioContext; node?: AudioWorkletNode; source?: MediaStreamAudioSourceNode } | null>(null);
+  const micGeneration = useRef(0);
+  const [micStatus, setMicStatus] = useState("off");
+  const [micSamples, setMicSamples] = useState(0);
+  const uart = useRef("");
+  const [firmwareReady, setFirmwareReady] = useState(false);
   let generated: ReturnType<typeof firmwareProject> | undefined, invalid = "";
-  try { generated = firmwareProject({ nodes, connections }); } catch (e) { invalid = String(e); }
+  try { generated = firmwareProject({ nodes, connections, application }); } catch (e) { invalid = String(e); }
   const key = generated ? JSON.stringify(generated.design) : "";
   const spec = generated?.spec;
   const matching = !!key && runtime?.project?.key === key;
@@ -164,7 +173,7 @@ function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections
     return () => { controller.abort(); clearTimeout(timer); };
   }, []);
   useEffect(() => {
-    setConnected(false); setSerial(""); setFrames(0);
+    setConnected(false); setSerial(""); setFrames(0); setFirmwareReady(false); uart.current = "";
     setAudio({ samples: 0, peak: 0, rate: 0 });
     setPins({ levels: 0n, pwm: new Map(), transactions: 0 });
     screen.current?.getContext("2d")?.clearRect(0, 0, 128, 32);
@@ -209,22 +218,28 @@ function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections
         try {
           const message = JSON.parse(data);
           if (message.t === "board" && message.name === "studio") setConnected(true);
-          if (message.t === "serial" && message.src === "uart0") setSerial((s) => (s + message.data).slice(-48000));
+          if (message.t === "serial" && message.src === "uart0") {
+            uart.current = (uart.current + message.data).slice(-48000); setSerial(uart.current);
+            const bootAt = uart.current.lastIndexOf("STUDIO BOOT"), readyAt = uart.current.lastIndexOf("STUDIO READY");
+            if (bootAt >= 0 || readyAt >= 0) setFirmwareReady(readyAt > bootAt);
+            if (/stack overflow|Guru Meditation|Rebooting|abort\(\)/.test(uart.current.slice(Math.max(bootAt, readyAt)))) setFirmwareReady(false);
+          }
+          if (message.t === "microphone-error") setError(`音频输入被拒绝：${message.message}`);
           if (message.t === "pao") setPins({ levels: BigInt(`0x${message.levels}`), pwm: new Map(message.pwm), transactions: message.i2c[0] });
         } catch (e) { setError(`模拟器消息无效：${e}`); }
       };
-      ws.onclose = () => { setConnected(false); if (!disposed) timer = setTimeout(connect, 1000); };
+      ws.onclose = () => { setConnected(false); stopMicrophone(); if (!disposed) timer = setTimeout(connect, 1000); };
       ws.onerror = () => ws.close();
     }
     connect();
-    return () => { disposed = true; clearTimeout(timer); ws?.close(); socket.current = null; void speaker.current?.close(); speaker.current = null; setListening(false); };
+    return () => { disposed = true; clearTimeout(timer); stopMicrophone(); ws?.close(); socket.current = null; void speaker.current?.close(); speaker.current = null; setListening(false); };
   }, [running, key]);
   async function action(name: "prepare" | "build" | "project" | "stop") {
     setPending(true); setError("");
     try {
       const response = await fetch(`/api/runtime/${name}`, { method: "POST",
         headers: { "X-Pao-Studio": "1", "Content-Type": "application/json" },
-        body: ["build", "project"].includes(name) ? JSON.stringify({ nodes, connections }) : undefined });
+        body: ["build", "project"].includes(name) ? JSON.stringify({ nodes, connections, application }) : undefined });
       const result = await response.json();
       if (!response.ok) throw Error(result.error);
       const status = await fetch("/api/runtime");
@@ -236,16 +251,60 @@ function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections
   function command(line: string) {
     if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ t: "serial", src: "uart0", line }));
   }
+  function stopMicrophone() {
+    micGeneration.current++;
+    const mic = microphone.current; microphone.current = null;
+    if (mic?.node) { mic.node.port.onmessage = null; mic.node.disconnect(); }
+    mic?.source?.disconnect();
+    mic?.stream?.getTracks().forEach((track) => track.stop());
+    if (mic?.context && mic.context.state !== "closed") void mic.context.close();
+    setMicStatus("off");
+  }
+  async function startMicrophone() {
+    if (!spec?.mic || socket.current?.readyState !== WebSocket.OPEN) return;
+    stopMicrophone(); setError(""); setMicStatus("requesting"); setMicSamples(0);
+    const generation = micGeneration.current;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: false } });
+      if (generation !== micGeneration.current) { stream.getTracks().forEach((track) => track.stop()); return; }
+      const context = new AudioContext({ sampleRate: 48000 });
+      const mic = { stream, context } as NonNullable<typeof microphone.current>;
+      microphone.current = mic;
+      await context.audioWorklet.addModule("/studio-microphone.js");
+      if (generation !== micGeneration.current) return;
+      mic.node = new AudioWorkletNode(context, "studio-microphone", { processorOptions: { channel: spec.mic.channel } });
+      mic.source = context.createMediaStreamSource(stream);
+      const mute = context.createGain(); mute.gain.value = 0;
+      mic.source.connect(mic.node); mic.node.connect(mute); mute.connect(context.destination);
+      mic.node.port.onmessage = ({ data }: MessageEvent<ArrayBuffer>) => {
+        const ws = socket.current;
+        if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 64000) { setError("麦克风发送队列积压，已丢弃当前音频帧"); return; }
+        ws.send(data); setMicSamples((n) => n + (data.byteLength - 4) / 2);
+      };
+      stream.getTracks().forEach((track) => { track.onended = () => stopMicrophone(); });
+      await context.resume();
+      if (generation === micGeneration.current) setMicStatus("on");
+    } catch (e) {
+      if (generation === micGeneration.current) { stopMicrophone(); setError(`麦克风未启用：${e}`); }
+    }
+  }
   const duty = (pin: number) => (pins.pwm.get(pin) ?? (pins.levels & (1n << BigInt(pin)) ? 1000 : 0)) / 10;
   const enabled = spec?.motor && !!(pins.levels & (1n << BigInt(spec.motor.enable)));
-  const readyAt = serial.lastIndexOf("STUDIO READY");
-  const ready = connected && readyAt > serial.lastIndexOf("STUDIO BOOT") &&
-    !/stack overflow|Guru Meditation|Rebooting/.test(serial.slice(readyAt));
+  const ready = connected && firmwareReady;
+  const appState = Array.from(serial.matchAll(/STUDIO APP mode=(\d) running=(\d) level=(\d+) alarm=(\d)/g)).at(-1);
   return <section className="simulation-page">
     <div className="section-heading"><div><span className="eyebrow">WIRING → ESP-IDF → ESP32SIM</span>
       <h1>让当前接线真正运行。</h1></div><span className="badge">{ready ? "当前固件已就绪 / 正在仿真" : connected ? "模拟器已连接 / 等待固件就绪" : labels[runtime?.state || ""] || "连接管理服务"}</span></div>
-    <div className="notice">从当前接线生成 ESP-IDF 6.0.1 模块诊断固件与虚拟板型，共用 GPIO、复位、声道和负载映射。
-      生成程序提供显示测试、音频输入/输出和电机控制；业务应用和灵矽语音使用单独的 PAO 参考板入口。</div>
+    <div className="notice">按当前接线与业务参数生成 ESP-IDF 固件：实时对讲将麦克风数据经固件送至扬声器；声音告警由固件判断阈值、保持时间并驱动 OLED 与提示音。</div>
+    <div className="runtime-setup"><div><h3>业务应用</h3>
+      <label>应用类型<select aria-label="业务应用类型" value={application.kind} onChange={(e) => onApplication(e.target.value === "intercom" ? { kind: "intercom", volume: 50 } : e.target.value === "sound-alarm" ? { kind: "sound-alarm", threshold: 5000, holdMs: 500, frequency: 880 } : { kind: "diagnostic" })}>
+        <option value="intercom">实时对讲</option><option value="sound-alarm">声音告警</option><option value="diagnostic">模块诊断</option></select></label>
+      {application.kind === "intercom" && <label>输出音量 / %<input aria-label="对讲输出音量" type="number" min={0} max={100} value={application.volume} onChange={(e) => onApplication({ ...application, volume: Number(e.target.value) })} /></label>}
+      {application.kind === "sound-alarm" && <>{([['threshold', 'PCM 幅度阈值', 100, 30000], ['holdMs', '告警保持 / ms', 100, 10000], ['frequency', '提示音 / Hz', 100, 2000]] as const).map(([field, label, min, max]) =>
+        <label key={field}>{label}<input aria-label={label} type="number" min={min} max={max} value={application[field]} onChange={(e) => onApplication({ ...application, [field]: Number(e.target.value) })} /></label>)}</>}
+    </div><div><h3>I²S 时钟</h3><p>{spec?.sharedI2s ? "共享 BCLK / WS，同一控制器全双工" : "独立 BCLK / WS，两个主控通道"}</p>
+      <button disabled={!spec?.mic || !spec?.amp || !!runtime?.active} onClick={() => onSharedI2s(!spec?.sharedI2s)}>{spec?.sharedI2s ? "恢复独立时钟接线" : "自动改为共享时钟接线"}</button>
+      <p>应用参数或时钟接线改变后，需要重新编译；业务计算在 ESP32 固件中执行。</p></div></div>
     {invalid && <p role="alert">{invalid}</p>}
     {runtime?.project && !matching && <p role="alert">接线已变化，现有固件不匹配。请停止旧任务并重新生成编译。</p>}
     <div className="runtime-setup"><div><h3>生成、编译与运行</h3>
@@ -261,11 +320,16 @@ function ProjectSimulator({ nodes, connections }: { nodes: Module[]; connections
     {error && <p role="alert" className="notice">{error}</p>}
     <div className="runtime-setup"><div><h3>实际外设输出</h3>
       {spec?.oled && <><canvas ref={screen} width={128} height={32} aria-label="当前接线 OLED 128×32 实际显存" style={{ width: "100%", maxWidth: 512, imageRendering: "pixelated", background: "#051410" }} />
-        <p>OLED 帧 {frames} · I²C 事务 {pins.transactions}</p><button disabled={!connected} onClick={() => command("display")}>切换 OLED 图案</button></>}
-      {spec?.mic && <p>SPH0645 输入：启动注入两秒 1kHz 测试 PCM；记录中的最大采样峰值 {Math.max(0, ...Array.from(serial.matchAll(/rx_peak=(\d+)/g), (m) => Number(m[1])))}。按实际 GPIO 与 SEL 声道接收。</p>}
+        <p>OLED 帧 {frames} · I²C 事务 {pins.transactions}</p>{application.kind === "diagnostic" && <button disabled={!connected} onClick={() => command("display")}>切换 OLED 图案</button>}</>}
+      {spec?.mic && <><p>浏览器麦克风：{micStatus === "on" ? "正在采集" : micStatus === "requesting" ? "等待授权 / 准备采集" : "已关闭"} · 已发送 {micSamples} 个 48kHz 样本 · 固件采样峰值 {Math.max(0, ...Array.from(serial.matchAll(/rx_peak=(\d+)/g), (m) => Number(m[1])))}</p>
+        <div className="actions"><button disabled={!ready || micStatus !== "off"} onClick={() => void startMicrophone()}>启用浏览器麦克风</button><button disabled={micStatus === "off"} onClick={stopMicrophone}>关闭麦克风</button></div></>}
+      {application.kind !== "diagnostic" && <><p>固件业务状态：{appState?.[2] === "1" ? "运行中" : "暂停"} · 当前幅度 {appState?.[3] ?? 0} · {appState?.[4] === "1" ? "告警触发" : "未告警"}</p><div className="actions"><button disabled={!ready} onClick={() => command("app-run")}>运行业务应用</button><button disabled={!ready} onClick={() => command("app-pause")}>暂停业务应用</button></div></>}
       {spec?.amp && <><p>I²S 输出：{audio.rate} Hz · {audio.samples} 样本 · 当前峰值 {audio.peak}</p>
-        <div className="actions"><button disabled={!connected} onClick={() => command("tone")}>播放 440Hz 测试音</button><button disabled={!connected} onClick={() => command("mute")}>静音</button>
-          <button disabled={!connected || listening} onClick={async () => { speaker.current = new AudioContext(); await speaker.current.resume(); setListening(true); }}>启用浏览器扬声器</button></div></>}
+        <div className="actions">{application.kind === "diagnostic" && <><button disabled={!connected} onClick={() => command("tone")}>播放 440Hz 测试音</button><button disabled={!connected} onClick={() => command("mute")}>静音</button></>}
+          <button disabled={!ready || listening} onClick={async () => {
+            try { speaker.current = new AudioContext(); await speaker.current.resume(); setListening(true); }
+            catch (e) { setError(`扬声器未启用：${e}`); }
+          }}>{listening ? "浏览器扬声器已启用" : "启用浏览器扬声器"}</button></div></>}
       {spec?.motor && <><p>DRV8833 SLP：{enabled ? "高 / 已使能" : "低 / 休眠"}</p>
         {spec.motor.loads.map((load, i) => <p key={load.id}>电机 #{load.id} / {i ? "B" : "A"}：桥臂占空比 {enabled ? Math.round((duty(spec.motor!.pins[i * 2]) - duty(spec.motor!.pins[i * 2 + 1])) * load.polarity) : 0}%（非实测转速）</p>)}
         <div className="actions"><button disabled={!connected} onClick={() => command("motor 30 30")}>双路正转 30% / 1秒</button><button disabled={!connected} onClick={() => command("motor -30 -30")}>双路反转 30% / 1秒</button><button disabled={!connected} onClick={() => command("stop")}>停止电机</button></div></>}

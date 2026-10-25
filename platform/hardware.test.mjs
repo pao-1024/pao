@@ -57,7 +57,7 @@ test("firmware and virtual board follow changed GPIOs, SEL and motor polarity", 
   assert.equal(result.spec.motor.loads[0].polarity, -1);
   assert.equal(result.spec.motor.loads[1].polarity, 1);
   const shared = referenceConnections(starter).map((c) => c.b === "3:BCLK" ? { ...c, a: "1:J1-8" } : c.b === "3:WS" ? { ...c, a: "1:J1-9" } : c);
-  assert.throws(() => firmwareProject({ nodes: starter, connections: shared }), /不支持共用/);
+  assert.equal(firmwareProject({ nodes: starter, connections: shared }).spec.sharedI2s, true);
   assert.throws(() => firmwareProject({ nodes: starter, connections: shared.filter((c) => c.b !== "2:RST") }), /电气检查/);
 });
 
@@ -70,9 +70,24 @@ test("firmware generation rejects malformed graphs and conflicting I2S routes", 
     { nodes: starter, connections: [{ id: "bad", a: "1:missing", b: "2:RST" }] }])
     assert.throws(() => firmwareProject(value));
   const oneClock = connections.map((c) => c.b === "3:BCLK" ? { ...c, a: "1:J1-8" } : c);
-  assert.throws(() => firmwareProject({ nodes: starter, connections: oneClock }), /不支持共用/);
+  assert.throws(() => firmwareProject({ nodes: starter, connections: oneClock }), /同时共用/);
   const dataConflict = connections.map((c) => c.b === "3:DOUT" ? { ...c, a: "1:J1-7" } : c);
   assert.throws(() => firmwareProject({ nodes: starter, connections: dataConflict }), /争用/);
   const bare = completeProject([{ id: 1, type: "esp", x: 0, y: 0 }]);
   assert.equal(firmwareProject({ nodes: bare, connections: referenceConnections(bare) }).spec.oled, null);
+});
+
+test("business parameters are validated and participate in the generated design", () => {
+  const graph = { nodes: starter, connections: referenceConnections(starter) };
+  const talk = firmwareProject({ ...graph, application: { kind: "intercom", volume: 70 } });
+  const alarm = firmwareProject({ ...graph, application: { kind: "sound-alarm", threshold: 6000, holdMs: 800, frequency: 1000 } });
+  assert.deepEqual(talk.spec.application, { kind: "intercom", volume: 70 });
+  assert.deepEqual(alarm.spec.application, { kind: "sound-alarm", threshold: 6000, holdMs: 800, frequency: 1000 });
+  assert.notDeepEqual(talk.design, alarm.design);
+  for (const application of [null, { kind: "unknown" }, { kind: "intercom", volume: 101 },
+    { kind: "intercom", volume: NaN }, { kind: "sound-alarm", threshold: -1, holdMs: 500, frequency: 880 },
+    { kind: "sound-alarm", threshold: 5000, holdMs: 10, frequency: 880 }])
+    assert.throws(() => firmwareProject({ ...graph, application }));
+  const bare = completeProject([{ id: 1, type: "esp", x: 0, y: 0 }]);
+  assert.throws(() => firmwareProject({ nodes: bare, connections: referenceConnections(bare), application: { kind: "intercom", volume: 50 } }), /需要麦克风/);
 });

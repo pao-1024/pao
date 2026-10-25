@@ -18,7 +18,7 @@ jobs:
   check:
     name: Simulator static checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,3 +42,13 @@ jobs:
           python3 -m unittest discover -s simulator -p 'test_*.py'
           node --check simulator/web/pao-microphone.js
           pnpm --dir simulator run check
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build and check virtual hardware
+        env:
+          TMPDIR: ${{ github.workspace }}/tmp/temp
+          CARGO_HOME: ${{ github.workspace }}/tmp/cargo-home
+          CARGO_TARGET_DIR: ${{ github.workspace }}/tmp/esp32sim-build
+        run: |
+          python3 simulator/build-esp32sim.py
+          cargo test --locked --release --manifest-path tmp/studio-sim/pao-sim/Cargo.toml
+          cargo test --locked --release --manifest-path tmp/studio-sim/esp32sim/Cargo.toml -p esp-periph i2s::

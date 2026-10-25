@@ -8,13 +8,13 @@
 网页使用电脑麦克风和扬声器与设备语音交互。
 
 板型与 SSD1306 模型在 `pao-sim/src/`，React 网页与 AudioWorklet 在 `web/`。
-内核 fork 只维护通用 CPU、网络、Flash、I2S 支持和库入口，不包含 PAO 板型或页面。
+内核 fork 维护通用 CPU、网络、Flash、I2S 支持和库入口，PAO 板型与页面在本仓库维护。
 启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
 `BoardModel` 接口挂载本地板型；不依赖动态插件 ABI。
 
 `simulator/esp32sim/` 是 [pao-1024/esp32sim](https://github.com/pao-1024/esp32sim)
 的 Git submodule，跟踪组织维护的 `pao` 分支，由父仓库的 gitlink 固定具体 commit。
-内核改动经 PR 合入 `pao`，`main` 保持上游基线；本地 crate 直接依赖子模块源码。
+内核固定在子模块版本；构建入口将仓库 I²S 扩展应用到 `tmp/studio-sim/` 隔离副本，原检出保持不变。修改 Rust 模型后使用 `task simulator:install` 构建，测试目标使用该目录下的 Cargo manifest。
 `Cargo.lock` 固定 crate 依赖关系。
 构建产物为 `tmp/esp32sim-build/release/pao-sim`，React 网页构建到 `tmp/simulator-web/`。
 
@@ -82,9 +82,8 @@ task simulator:run
 需在 ESP-IDF 配置界面修改，或移走 `tmp/build/<base-commit>/` 后重新构建。
 
 仿真覆盖主要功能，不模拟射频干扰、电气特性和声学环境；
-浮点初始估计值不保证与芯片逐位一致。独立的 Simulator CI 仅检查脚本、React 类型和音频封包，
-不编译或运行模拟器；主分支实机固件构建沿用仓库现有 CI。
+浮点初始估计值不保证与芯片逐位一致。Simulator CI 检查脚本、React 类型与音频封包，并构建模拟器、运行板型与 I²S 模型检查；ESP-IDF 应用闭环通过实际编译和运行验证，主分支实机固件构建沿用仓库现有 CI。
 
-## 平台当前接线的诊断仿真
+## 平台当前接线的业务应用仿真
 
-React 工作台另提供按当前模块与接线生成 ESP-IDF 工程、编译并启动匹配虚拟板型的入口，见 [平台运行说明](../platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。该诊断固件与上述 PAO 灵矽语音参考固件分别管理，不会将参考板的运行结果视为当前接线的验证结果。
+React 工作台提供按当前接线和业务参数生成实时对讲、声音告警及诊断固件的入口，支持真实浏览器麦克风、独立/共享 I²S 时钟，见 [平台运行说明](../platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。这些本地应用与上述 PAO 灵矽语音参考固件分别管理。

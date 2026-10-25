@@ -1,0 +1,99 @@
+diff --git a/esp-periph/src/i2s/rx.rs b/esp-periph/src/i2s/rx.rs
+index 3eff7a4..f8756f4 100644
+--- a/esp-periph/src/i2s/rx.rs
++++ b/esp-periph/src/i2s/rx.rs
+@@ -80,6 +80,10 @@ impl I2s {
+     }
+     /// Standard I2S frame rate, or S3 PDM-to-PCM output rate. No external slave clock.
+     pub fn rx_rate(&self) -> Option<u32> {
++        // ESP32-S3 SIG_LOOPBACK shares TX BCK/WS with a slave RX (IDF full duplex).
++        if self.rx_conf & (1 << 3) != 0 {
++            return if self.shared_rx_clock() { self.derive_rate() } else { None };
++        }
+         let conf1 = self.ram.read(0x28);
+         let frame_bits = if self.rx_conf & (1 << 20) != 0 {
+             if self.rx_conf & (1 << 22) != 0 {
+@@ -92,6 +96,10 @@ impl I2s {
+         };
+         Self::clock_rate(self.ram.read(0x30), self.ram.read(0x38), conf1, frame_bits)
+     }
++    pub fn shared_rx_clock(&self) -> bool {
++        self.rx_conf & (1 << 3) != 0 && self.tx_conf & (1 << 27) != 0
++            && self.tx_conf & (1 << 3) == 0 && self.tx_running()
++    }
+     /// C6's RX clock lives in PCR instead of the I2S block.
+     pub fn rx_pcr_clock(&mut self, conf: u32, div: u32) {
+         self.ram.write(
+@@ -135,7 +143,7 @@ impl I2s {
+             && [16, 24, 32].contains(&bits)
+             && mask != 0
+             && mask & !3 == 0
+-            && self.rx_conf & ((1 << 3) | (1 << 7) | (3 << 10) | (1 << 18)) == 0
++            && self.rx_conf & ((1 << 7) | (3 << 10) | (1 << 18)) == 0
+             && if pdm {
+                 pdm2pcm && bits == 16 && self.rx_conf & (1 << 21) != 0
+             } else {
+@@ -192,6 +200,21 @@ mod tests {
+         i.write(0x20, 4);
+         i
+     }
++    #[test]
++    fn shared_tx_clock_paces_slave_rx_and_stalls_without_a_running_master() {
++        let mut i = receiver();
++        i.write(0x34, (1 << 26) | (2 << 27) | 25);
++        i.write(0x2c, (24 << 7) | (15 << 13) | (15 << 18));
++        i.write(0x20, 4 | (1 << 3));
++        assert_eq!(i.rx_rate(), None);
++        i.write(0x24, 4 | (1 << 27));
++        assert_eq!(i.rx_rate(), Some(8000));
++        i.rx_input().push(&[[1234, -2345]]);
++        assert_eq!(i.receive(20000, 20000, false, &crate::Gpio::new(), SIG, None), [0xd2, 4, 0xd7, 0xf6]);
++        i.write(0x24, 1 << 27);
++        assert_eq!(i.rx_rate(), None);
++        assert!(i.receive(20000, 40000, false, &crate::Gpio::new(), SIG, None).is_empty());
++    }
+     const SIG: super::super::RxSignals = super::super::RxSignals { data: 15, clock: [16, 17], input_select_bit: 6, output_mask: 0x1ff };
+ 
+     #[test]
+diff --git a/esp32s3/src/bus/dma.rs b/esp32s3/src/bus/dma.rs
+index c227caf..d480c0b 100644
+--- a/esp32s3/src/bus/dma.rs
++++ b/esp32s3/src/bus/dma.rs
+@@ -312,7 +312,9 @@ impl SocBus {
+ 
+     fn dma_i2s_rx(&mut self, cycles: u64, port: u32) {
+         let Some(ch) = self.periph.gdma.in_channel_for(3 + port) else { return };
+-        let signals = esp_periph::i2s::RxSignals { data: if port == 0 { 25 } else { 30 }, clock: if port == 0 { [26, 27] } else { [31, 32] }, input_select_bit: 7, output_mask: 0x3ff };
++        let shared = if port == 0 { self.periph.i2s0.shared_rx_clock() } else { self.periph.i2s1.shared_rx_clock() };
++        let clock = match (port, shared) { (0, true) => [22, 24], (0, false) => [26, 27], (_, true) => [28, 29], _ => [31, 32] };
++        let signals = esp_periph::i2s::RxSignals { data: if port == 0 { 25 } else { 30 }, clock, input_select_bit: 7, output_mask: 0x3ff };
+         let mut bank = self.periph.i2s0.take_pcm_bank();
+         let i2s = if port == 0 { &mut self.periph.i2s0 } else { &mut self.periph.i2s1 };
+         let bytes = i2s.receive(cycles, self.cycles, port == 0, &self.periph.gpio, signals, bank.as_deref_mut());
+diff --git a/esp-soc/src/machine/web.rs b/esp-soc/src/machine/web.rs
+index 165cc9b..a34952f 100644
+--- a/esp-soc/src/machine/web.rs
++++ b/esp-soc/src/machine/web.rs
+@@ -119,6 +119,22 @@ impl<S: Soc> Machine<S> {
+         let Some(w) = self.web.clone() else { return };
+         use crate::json::{parse_json, Json};
+         for b in w.poll_incoming_bin() {
++            // type 6: [6, routed source slot, channel, 0][mono PCM16 LE] at the source rate.
++            if b.first() == Some(&6) {
++                if b.len() < 6 || b.len() > 8196 || b.len() % 2 != 0 || b[1] >= 16 || b[2] > 1 || b[3] != 0 {
++                    w.send_text(r#"{"t":"microphone-error","message":"Invalid routed PCM16 microphone packet"}"#);
++                    continue;
++                }
++                let samples: Vec<_> = b[4..].as_chunks::<2>().0.iter().map(|v| {
++                    let mut frame = [0; 2]; frame[b[2] as usize] = i16::from_le_bytes(*v); frame
++                }).collect();
++                let accepted = self.bus.attach_pcm_sources().and_then(|bank| bank.inputs.get_mut(b[1] as usize))
++                    .and_then(Option::as_mut).map_or(0, |source| source.push_latest(&samples, 12000));
++                if accepted != samples.len() {
++                    w.send_text(r#"{"t":"microphone-error","message":"Routed microphone source unavailable"}"#);
++                }
++                continue;
++            }
+             // type 5: [5][I2S port][mono PCM16 LE]; consumed at the guest's I2S rate.
+             if b.first() == Some(&5) {
+                 if b.len() < 4 || b.len() > 8194 || b.len() % 2 != 0 || b[1] > 1 {

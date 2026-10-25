@@ -13,6 +13,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+static std::atomic<bool> app_running{false}, app_alarm{false};
+static std::atomic<int> input_level{0};
+
 [[maybe_unused]] static void output(gpio_num_t pin) {
     ESP_ERROR_CHECK(gpio_set_level(pin, 0));
     gpio_config_t cfg = {};
@@ -26,10 +29,31 @@ static i2c_master_dev_handle_t oled;
 static bool inverted;
 static void display() {
     uint8_t data[513] = {0x40};
+#if APP_MODE == 0
     // A moving checkerboard proves that the guest writes all four display pages.
     for (int i = 1; i <= 512; ++i) data[i] = ((i / 8) & 1) ^ inverted ? 0x55 : 0xaa;
+#else
+    static const uint8_t font[][5] = {
+        {0x7e,0x11,0x11,0x11,0x7e}, {0x7f,0x49,0x49,0x49,0x36}, {0x3e,0x41,0x41,0x41,0x22},
+        {0x7f,0x41,0x41,0x22,0x1c}, {0x7f,0x49,0x49,0x49,0x41}, {0x7f,0x09,0x09,0x09,0x01},
+        {0x3e,0x41,0x49,0x49,0x7a}, {0x7f,0x08,0x08,0x08,0x7f}, {0,0x41,0x7f,0x41,0},
+        {0x20,0x40,0x41,0x3f,0x01}, {0x7f,0x08,0x14,0x22,0x41}, {0x7f,0x40,0x40,0x40,0x40},
+        {0x7f,0x02,0x0c,0x02,0x7f}, {0x7f,0x04,0x08,0x10,0x7f}, {0x3e,0x41,0x41,0x41,0x3e},
+        {0x7f,0x09,0x09,0x09,0x06}, {0x3e,0x41,0x51,0x21,0x5e}, {0x7f,0x09,0x19,0x29,0x46},
+        {0x46,0x49,0x49,0x49,0x31}, {0x01,0x01,0x7f,0x01,0x01}, {0x3f,0x40,0x40,0x40,0x3f},
+        {0x1f,0x20,0x40,0x20,0x1f}, {0x3f,0x40,0x38,0x40,0x3f}, {0x63,0x14,0x08,0x14,0x63},
+        {0x07,0x08,0x70,0x08,0x07}, {0x61,0x51,0x49,0x45,0x43}
+    };
+    const char *title = !app_running ? "PAUSED" : APP_MODE == 1 ? "INTERCOM" : app_alarm ? "ALARM" : "LISTENING";
+    for (int i = 0; title[i] && i < 20; ++i)
+        if (title[i] >= 'A' && title[i] <= 'Z') std::memcpy(data + 1 + i * 6, font[title[i] - 'A'], 5);
+    const int bar = std::min(128, input_level.load() * 128 / 32768);
+    for (int i = 0; i < bar; ++i) data[1 + 3 * 128 + i] = 0x7e;
+#endif
     ESP_ERROR_CHECK(i2c_master_transmit(oled, data, sizeof(data), 1000));
+#if APP_MODE == 0
     printf("STUDIO OLED frame 128x32 SDA=%d SCL=%d RST=%d\n", OLED_SDA, OLED_SCL, OLED_RST);
+#endif
 }
 static void init_oled() {
     output((gpio_num_t)OLED_RST);
@@ -76,29 +100,55 @@ static void audio(void *) {
     [[maybe_unused]] uint32_t frame = 0;
     uint32_t packets = 0;
     int peak = 0;
+    bool last_running = false, last_alarm = false;
+    [[maybe_unused]] int64_t alarm_until = 0;
     while (true) {
         size_t bytes;
+        int block_peak = 0;
 #if HAS_MIC
         ESP_ERROR_CHECK(i2s_channel_read(rx, input, sizeof(input), &bytes, 1000));
         if (bytes != sizeof(input)) abort();
         for (unsigned i = MIC_CHANNEL; i < bytes / sizeof(int32_t); i += 2)
-            peak = std::max(peak, std::abs((int)(input[i] / 65536)));
+            block_peak = std::max(block_peak, std::abs((int)(input[i] / 65536)));
+#endif
+        input_level = block_peak;
+        peak = std::max(peak, block_peak);
+#if APP_MODE == 2
+        const int64_t now = esp_timer_get_time();
+        if (!app_running) alarm_until = 0;
+        else if (block_peak >= APP_THRESHOLD) alarm_until = now + APP_HOLD_MS * 1000LL;
+        app_alarm = app_running && now < alarm_until;
 #endif
 #if HAS_AMP
         for (int i = 0; i < 480; ++i, ++frame) {
+#if APP_MODE == 1
+            int32_t value = app_running ? (input[i * 2 + MIC_CHANNEL] / 65536 * APP_VOLUME / 100) * 65536 : 0;
+#elif APP_MODE == 2
+            int32_t value = app_alarm ? (int32_t)(std::sin(frame * 6.283185307 * APP_ALARM_HZ / 48000) * 2000) * 65536 : 0;
+#else
             int32_t value = play_tone ? (int32_t)(std::sin(frame * 6.283185307 * 440 / 48000) * 2000) * 65536 : 0;
+#endif
             samples[i * 2] = samples[i * 2 + 1] = value;
         }
         ESP_ERROR_CHECK(i2s_channel_write(tx, samples, sizeof(samples), &bytes, 1000));
         if (bytes != sizeof(samples)) abort();
 #endif
-        if (++packets % 100 == 0) {
-            printf("STUDIO AUDIO rate=48000 slots=32x2 rx_peak=%d tx=%s\n", peak, play_tone ? "tone440" : "silence");
+        if (++packets % 100 == 0 || app_running != last_running || app_alarm != last_alarm) {
+            printf("STUDIO AUDIO rate=48000 slots=32x2 rx_peak=%d tx=%s\n", peak, APP_MODE == 0 ? (play_tone ? "tone440" : "silence") : app_running ? "application" : "silence");
+            printf("STUDIO APP mode=%d running=%d level=%d alarm=%d time_ms=%lld\n", APP_MODE, (int)app_running.load(), block_peak, (int)app_alarm.load(), (long long)(esp_timer_get_time() / 1000));
+            last_running = app_running; last_alarm = app_alarm;
             peak = 0;
         }
     }
 }
 static void init_audio() {
+#if SHARED_I2S
+    i2s_chan_config_t channel = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    ESP_ERROR_CHECK(i2s_new_channel(&channel, &tx, &rx));
+    auto cfg = audio_config(MIC_BCLK, MIC_WS, MIC_DATA, AMP_DATA);
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx, &cfg));
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx, &cfg));
+#else
 #if HAS_AMP
     i2s_chan_config_t out = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
     ESP_ERROR_CHECK(i2s_new_channel(&out, &tx, nullptr));
@@ -110,6 +160,7 @@ static void init_audio() {
     ESP_ERROR_CHECK(i2s_new_channel(&in, nullptr, &rx));
     auto rx_cfg = audio_config(MIC_BCLK, MIC_WS, MIC_DATA, -1);
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(rx, &rx_cfg));
+#endif
 #endif
 #if HAS_AMP
     ESP_ERROR_CHECK(i2s_channel_enable(tx));
@@ -141,7 +192,12 @@ extern "C" void app_main() {
     printf("STUDIO READY commands: status, display, tone, mute, motor A B (-50..50), stop\n");
     char line[80]; size_t length = 0;
     bool overflow = false;
+    [[maybe_unused]] int64_t next_display = 0;
     while (true) {
+#if HAS_OLED && APP_MODE != 0
+        const int64_t now = esp_timer_get_time();
+        if (now >= next_display) { display(); next_display = now + 100000; }
+#endif
 #if HAS_MOTOR
         if (motor_deadline && esp_timer_get_time() >= motor_deadline) {
             a.setSpeed(0); b.setSpeed(0); motor_deadline = 0;
@@ -161,6 +217,8 @@ extern "C" void app_main() {
         int av, bv; char extra;
 #endif
         if (!std::strcmp(line, "status")) printf("STUDIO READY oled=%d mic=%d amp=%d motor=%d\n", HAS_OLED, HAS_MIC, HAS_AMP, HAS_MOTOR);
+        else if (!std::strcmp(line, "app-run")) { app_running = true; printf("STUDIO APP started mode=%d\n", APP_MODE); }
+        else if (!std::strcmp(line, "app-pause")) { app_running = false; app_alarm = false; printf("STUDIO APP paused\n"); }
 #if HAS_OLED
         else if (!std::strcmp(line, "display")) { inverted = !inverted; display(); }
 #endif

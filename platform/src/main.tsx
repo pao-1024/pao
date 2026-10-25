@@ -17,7 +17,8 @@ import { hardwareSource } from "./hardware.ts";
 import { Assembly } from "./Assembly.tsx";
 import { PCB } from "./PCB.tsx";
 import { Simulator } from "./Simulator.tsx";
-import { firmwareProject } from "./firmware.ts";
+import { firmwareProject, defaultApplication } from "./firmware.ts";
+import type { Application } from "./firmware.ts";
 import firmwareMain from "../firmware/main/main.cpp?raw";
 import "./style.css";
 
@@ -51,6 +52,8 @@ function App() {
     referenceConnections(starter),
   );
   const [traces, setTraces] = useState<Trace[]>([]);
+  const [application, setApplication] = useState<Application | null>(null);
+  const activeApplication = application ?? defaultApplication(nodes);
   const [routing, setRouting] = useState(false);
   const [routeRequest, setRouteRequest] = useState(0);
   const [routeWidth, setRouteWidth] = useState(0.4);
@@ -63,7 +66,7 @@ function App() {
   const [category, setCategory] = useState("全部");
   const [message, setMessage] = useState("添加模块后自动接线并尝试双面布线；未完成项会明确列出。");
   let firmware = "", firmwareError = "";
-  try { firmware = firmwareProject({ nodes, connections }).header; }
+  try { firmware = firmwareProject({ nodes, connections, application: activeApplication }).header; }
   catch (error) { firmwareError = String(error); }
   const [tab, setTab] = useState<"source" | "schematic" | "firmware">("source");
   const [result, setResult] = useState<{ svg: string; json: unknown } | null>(
@@ -165,6 +168,25 @@ function App() {
     setSelectedWire(null);
     setMessage("已删除连接及其 PCB 走线。");
   }
+  function shareAudioClock(shared: boolean) {
+    try {
+      const { mic, amp } = firmwareProject({ nodes, connections, application: activeApplication }).spec;
+      if (!mic || !amp) throw Error("共享时钟需要麦克风和功放");
+      const esp = nodes.find((n) => n.type === "esp")!;
+      const gpio = (pin: number) => `${esp.id}:${pinSets.esp.find((p) => p.name === `GPIO${pin}`)!.id}`;
+      const next = connections.map((c) => {
+        for (const [pin, name] of [["BCLK", shared ? amp.bclk : 5], ["WS", shared ? amp.ws : 4]] as const) {
+          const target = `${mic.id}:${pin}`;
+          if (c.a === target) return { ...c, b: gpio(name) };
+          if (c.b === target) return { ...c, a: gpio(name) };
+        }
+        return c;
+      });
+      firmwareProject({ nodes, connections: next, application: activeApplication });
+      setConnections(next);
+      setMessage(shared ? "麦克风与功放已共享 BCLK / WS；请重新编译当前设计。" : "麦克风已恢复独立 GPIO5 / GPIO4 时钟；请重新编译。");
+    } catch (error) { setMessage(String(error)); }
+  }
   function removeModule(id: number) {
     const removed = new Set(
       connections
@@ -249,9 +271,10 @@ function App() {
           board,
           traces,
           electrical,
+          application: activeApplication,
           firmware: { header: firmware, main: firmwareMain },
           notice:
-            "模块接口设计与载板草稿；不是可制造 PCB。诊断固件按当前接线生成，运行状态以仿真页面为准。",
+            "模块接口设计与载板草稿；不是可制造 PCB。应用固件按当前接线和业务参数生成，运行状态以仿真页面为准。",
         },
         null,
         2,
@@ -365,14 +388,14 @@ function App() {
                   <span className="badge">已实现 / 软件在环</span>
                   <h2>接线、固件、运行</h2>
                   <p>
-                    按当前模块接线生成 ESP-IDF 诊断固件并编译，在匹配的 esp32sim 板型上观测 OLED、I²S、电机与 UART；另保留 PAO 灵矽语音参考板。
+                    按当前接线生成实时对讲、声音告警或诊断固件并编译，使用真实浏览器麦克风，在匹配的 esp32sim 板型上运行；支持共享 I²S 时钟。
                   </p>
                 </article>
                 <article>
                   <span className="badge planned">规划中 / Agent</span>
                   <h2>从需求到验证</h2>
                   <p>
-                    Agent 生成业务应用、根据运行证据迭代、硬件在环（HIL）与制造资料检查。
+                    Agent 从自然语言生成更多业务应用、根据运行证据迭代、硬件在环（HIL）与制造资料检查。
                   </p>
                 </article>
               </div>
@@ -697,14 +720,14 @@ function App() {
               {tab === "firmware" && (
                 <>
                   <p className="notice">
-                    wiring.h 随当前接线生成，和 ESP-IDF 模块诊断应用一起编译；在仿真页启动匹配板型。业务逻辑自动生成仍在规划中。
+                    wiring.h 随当前接线与业务参数生成，和实时对讲、声音告警或模块诊断程序一起编译；在仿真页配置应用并启动匹配板型。
                   </p>
                   <details><summary>当前设计的 GPIO / 电气配置</summary><pre className="runtime-log">{JSON.stringify(electrical, null, 2)}</pre></details>
                   <button onClick={() => download("electrical-contract.json", JSON.stringify(electrical, null, 2), "application/json")}>导出 GPIO 与初始化条件</button>
                   <button disabled={!!firmwareError} onClick={async () => {
                     try {
                       const response = await fetch("/api/runtime/source", { method: "POST",
-                        headers: { "X-Pao-Studio": "1", "Content-Type": "application/json" }, body: JSON.stringify({ nodes, connections }) });
+                        headers: { "X-Pao-Studio": "1", "Content-Type": "application/json" }, body: JSON.stringify({ nodes, connections, application: activeApplication }) });
                       const result = await response.json();
                       if (!response.ok) throw Error(result.error);
                       download("esp-idf-project.json", JSON.stringify(result.files, null, 2), "application/json");
@@ -785,7 +808,7 @@ function App() {
               />
             </>
           )}
-          {page === "simulation" && <Simulator nodes={nodes} connections={connections} />}
+          {page === "simulation" && <Simulator nodes={nodes} connections={connections} application={activeApplication} onApplication={setApplication} onSharedI2s={shareAudioClock} />}
           {page === "delivery" && (
             <>
               <div className="section-heading">
@@ -901,6 +924,7 @@ function App() {
             if (!title) return;
             setName(title);
             setNodes([]);
+            setApplication(null);
             setConnections([]);
             setTraces([]);
             setBoard(defaultBoard);

@@ -27,15 +27,8 @@ pub fn configure<S: Soc>(text: &str, machine: &mut esp_soc::Machine<S>) -> Resul
     match spec.get("mic") {
         Some(Json::Null) => {},
         Some(mic) => {
-            let channel = mic.get("channel").and_then(Json::as_i64).filter(|c| (0..2).contains(c)).ok_or("invalid microphone channel")? as usize;
-            let mut source = PcmSource::new(48000, PcmPins::I2s { bclk: pin(mic, "bclk")?, ws: pin(mic, "ws")?, data: pin(mic, "data")? })?;
-            // Deterministic startup stimulus, not a host-microphone or acoustic model.
-            let samples: Vec<_> = (0..96000).map(|i| {
-                let mut frame = [0; 2];
-                frame[channel] = ((i as f64 * std::f64::consts::TAU * 1000.0 / 48000.0).sin() * 8192.0) as i16;
-                frame
-            }).collect();
-            source.push(&samples);
+            mic.get("channel").and_then(Json::as_i64).filter(|c| (0..2).contains(c)).ok_or("invalid microphone channel")?;
+            let source = PcmSource::new(48000, PcmPins::I2s { bclk: pin(mic, "bclk")?, ws: pin(mic, "ws")?, data: pin(mic, "data")? })?;
             machine.bus.attach_pcm_sources().ok_or("PCM sources unavailable")?.inputs.push(Some(source));
         },
         None => return Err("missing microphone definition".into()),
@@ -58,7 +51,8 @@ impl BoardModel for Project {
             Box::new(TracedI2c::new(Ssd1306::new(self.display.clone(), (sda, scl)).with_reset(self.reset.clone()), 0x3c, self.trace.clone())) as Box<dyn esp_periph::i2c::I2cDevice>)])
     }
     fn display(&self) -> Option<(u32, u32, Vec<u16>, u64)> {
-        self.oled.map(|_| { let state = self.display.lock().unwrap(); (128, 32, state.pixels_for(32), state.version) })
+        // The breakout glass origin is opposite SEG0/COM0, as on the PAO reference display.
+        self.oled.map(|_| { let state = self.display.lock().unwrap(); (128, 32, state.pixels_for(32).into_iter().rev().collect(), state.version) })
     }
     fn display_version(&self) -> u64 { self.display.lock().unwrap().version }
     fn display_frames(&self) -> u64 { self.display.lock().unwrap().frames }
@@ -80,6 +74,15 @@ mod tests {
         let (width, height, pixels, _) = board.display().unwrap();
         assert_eq!((width, height, pixels.len()), (128, 32, 4096));
         assert!(pixels.iter().all(|&p| p == 0xffff));
+        assert!(oled.start(false));
+        for byte in [0, 0xa4, 0xa1, 0xc8, 0x20, 0, 0x21, 0, 127, 0x22, 0, 3] { assert!(oled.write(byte)); }
+        oled.stop();
+        assert!(oled.start(false));
+        for byte in [0x40, 1] { assert!(oled.write(byte)); }
+        oled.stop();
+        let pixels = board.display().unwrap().2;
+        assert_eq!(pixels[0], 0xffff);
+        assert_eq!(pixels.iter().filter(|&&p| p != 0).count(), 1);
         board.gpio_changes(&[(8, false)]);
         assert!(!oled.start(false));
         assert!(board.display().unwrap().2.iter().all(|&p| p == 0));
