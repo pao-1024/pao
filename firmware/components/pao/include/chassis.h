@@ -25,6 +25,9 @@ public:
     bool setWheelCalibration(int left, int right);
     std::pair<int, int> wheelCalibration();
     bool calibrateForward(float forward, float turn);
+    // 0..100%，0 禁用对应分量；作用于后续指令，停止当前运动由调用方负责。
+    bool setSpeedLimits(int linear, int turn);
+    std::pair<int, int> speedLimits();
 
 private:
     Motor& left_;
@@ -32,5 +35,8 @@ private:
     std::mutex mutex_;
     int left_gain_ = 1000;
     int right_gain_ = 1000;
+    int linear_limit_ = 100;
+    int turn_limit_ = 30;
     static std::pair<float, float> Mix(float forward, float turn);
+    std::pair<float, float> Limit(float left, float right) const;
 };

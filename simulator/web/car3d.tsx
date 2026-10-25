@@ -372,7 +372,7 @@ export function Car3D(props: Props) {
       <output aria-live="polite">{reading}</output>
     </div>
     <div className="car3d-ranging">
-      <span>左右轮独立调速 · 占空比，应用当前直行校正</span>
+      <span>左右轮独立调速 · 受行驶/旋转上限与直行校正约束</span>
       <label>左轮 <input aria-label="左轮速度" type="range" min="-100" max="100" value={leftWheel} onChange={event => setLeftWheel(event.target.valueAsNumber)} /> {leftWheel}%</label>
       <label>右轮 <input aria-label="右轮速度" type="range" min="-100" max="100" value={rightWheel} onChange={event => setRightWheel(event.target.valueAsNumber)} /> {rightWheel}%</label>
       <button onClick={() => void request(`/api/wheels?left=${leftWheel}&right=${rightWheel}&duration_ms=1000`, "POST")}>运行 1 秒</button>

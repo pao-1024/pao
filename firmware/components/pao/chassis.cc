@@ -43,8 +43,31 @@ void Chassis::driveWheels(float left, float right) {
     if (!std::isfinite(left) || !std::isfinite(right)) {
         left = right = 0;
     }
-    left_.setSpeed(std::clamp(left, -1.0f, 1.0f) * left_gain_ / 1000.0f);
-    right_.setSpeed(std::clamp(right, -1.0f, 1.0f) * right_gain_ / 1000.0f);
+    const auto [limited_left, limited_right] = Limit(std::clamp(left, -1.0f, 1.0f), std::clamp(right, -1.0f, 1.0f));
+    left_.setSpeed(limited_left * left_gain_ / 1000.0f);
+    right_.setSpeed(limited_right * right_gain_ / 1000.0f);
+}
+
+std::pair<float, float> Chassis::Limit(float left, float right) const {
+    // 分别缩放平移和差速分量，使直接控制两轮也不能绕过速度上限；之后再补偿电机差异。
+    const float linear = (left + right) * 0.5f * linear_limit_ / 100.0f;
+    const float turn = (right - left) * 0.5f * turn_limit_ / 100.0f;
+    return {linear - turn, linear + turn};
+}
+
+bool Chassis::setSpeedLimits(int linear, int turn) {
+    if (linear < 0 || linear > 100 || turn < 0 || turn > 100) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    linear_limit_ = linear;
+    turn_limit_ = turn;
+    return true;
+}
+
+std::pair<int, int> Chassis::speedLimits() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return {linear_limit_, turn_limit_};
 }
 
 bool Chassis::setWheelCalibration(int left, int right) {
@@ -67,7 +90,8 @@ bool Chassis::calibrateForward(float forward, float turn) {
         return false;
     }
     std::lock_guard<std::mutex> lock(mutex_);
-    const auto [left, right] = Mix(forward, turn);
+    const auto mixed = Mix(forward, turn);
+    const auto [left, right] = Limit(mixed.first, mixed.second);
     if (left <= 0 || right <= 0) {
         return false;
     }
