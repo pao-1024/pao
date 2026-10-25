@@ -111,7 +111,7 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 板上时长限制继续生效。
 
 前进／后退和旋转各有独立的最大输出滑块，范围均为 20%～100%，默认 80%；
-它们用于网页和语音动作，也决定 HTTP／WebSocket 动作的输出。
+它们用于网页、WebSocket 和语音动作。
 两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
 底盘内部按实际时间渐变输出，
 渐变时间范围 0～3 s，默认 1 s；0 表示直接达到目标。
@@ -122,27 +122,30 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 
 WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` 为正整数，
 `query` 使用 URL 查询串格式。响应为 `{"id":1,"ok":true,"data":...}`；失败时 `ok` 为 `false`，
-`error` 包含错误原因。`path` 使用下列接口路径，控制成功时 `data` 为 `true`；状态、配置和距离返回对应 JSON 对象。
+`error` 包含错误原因。`path` 使用下列指令路径，控制成功时 `data` 为 `true`；配置和距离返回对应 JSON 对象。
 请求仅支持不超过 512 字节的完整文本帧；无效格式会关闭连接。构建启用 `CONFIG_HTTPD_WS_SUPPORT=y`；
 已有构建目录若关闭了此选项，需通过 ESP-IDF 配置界面启用 HTTP Server 的 WebSocket 支持后重新编译。
 
-模拟器也可使用下面的 HTTP 接口；参数放在查询串，范围错误返回 400：
+遥控页、模拟器和验收脚本均通过 WebSocket 调用以下指令；参数放在 `query` 中，
+取值错误返回 `ok: false`：
 
-- `POST /api/chassis?action=&duration_ms=`：`action` 为上述六种值之一，四个方向动作的
+- `/api/chassis`，`query` 为 `action=&duration_ms=`：`action` 为上述六种值之一，四个方向动作的
   `duration_ms` 可省略，默认 1000 毫秒；`stop` 为平滑停车，`emergency_stop` 为立即停车。
-- `POST /api/move_forward?distance_cm=`：与按厘米运动工具共用控制逻辑，默认 20cm；
-  参数错误、起始测距失败或空间不足返回 400，接受运动返回 `ok`。
+- `/api/move_forward`，`query` 为 `distance_cm=`：与按厘米运动工具共用控制逻辑，默认 20cm；
+  参数错误、起始测距失败或空间不足返回 `ok: false`，接受运动返回 `data: true`。
   方向动作和定距前进都使用设备保存的对应最大输出。
-- `GET /api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
-- `POST /api/launcher/fire`
-- `GET /api/motion-config`、`GET /api/status`：返回 `ramp_time_ms`、`left_scale`、`right_scale`、
+- `/api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
+- `/api/launcher/fire`：发射一次，无参数。
+- `/api/motion-config`，`query` 为空时读取配置，返回 `ramp_time_ms`、`left_scale`、`right_scale`、
   `move_output`、`rotate_output`。
-- `POST /api/motion-config?ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=`：校验并保存配置；
+- `/api/motion-config`，`query` 为 `ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=` 时校验并保存配置；
   `move_output` 和 `rotate_output` 可省略，此时保持设备当前值，
-  NVS 提交成功后生效，保存失败返回 500。
+  NVS 提交成功后生效，保存失败返回 `ok: false`。
+
+HTTP 提供 `GET /` 加载页面，`/ws` 用于升级 WebSocket 连接。
+页面关闭时通过 WebSocket 尝试立即停车；指令未送达时，方向控制的 400ms 时长限制仍会清零输出。
 
 遥控页没有鉴权，同一网络内的任何人都能控制小车，只应在可信网络中使用。
-HTTP 响应允许本机模拟器页面 `http://127.0.0.1:8080` 跨域读取结果。
 
 继电器为 3.3V 单路、触发跳帽设在 L 档（低电平吸合），触点短接发射器的发射按钮，
 放电回路在发射器内部不经过任何触点。

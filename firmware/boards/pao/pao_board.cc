@@ -504,46 +504,20 @@ private:
         return end != value && *end == '\0' && std::isfinite(out) && out >= 0 && out <= 1;
     }
 
-    static esp_err_t Reply(httpd_req_t* req, const char* status, const char* type, const char* body) {
-        httpd_resp_set_status(req, status);
-        httpd_resp_set_type(req, type);
-        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "http://127.0.0.1:8080");
-        return httpd_resp_sendstr(req, body);
-    }
-
-    static esp_err_t BadRequest(httpd_req_t* req, const char* message) {
-        return Reply(req, "400 Bad Request", "text/plain; charset=utf-8", message);
-    }
-
-    static esp_err_t Ok(httpd_req_t* req) {
-        return Reply(req, "200 OK", "text/plain", "ok");
-    }
-
-    static PaoBoard* Self(httpd_req_t* req) {
-        return static_cast<PaoBoard*>(req->user_ctx);
-    }
-
-    struct CommandResult {
-        std::string error;
-        bool internal = false;
-    };
-
-    // HTTP 和 WebSocket 共用指令校验与执行，避免两个入口的运动约束发生偏差。
-    CommandResult ControlCommand(const std::string& path, const char* query) {
+    std::string ControlCommand(const std::string& path, const char* query) {
         int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output;
         if (path == "/api/chassis") {
             char name[20];
             MotionAction action;
             if (httpd_query_key_value(query, "action", name, sizeof(name)) != ESP_OK ||
                 !ParseMotionAction(name, action)) {
-                return {"action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop"};
+                return "action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop";
             }
             if (action == MotionAction::Stop || action == MotionAction::EmergencyStop) {
                 RunChassis(action);
             } else {
                 if (!QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
-                    return {"duration_ms 取 100..15000"};
+                    return "duration_ms 取 100..15000";
                 }
                 RunChassis(action, duration_ms);
             }
@@ -554,7 +528,7 @@ private:
                 !QueryFloat(query, "right_scale", config.right_scale) ||
                 !QueryInt(query, "move_output", std::lround(config.move_output * 100), 20, 100, move_output) ||
                 !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output)) {
-                return {"参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100"};
+                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100";
             }
             config.ramp_time_ms = ramp_time_ms;
             config.move_output = move_output / 100.0f;
@@ -562,32 +536,20 @@ private:
             const auto saved = SaveMotionConfig(config);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
-                return {"运动配置保存失败，请重试", true};
+                return "运动配置保存失败，请重试";
             }
         } else if (path == "/api/move_forward") {
             if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm)) {
-                return {"distance_cm 取 1..390"};
+                return "distance_cm 取 1..390";
             }
             const auto result = MoveForward(distance_cm);
-            if (!result) { return {result.error()}; }
+            if (!result) { return result.error(); }
         } else if (path == "/api/launcher/fire") {
             FireLauncher();
         } else {
-            return {"未知控制指令"};
+            return "未知控制指令";
         }
         return {};
-    }
-
-    static esp_err_t HttpControl(httpd_req_t* req) {
-        char query[128] = {};
-        const auto error = httpd_req_get_url_query_str(req, query, sizeof(query));
-        if (error != ESP_OK && error != ESP_ERR_NOT_FOUND) { return BadRequest(req, "查询参数过长"); }
-        const std::string uri(req->uri);
-        const auto result = Self(req)->ControlCommand(uri.substr(0, uri.find('?')), query);
-        if (result.error.empty()) { return Ok(req); }
-        return result.internal
-                   ? Reply(req, "500 Internal Server Error", "text/plain; charset=utf-8", result.error.c_str())
-                   : BadRequest(req, result.error.c_str());
     }
 
     cJSON* ReadMotionConfig() {
@@ -600,13 +562,6 @@ private:
         cJSON_AddNumberToObject(result, "move_output", std::lround(config.move_output * 100));
         cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
         return result;
-    }
-
-    static esp_err_t HttpMotionConfig(httpd_req_t* req) {
-        CJsonUniquePtr result(Self(req)->ReadMotionConfig());
-        CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
-        if (!text) { return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode config"); }
-        return Reply(req, "200 OK", "application/json", text.get());
     }
 
     static esp_err_t WebSocketControl(httpd_req_t* req) {
@@ -628,22 +583,20 @@ private:
             std::strlen(path->valuestring) > 64 || std::strlen(query->valuestring) > 127) {
             return ESP_ERR_INVALID_ARG;
         }
-        auto* board = Self(req);
+        auto* board = static_cast<PaoBoard*>(req->user_ctx);
         CJsonUniquePtr response(cJSON_CreateObject());
         cJSON_AddNumberToObject(response.get(), "id", id->valueint);
-        CommandResult result;
-        if (std::strcmp(path->valuestring, "/api/status") == 0) {
-            cJSON_AddItemToObject(response.get(), "data", board->ReadMotionConfig());
-        } else if (std::strcmp(path->valuestring, "/api/motion-config") == 0 && query->valuestring[0] == '\0') {
+        std::string error;
+        if (std::strcmp(path->valuestring, "/api/motion-config") == 0 && query->valuestring[0] == '\0') {
             cJSON_AddItemToObject(response.get(), "data", board->ReadMotionConfig());
         } else if (std::strcmp(path->valuestring, "/api/distance") == 0) {
             cJSON_AddItemToObject(response.get(), "data", board->ReadDistance());
         } else {
-            result = board->ControlCommand(path->valuestring, query->valuestring);
-            cJSON_AddBoolToObject(response.get(), "data", result.error.empty());
+            error = board->ControlCommand(path->valuestring, query->valuestring);
+            cJSON_AddBoolToObject(response.get(), "data", error.empty());
         }
-        cJSON_AddBoolToObject(response.get(), "ok", result.error.empty());
-        if (!result.error.empty()) { cJSON_AddStringToObject(response.get(), "error", result.error.c_str()); }
+        cJSON_AddBoolToObject(response.get(), "ok", error.empty());
+        if (!error.empty()) { cJSON_AddStringToObject(response.get(), "error", error.c_str()); }
         CJsonStringUniquePtr text(cJSON_PrintUnformatted(response.get()));
         if (!text) { return ESP_ERR_NO_MEM; }
         frame.type = HTTPD_WS_TYPE_TEXT;
@@ -660,35 +613,21 @@ private:
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.server_port = 80;
         config.ctrl_port = 32769;
-        config.max_uri_handlers = 12;
+        config.max_uri_handlers = 2;
         config.lru_purge_enable = true;
         if (httpd_start(&control_server_, &config) != ESP_OK) {
             ESP_LOGE(TAG, "Control server failed to start");
             control_server_ = nullptr;
             return;
         }
-        const httpd_uri_t routes[] = {
-            {"/", HTTP_GET, [](httpd_req_t* req) {
-                return Reply(req, "200 OK", "text/html; charset=utf-8", kControlPage);
-            }, this},
-            {"/api/status", HTTP_GET, HttpMotionConfig, this},
-            {"/api/motion-config", HTTP_GET, HttpMotionConfig, this},
-            {"/api/motion-config", HTTP_POST, HttpControl, this},
-            {"/api/chassis", HTTP_POST, HttpControl, this},
-            {"/api/distance", HTTP_GET, [](httpd_req_t* req) {
-                CJsonUniquePtr result(Self(req)->ReadDistance());
-                CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
-                if (!text) {
-                    return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode distance");
-                }
-                return Reply(req, "200 OK", "application/json", text.get());
-            }, this},
-            {"/api/move_forward", HTTP_POST, HttpControl, this},
-            {"/api/launcher/fire", HTTP_POST, HttpControl, this},
+        const httpd_uri_t page = {
+            "/", HTTP_GET, [](httpd_req_t* req) {
+                httpd_resp_set_type(req, "text/html; charset=utf-8");
+                httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+                return httpd_resp_sendstr(req, kControlPage);
+            }, this,
         };
-        for (const auto& route : routes) {
-            ESP_ERROR_CHECK(httpd_register_uri_handler(control_server_, &route));
-        }
+        ESP_ERROR_CHECK(httpd_register_uri_handler(control_server_, &page));
         httpd_uri_t websocket = {};
         websocket.uri = "/ws";
         websocket.method = HTTP_GET;
