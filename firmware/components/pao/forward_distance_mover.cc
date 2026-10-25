@@ -10,7 +10,7 @@ esp_err_t ForwardDistanceMover::readDistanceCm(float& distance_cm) {
     return ultrasonic_.readDistanceCm(distance_cm);
 }
 
-bool ForwardDistanceMover::forwardCm(int distance_cm, float output, float initial_cm) {
+bool ForwardDistanceMover::forwardCm(int distance_cm, float initial_cm) {
     if (initial_cm - distance_cm < 10.0f) {
         status_.motion_status = "obstacle";
         return false;
@@ -20,7 +20,7 @@ bool ForwardDistanceMover::forwardCm(int distance_cm, float output, float initia
     status_.moved_cm = 0;
     status_.active = true;
     status_.motion_status = "moving";
-    chassis_.forward(output);
+    chassis_.forward();
     return true;
 }
 

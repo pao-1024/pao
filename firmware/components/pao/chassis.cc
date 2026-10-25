@@ -41,7 +41,9 @@ Chassis::~Chassis() {
 bool Chassis::validConfig(const ChassisConfig& config) {
     return config.ramp_time_ms <= 3000 && std::isfinite(config.left_scale) &&
            std::isfinite(config.right_scale) && config.left_scale >= 0 &&
-           config.left_scale <= 1 && config.right_scale >= 0 && config.right_scale <= 1;
+           config.left_scale <= 1 && config.right_scale >= 0 && config.right_scale <= 1 &&
+           std::isfinite(config.move_output) && config.move_output >= 0.2f && config.move_output <= 1 &&
+           std::isfinite(config.rotate_output) && config.rotate_output >= 0.2f && config.rotate_output <= 1;
 }
 
 bool Chassis::setConfig(const ChassisConfig& config) {
@@ -50,6 +52,10 @@ bool Chassis::setConfig(const ChassisConfig& config) {
     }
     std::lock_guard<std::mutex> lock(mutex_);
     config_ = config;
+    if (target_speed_ != 0) {
+        const float output = requested_ == Motion::Rotate ? config_.rotate_output : config_.move_output;
+        target_speed_ = std::copysign(output, target_speed_);
+    }
     if (config_.ramp_time_ms == 0) {
         advanceLocked(0);
     }
@@ -62,33 +68,31 @@ ChassisConfig Chassis::config() const {
     return config_;
 }
 
-void Chassis::setMotion(Motion motion, float speed) {
-    if (!std::isfinite(speed)) {
-        speed = 0;
-    }
+void Chassis::setMotion(Motion motion, int direction) {
     std::lock_guard<std::mutex> lock(mutex_);
     requested_ = motion;
-    target_speed_ = std::clamp(speed, -1.0f, 1.0f);
+    const float output = motion == Motion::Rotate ? config_.rotate_output : config_.move_output;
+    target_speed_ = direction * output;
     if (config_.ramp_time_ms == 0) {
         advanceLocked(0);
     }
     xTaskNotifyGive(task_);
 }
 
-void Chassis::forward(float output) {
-    setMotion(Motion::Move, std::max(0.0f, output));
+void Chassis::forward() {
+    setMotion(Motion::Move, 1);
 }
 
-void Chassis::backward(float output) {
-    setMotion(Motion::Move, -std::max(0.0f, output));
+void Chassis::backward() {
+    setMotion(Motion::Move, -1);
 }
 
-void Chassis::turnLeft(float output) {
-    setMotion(Motion::Rotate, std::max(0.0f, output));
+void Chassis::turnLeft() {
+    setMotion(Motion::Rotate, 1);
 }
 
-void Chassis::turnRight(float output) {
-    setMotion(Motion::Rotate, -std::max(0.0f, output));
+void Chassis::turnRight() {
+    setMotion(Motion::Rotate, -1);
 }
 
 void Chassis::stop() {

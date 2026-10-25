@@ -66,7 +66,7 @@ task simulator:run
 顶栏“遥控”打开固件内置的遥控页 <http://127.0.0.1:8081/>，由启动器把本机 8081 端口转发到设备的 80 端口。
 
 3D 场景的“前进”输入框通过正式固件的 `POST /api/move_forward` 发出厘米指令，
-“停止”调用 `POST /api/stop`，“测距 / 进度”调用 `GET /api/distance`，显示固件实际测距值及完成状态。
+“停止”调用 `POST /api/chassis?action=emergency_stop`，“测距 / 进度”调用 `GET /api/distance`，显示固件实际测距值及完成状态。
 场景中的前方距离和蓝色射线由车头到矩形边界的射线交点计算；传感器位于车体中心前方 10.5cm。
 PAO 板型在 GPIO8 检测到至少 10µs 的 Trig 脉冲后，向 GPIO9 发送高电平 Echo，
 脉宽为厘米数 × 58µs，经内核 RMT RX 和正式 HC-SR04 驱动返回固件，不直接注入驱动返回值。

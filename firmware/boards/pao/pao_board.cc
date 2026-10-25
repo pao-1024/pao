@@ -24,7 +24,6 @@
 #include <nvs.h>
 #include <wifi_manager.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
@@ -39,22 +38,24 @@ namespace {
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
 constexpr char kMotionOutputKey[] = "motion_output";
-constexpr uint32_t kMotionConfigVersion = 1;
+constexpr uint32_t kMotionConfigVersion = 2;
+
+struct StoredMotionConfigV1 {
+    uint32_t version;
+    uint32_t ramp_time_ms;
+    float left_scale;
+    float right_scale;
+};
 
 struct StoredMotionConfig {
     uint32_t version;
     ChassisConfig config;
 };
 
-struct MotionOutputConfig {
+struct LegacyMotionOutput {
     uint8_t move_output = 80;
     uint8_t rotate_output = 80;
 };
-
-bool ValidMotionOutput(const MotionOutputConfig& config) {
-    return config.move_output >= 20 && config.move_output <= 100 &&
-           config.rotate_output >= 20 && config.rotate_output <= 100;
-}
 }  // namespace
 
 extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
@@ -62,7 +63,7 @@ extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
-    enum class MotionCommand { Move, Rotate };
+    enum class MotionAction { Forward, Backward, TurnLeft, TurnRight, Stop, EmergencyStop };
 
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
@@ -72,7 +73,6 @@ private:
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
     std::mutex motion_config_mutex_;
-    MotionOutputConfig motion_output_;
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
@@ -113,40 +113,47 @@ private:
         return chassis_generation_;
     }
 
-    int ConfiguredOutput(MotionCommand motion) {
-        std::lock_guard<std::mutex> lock(motion_config_mutex_);
-        return motion == MotionCommand::Move ? motion_output_.move_output : motion_output_.rotate_output;
+    static bool ParseMotionAction(std::string_view name, MotionAction& action) {
+        if (name == "forward") { action = MotionAction::Forward; }
+        else if (name == "backward") { action = MotionAction::Backward; }
+        else if (name == "turn_left") { action = MotionAction::TurnLeft; }
+        else if (name == "turn_right") { action = MotionAction::TurnRight; }
+        else if (name == "stop") { action = MotionAction::Stop; }
+        else if (name == "emergency_stop") { action = MotionAction::EmergencyStop; }
+        else { return false; }
+        return true;
     }
 
-    void RunChassis(MotionCommand motion, int speed, int duration_ms) {
-        std::lock_guard<std::mutex> lock(chassis_mutex_);
-        ResetMotionLocked(distance_mover_.status().active ? "cancelled" : "idle");
-        if (speed == 0) {
-            chassis_.stop();
+    void RunChassis(MotionAction action, int duration_ms = 0) {
+        static constexpr const char* kActionNames[] = {
+            "forward", "backward", "turn_left", "turn_right", "stop", "emergency_stop"
+        };
+        if (action == MotionAction::EmergencyStop) {
+            StopChassis();
+            ESP_LOGI(TAG, "Chassis stopped: emergency_stop");
             return;
         }
-        const int max_output = ConfiguredOutput(motion);
-        speed = std::clamp(speed, -max_output, max_output);
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        ResetMotionLocked(distance_mover_.status().active ? "cancelled" : "idle");
+        if (action == MotionAction::Stop) {
+            chassis_.stop();
+            ESP_LOGI(TAG, "Chassis stopped: stop");
+            return;
+        }
         if (duration_ms > 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
             ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
         }
-        if (motion == MotionCommand::Move) {
-            if (speed > 0) {
-                chassis_.forward(speed / 100.0f);
-            } else {
-                chassis_.backward(-speed / 100.0f);
-            }
-        } else {
-            if (speed > 0) {
-                chassis_.turnLeft(speed / 100.0f);
-            } else {
-                chassis_.turnRight(-speed / 100.0f);
-            }
+        switch (action) {
+        case MotionAction::Forward: chassis_.forward(); break;
+        case MotionAction::Backward: chassis_.backward(); break;
+        case MotionAction::TurnLeft: chassis_.turnLeft(); break;
+        case MotionAction::TurnRight: chassis_.turnRight(); break;
+        case MotionAction::Stop:
+        case MotionAction::EmergencyStop: break;
         }
-        ESP_LOGI(TAG, "Chassis %s: speed=%d duration_ms=%d",
-                 motion == MotionCommand::Move ? "move" : "rotate", speed, duration_ms);
+        ESP_LOGI(TAG, "Chassis action=%s duration_ms=%d", kActionNames[static_cast<int>(action)], duration_ms);
     }
 
     void LoadMotionConfig() {
@@ -159,36 +166,50 @@ private:
             ESP_LOGW(TAG, "Cannot open motion config: %s", esp_err_to_name(opened));
             return;
         }
-        StoredMotionConfig saved = {};
-        size_t size = sizeof(saved);
-        const auto error = nvs_get_blob(handle, kMotionKey, &saved, &size);
-        if (error != ESP_OK && error != ESP_ERR_NVS_NOT_FOUND) {
+        size_t size = 0;
+        const auto error = nvs_get_blob(handle, kMotionKey, nullptr, &size);
+        if (error == ESP_OK && size == sizeof(StoredMotionConfig)) {
+            StoredMotionConfig saved = {};
+            if (nvs_get_blob(handle, kMotionKey, &saved, &size) != ESP_OK ||
+                saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
+                ESP_LOGW(TAG, "Invalid motion config; using defaults");
+            }
+        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV1)) {
+            StoredMotionConfigV1 saved = {};
+            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 1) {
+                ChassisConfig config;
+                config.ramp_time_ms = saved.ramp_time_ms;
+                config.left_scale = saved.left_scale;
+                config.right_scale = saved.right_scale;
+                LegacyMotionOutput output;
+                size = sizeof(output);
+                if (nvs_get_blob(handle, kMotionOutputKey, &output, &size) == ESP_OK &&
+                    size == sizeof(output) && output.move_output >= 20 && output.move_output <= 100 &&
+                    output.rotate_output >= 20 && output.rotate_output <= 100) {
+                    config.move_output = output.move_output / 100.0f;
+                    config.rotate_output = output.rotate_output / 100.0f;
+                }
+                if (!chassis_.setConfig(config)) {
+                    ESP_LOGW(TAG, "Invalid motion config; using defaults");
+                }
+            } else {
+                ESP_LOGW(TAG, "Invalid motion config; using defaults");
+            }
+        } else if (error != ESP_ERR_NVS_NOT_FOUND) {
             ESP_LOGW(TAG, "Invalid motion config; using defaults");
-        } else if (error == ESP_OK && (size != sizeof(saved) ||
-                   saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config))) {
-            ESP_LOGW(TAG, "Invalid motion config; using defaults");
-        }
-        MotionOutputConfig motion_output;
-        size = sizeof(motion_output);
-        const auto output_error = nvs_get_blob(handle, kMotionOutputKey, &motion_output, &size);
-        if (output_error == ESP_OK && size == sizeof(motion_output) && ValidMotionOutput(motion_output)) {
-            motion_output_ = motion_output;
-        } else if (output_error != ESP_ERR_NVS_NOT_FOUND) {
-            ESP_LOGW(TAG, "Invalid motion output config; using defaults");
         }
         nvs_close(handle);
     }
 
-    esp_err_t SaveMotionConfig(const ChassisConfig& config, const MotionOutputConfig& motion_output) {
-        if (!Chassis::validConfig(config) || !ValidMotionOutput(motion_output)) {
+    esp_err_t SaveMotionConfig(const ChassisConfig& config) {
+        if (!Chassis::validConfig(config)) {
             return ESP_ERR_INVALID_ARG;
         }
         std::lock_guard<std::mutex> lock(motion_config_mutex_);
         const auto current = chassis_.config();
         if (current.ramp_time_ms == config.ramp_time_ms &&
             current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
-            motion_output_.move_output == motion_output.move_output &&
-            motion_output_.rotate_output == motion_output.rotate_output) {
+            current.move_output == config.move_output && current.rotate_output == config.rotate_output) {
             return ESP_OK;
         }
         nvs_handle_t handle;
@@ -199,20 +220,16 @@ private:
         const StoredMotionConfig saved = {kMotionConfigVersion, config};
         error = nvs_set_blob(handle, kMotionKey, &saved, sizeof(saved));
         if (error == ESP_OK) {
-            error = nvs_set_blob(handle, kMotionOutputKey, &motion_output, sizeof(motion_output));
-        }
-        if (error == ESP_OK) {
             error = nvs_commit(handle);
         }
         nvs_close(handle);
         if (error == ESP_OK) {
             chassis_.setConfig(config);
-            motion_output_ = motion_output;
         }
         return error;
     }
 
-    ToolResult MoveForward(int distance_cm, int speed) {
+    ToolResult MoveForward(int distance_cm) {
         const auto generation = StopChassis();
         float initial_cm = 0;
         const auto error = distance_mover_.readDistanceCm(initial_cm);
@@ -224,14 +241,13 @@ private:
             distance_mover_.cancel("sensor_error");
             return std::unexpected(std::string("起始测距失败，未启动电机：") + esp_err_to_name(error));
         }
-        const int capped_speed = std::min(speed, ConfiguredOutput(MotionCommand::Move));
-        if (!distance_mover_.forwardCm(distance_cm, capped_speed / 100.0f, initial_cm)) {
+        if (!distance_mover_.forwardCm(distance_cm, initial_cm)) {
             return std::unexpected("前方空间不足：目标位置须保留至少 10cm 距离，未启动电机");
         }
         chassis_deadline_ = esp_timer_get_time() + 15000000;
         ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
         xTaskNotifyGive(distance_task_);
-        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, capped_speed);
+        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm", distance_cm, initial_cm);
         return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
     }
 
@@ -305,21 +321,11 @@ private:
             [this](const PropertyList& properties) -> ToolResult {
                 const auto& action = properties["action"].value<std::string>();
                 const int duration_ms = properties["duration_ms"].value<int>();
-                if (action == "forward") {
-                    RunChassis(MotionCommand::Move, ConfiguredOutput(MotionCommand::Move), duration_ms);
-                } else if (action == "backward") {
-                    RunChassis(MotionCommand::Move, -ConfiguredOutput(MotionCommand::Move), duration_ms);
-                } else if (action == "turn_left") {
-                    RunChassis(MotionCommand::Rotate, ConfiguredOutput(MotionCommand::Rotate), duration_ms);
-                } else if (action == "turn_right") {
-                    RunChassis(MotionCommand::Rotate, -ConfiguredOutput(MotionCommand::Rotate), duration_ms);
-                } else if (action == "stop") {
-                    RunChassis(MotionCommand::Move, 0, 0);
-                } else if (action == "emergency_stop") {
-                    StopChassis();
-                } else {
+                MotionAction parsed;
+                if (!ParseMotionAction(action, parsed)) {
                     return std::unexpected("action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop");
                 }
+                RunChassis(parsed, duration_ms);
                 return true;
             });
         mcp.AddTool("self.chassis.move_forward",
@@ -333,7 +339,7 @@ private:
             "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询进度及停止原因。",
             PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390)}),
             [this](const PropertyList& properties) -> ToolResult {
-                return MoveForward(properties["distance_cm"].value<int>(), ConfiguredOutput(MotionCommand::Move));
+                return MoveForward(properties["distance_cm"].value<int>());
             });
         mcp.AddTool("self.ultrasonic.get_distance",
             "是什么：读取小车前方 HC-SR04 超声波距离，单位厘米，量程 2..400cm。\n"
@@ -525,42 +531,44 @@ private:
 
     // HTTP 和 WebSocket 共用指令校验与执行，避免两个入口的运动约束发生偏差。
     CommandResult ControlCommand(const std::string& path, const char* query) {
-        int duration_ms, distance_cm, speed, ramp_time_ms, move_output, rotate_output;
-        if (path == "/api/move" || path == "/api/rotate") {
-            if (!QueryInt(query, "speed", -101, -100, 100, speed) || speed == -101 ||
-                !QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
-                return {"speed 取 -100..100，duration_ms 取 100..15000"};
+        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output;
+        if (path == "/api/chassis") {
+            char name[20];
+            MotionAction action;
+            if (httpd_query_key_value(query, "action", name, sizeof(name)) != ESP_OK ||
+                !ParseMotionAction(name, action)) {
+                return {"action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop"};
             }
-            RunChassis(path == "/api/move" ? MotionCommand::Move : MotionCommand::Rotate, speed, duration_ms);
-        } else if (path == "/api/stop") {
-            StopChassis();
+            if (action == MotionAction::Stop || action == MotionAction::EmergencyStop) {
+                RunChassis(action);
+            } else {
+                if (!QueryInt(query, "duration_ms", 1000, 100, 15000, duration_ms)) {
+                    return {"duration_ms 取 100..15000"};
+                }
+                RunChassis(action, duration_ms);
+            }
         } else if (path == "/api/motion-config") {
-            ChassisConfig config;
-            MotionOutputConfig motion_output;
-            {
-                std::lock_guard<std::mutex> lock(motion_config_mutex_);
-                motion_output = motion_output_;
-            }
+            ChassisConfig config = chassis_.config();
             if (!QueryInt(query, "ramp_time_ms", -1, 0, 3000, ramp_time_ms) || ramp_time_ms < 0 ||
                 !QueryFloat(query, "left_scale", config.left_scale) ||
                 !QueryFloat(query, "right_scale", config.right_scale) ||
-                !QueryInt(query, "move_output", motion_output.move_output, 20, 100, move_output) ||
-                !QueryInt(query, "rotate_output", motion_output.rotate_output, 20, 100, rotate_output)) {
+                !QueryInt(query, "move_output", std::lround(config.move_output * 100), 20, 100, move_output) ||
+                !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output)) {
                 return {"参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100"};
             }
             config.ramp_time_ms = ramp_time_ms;
-            motion_output.move_output = move_output;
-            motion_output.rotate_output = rotate_output;
-            const auto saved = SaveMotionConfig(config, motion_output);
+            config.move_output = move_output / 100.0f;
+            config.rotate_output = rotate_output / 100.0f;
+            const auto saved = SaveMotionConfig(config);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
                 return {"运动配置保存失败，请重试", true};
             }
         } else if (path == "/api/move_forward") {
-            if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm) || !QueryInt(query, "speed", 50, 1, 100, speed)) {
-                return {"distance_cm 取 1..390，speed 取 1..100"};
+            if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm)) {
+                return {"distance_cm 取 1..390"};
             }
-            const auto result = MoveForward(distance_cm, speed);
+            const auto result = MoveForward(distance_cm);
             if (!result) { return {result.error()}; }
         } else if (path == "/api/launcher/fire") {
             FireLauncher();
@@ -589,8 +597,8 @@ private:
         cJSON_AddNumberToObject(result, "ramp_time_ms", config.ramp_time_ms);
         cJSON_AddNumberToObject(result, "left_scale", config.left_scale);
         cJSON_AddNumberToObject(result, "right_scale", config.right_scale);
-        cJSON_AddNumberToObject(result, "move_output", motion_output_.move_output);
-        cJSON_AddNumberToObject(result, "rotate_output", motion_output_.rotate_output);
+        cJSON_AddNumberToObject(result, "move_output", std::lround(config.move_output * 100));
+        cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
         return result;
     }
 
@@ -666,9 +674,7 @@ private:
             {"/api/status", HTTP_GET, HttpMotionConfig, this},
             {"/api/motion-config", HTTP_GET, HttpMotionConfig, this},
             {"/api/motion-config", HTTP_POST, HttpControl, this},
-            {"/api/move", HTTP_POST, HttpControl, this},
-            {"/api/rotate", HTTP_POST, HttpControl, this},
-            {"/api/stop", HTTP_POST, HttpControl, this},
+            {"/api/chassis", HTTP_POST, HttpControl, this},
             {"/api/distance", HTTP_GET, [](httpd_req_t* req) {
                 CJsonUniquePtr result(Self(req)->ReadDistance());
                 CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));

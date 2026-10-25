@@ -13,6 +13,8 @@ struct ChassisConfig {
     uint32_t ramp_time_ms = 1000;
     float left_scale = 1.0f;
     float right_scale = 1.0f;
+    float move_output = 0.8f;
+    float rotate_output = 0.8f;
 };
 
 class Chassis {
@@ -24,11 +26,11 @@ public:
     Chassis(const Chassis&) = delete;
     Chassis& operator=(const Chassis&) = delete;
 
-    // 输出为非负值，超过 1 时限幅；无效值按 0 处理。不能在 ISR 中调用。
-    void forward(float output);
-    void backward(float output);
-    void turnLeft(float output);
-    void turnRight(float output);
+    // 四个方向使用配置中的最大输出；不能在 ISR 中调用。
+    void forward();
+    void backward();
+    void turnLeft();
+    void turnRight();
     // 按配置的渐变时间减速停车。
     void stop();
     // 立即清零两轮输出和当前运动目标。
@@ -44,7 +46,7 @@ private:
 
     static void taskEntry(void* arg);
     void run();
-    void setMotion(Motion motion, float speed);
+    void setMotion(Motion motion, int direction);
     void advanceLocked(float elapsed_seconds);
     void writeMotorsLocked();
 

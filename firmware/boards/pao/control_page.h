@@ -83,11 +83,10 @@ function connect(){const connection=socket=new WebSocket(`${location.protocol===
   connection.onerror=()=>connection.close()}
 function reportError(error){setStatus(error.message||"连接断开","bad")}
 
-const directions={forward:{path:"/api/move",sign:1},backward:{path:"/api/move",sign:-1},
-  left:{path:"/api/rotate",sign:1},right:{path:"/api/rotate",sign:-1}};
+const directions={forward:"forward",backward:"backward",left:"turn_left",right:"turn_right"};
 const keys={KeyW:"forward",ArrowUp:"forward",KeyS:"backward",ArrowDown:"backward",
   KeyA:"left",ArrowLeft:"left",KeyD:"right",ArrowRight:"right"};
-const held=new Map();let pointerDir=null,currentPath=null,lastDir=null,lastSpeed=0,lastSent=0;
+const held=new Map();let pointerDir=null,currentDir=null,lastDir=null,lastSent=0;
 let pendingMotion=null,sendingMotion=false;
 async function queueMotion(path,params){pendingMotion={path,params};if(sendingMotion)return;
   sendingMotion=true;while(pendingMotion){const next=pendingMotion;pendingMotion=null;
@@ -96,13 +95,13 @@ function selectedDir(){return pointerDir||Array.from(held.values()).at(-1)||null
 function markDirection(dir){document.querySelectorAll(".direction").forEach(button=>
   button.classList.toggle("active",button.dataset.dir===dir))}
 function syncMotion(force=false){const dir=selectedDir();markDirection(dir);
-  if(!dir){if(currentPath){queueMotion(currentPath,{speed:0,duration_ms:400});currentPath=null;lastDir=null}return}
-  const now=performance.now(),motion=directions[dir];
-  const power=motion.path==="/api/move"?"movePower":"rotatePower",speed=motion.sign*Number($(power).value);
-  if(force||dir!==lastDir||speed!==lastSpeed||now-lastSent>=150){
-    queueMotion(motion.path,{speed,duration_ms:400});lastSent=now;lastDir=dir;lastSpeed=speed;currentPath=motion.path}}
-function clearControls(){pointerDir=null;held.clear();currentPath=null;lastDir=null;pendingMotion=null;markDirection(null)}
-function emergencyStop(){clearControls();queueMotion("/api/stop")}
+  if(!dir){if(currentDir){queueMotion("/api/chassis",{action:"stop"});currentDir=null;lastDir=null}return}
+  const now=performance.now();
+  if(force||dir!==lastDir||now-lastSent>=150){
+    queueMotion("/api/chassis",{action:directions[dir],duration_ms:400});
+    lastSent=now;lastDir=dir;currentDir=dir}}
+function clearControls(){pointerDir=null;held.clear();currentDir=null;lastDir=null;pendingMotion=null;markDirection(null)}
+function emergencyStop(){clearControls();queueMotion("/api/chassis",{action:"emergency_stop"})}
 for(const button of document.querySelectorAll(".direction")){
   button.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();pointerDir=button.dataset.dir;
     button.setPointerCapture(e.pointerId);syncMotion(true)};
@@ -137,8 +136,7 @@ async function saveConfig(){pendingSave=true;if(saving)return;saving=true;
     catch(e){setConfigStatus("保存失败，请重试","bad");$("retry").hidden=false}}
   saving=false}
 for(const id of ["ramp","leftScale","rightScale","movePower","rotatePower"]){
-  $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存");
-    if(id==="movePower"||id==="rotatePower")syncMotion(true)};
+  $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};
   $(id).onchange=saveConfig}
 $("retry").onclick=saveConfig;
 
@@ -150,7 +148,7 @@ addEventListener("keydown",e=>{if(e.target instanceof Element&&e.target.closest(
 addEventListener("keyup",e=>{if(keys[e.code]){held.delete(e.code);syncMotion(true)}});
 addEventListener("blur",emergencyStop);
 document.addEventListener("visibilitychange",()=>{if(document.hidden)emergencyStop()});
-addEventListener("pagehide",()=>{fetch("/api/stop",{method:"POST",keepalive:true}).catch(()=>{})});
+addEventListener("pagehide",()=>{fetch("/api/chassis?action=emergency_stop",{method:"POST",keepalive:true}).catch(()=>{})});
 async function pollDistance(connection){if(socket!==connection||connection.readyState!==WebSocket.OPEN)return;
   const output=$("distance");try{const state=await call("/api/distance");
     const valid=!state.error&&Number.isFinite(state.distance_cm);

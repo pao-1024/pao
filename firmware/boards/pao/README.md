@@ -51,8 +51,9 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 随后创建 `Launcher`，上电保持两路继电器断开。
 左轮按 `IN4/IN3` 顺序创建 `Motor`，反转左侧安装极性，使两轮正速度均表示车体前进；
 右轮仍按 `IN1/IN2` 顺序。更换电机或接线后需重新核对方向。
-底盘内部提供前进、后退、左转、右转、常规停止和立即停止六个动作；
+底盘内部提供前进、后退、左转、右转、常规停止和立即停止六个无参数动作；
 常规停止按输出渐变时间减速，立即停止直接清零两轮输出。
+前进和旋转的最大输出属于可动态调整的 `ChassisConfig`。
 按厘米前进由独立的 `ForwardDistanceMover` 组合前向超声波与底盘实现，不提供按厘米后退。
 底盘通过小智的设备 MCP 协议向灵矽暴露以下工具，联网激活后随设备工具列表上报：
 
@@ -97,7 +98,7 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 
 联网后设备在 80 端口提供遥控页，串口日志会打印 `Control page: http://<设备 IP>/`，
 同一局域网内用浏览器打开即可。四个方向按钮分别控制前进、后退和两种原地旋转；
-按住期间每 150 ms 续发一次 400 ms 的运动指令，松开时平滑停车。中央停止键立即清零输出；
+按住期间每 150 ms 续发一次 400 ms 的动作指令，松开时平滑停车。中央停止键立即清零输出；
 失焦、页面关闭或断网后停止续发，超时保护在当前指令有效期结束时清零。
 也支持 WASD / 方向键，最近按下且仍按住的方向优先。续发指令不会重置加速过程，
 切换方向时底盘先降至零再升至新目标。
@@ -110,7 +111,7 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 板上时长限制继续生效。
 
 前进／后退和旋转各有独立的最大输出滑块，范围均为 20%～100%，默认 80%；
-它们用于网页和语音动作，也约束 HTTP／WebSocket 的运动输出。
+它们用于网页和语音动作，也决定 HTTP／WebSocket 动作的输出。
 两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
 底盘内部按实际时间渐变输出，
 渐变时间范围 0～3 s，默认 1 s；0 表示直接达到目标。
@@ -127,10 +128,11 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 
 模拟器也可使用下面的 HTTP 接口；参数放在查询串，范围错误返回 400：
 
-- `POST /api/move?speed=&duration_ms=`、`POST /api/rotate?speed=&duration_ms=`、`POST /api/stop`
-- `POST /api/move_forward?distance_cm=&speed=`：与按厘米运动工具共用控制逻辑，默认 20cm、50% 前进输出；
+- `POST /api/chassis?action=&duration_ms=`：`action` 为上述六种值之一，四个方向动作的
+  `duration_ms` 可省略，默认 1000 毫秒；`stop` 为平滑停车，`emergency_stop` 为立即停车。
+- `POST /api/move_forward?distance_cm=`：与按厘米运动工具共用控制逻辑，默认 20cm；
   参数错误、起始测距失败或空间不足返回 400，接受运动返回 `ok`。
-  所有带 `speed` 的 HTTP／WebSocket 运动请求仍接受原有范围，实际输出不超过对应设备最大输出。
+  方向动作和定距前进都使用设备保存的对应最大输出。
 - `GET /api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
 - `POST /api/launcher/fire`
 - `GET /api/motion-config`、`GET /api/status`：返回 `ramp_time_ms`、`left_scale`、`right_scale`、

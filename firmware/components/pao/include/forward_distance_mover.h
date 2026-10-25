@@ -19,7 +19,7 @@ public:
     ForwardDistanceMover(HcSr04& ultrasonic, Chassis& chassis);
 
     esp_err_t readDistanceCm(float& distance_cm);
-    bool forwardCm(int distance_cm, float output, float initial_cm);
+    bool forwardCm(int distance_cm, float initial_cm);
     void update(esp_err_t error, float current_cm);
     void cancel(const char* status);
     ForwardDistanceStatus status() const;
