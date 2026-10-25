@@ -49,7 +49,7 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>前进／后退最大输出<input id="movePower" type="range" min="20" max="100" value="80"><output id="movePowerOut">80%</output></label>
 <label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80"><output id="rotatePowerOut">80%</output></label>
 </section>
-<section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>发射后约 10 s 充满</small></button></section>
+<section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>充能请看模块指示灯</small></button></section>
 <section class="settings"><h2>运动校准</h2>
 <fieldset id="configFields" disabled>
 <label>输出渐变<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
