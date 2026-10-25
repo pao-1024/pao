@@ -1,17 +1,15 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { MAX_SPEED, motion, stepPose } from "./protocol.ts";
-import type { Pose } from "./protocol.ts";
+import { MAX_SPEED, motion } from "./protocol.ts";
+import type { Pose, World } from "./protocol.ts";
 
-type Props = { left: number; right: number; charging: boolean; firing: boolean; energy: number; shots: number };
+type Props = { left: number; right: number; charging: boolean; firing: boolean; energy: number; shots: number; world: World | null };
 
 const WHEEL_RADIUS = 0.36, TRAIL = 900, SHOT_SPEED = 9, SHOT_LIFE = 1.6;
-// Cones: one candidate per 2.5 m cell, half of them filled, out to 10 cells (past the fog).
-const CONE_CELL = 2.5, CONE_REACH = 10, CONE_DENSITY = 0.5;
 const BACKGROUND = 0x080b10, ACCENT = new THREE.Color(0x4cc2ff), CHARGE = new THREE.Color(0xffa63d);
 
 const standard = (color: number, roughness = 0.5, metalness = 0, extra: THREE.MeshStandardMaterialParameters = {}) =>
@@ -53,10 +51,26 @@ export function Car3D(props: Props) {
   const latest = useRef(props);
   latest.current = props;
   const reset = useRef(() => {});
+  const overview = useRef(() => {});
+  const [distance, setDistance] = useState("20");
+  const requestedDistance = Number(distance);
+  const [reading, setReading] = useState("");
+  async function request(path: string, method = "GET") {
+    try {
+      const response = await fetch(`http://127.0.0.1:8081${path}`, { method });
+      const text = await response.text();
+      if (!response.ok) throw new Error(text);
+      setReading(path === "/api/distance" ? (() => {
+        const result = JSON.parse(text);
+        return `${result.distance_cm == null ? result.error : `${result.distance_cm.toFixed(1)} cm`} · ${result.motion_status} · 已走 ${result.moved_cm.toFixed(1)} cm`;
+      })() : "指令已接受，点击测距查看进度");
+    } catch (error) { setReading(error instanceof Error ? error.message : String(error)); }
+  }
 
   useEffect(() => {
     const element = host.current!;
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Idle scenes stop redrawing; retain their last frame across compositor updates.
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.shadowMap.enabled = true;
@@ -65,15 +79,15 @@ export function Car3D(props: Props) {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.Fog(BACKGROUND, 9, 22);
+    scene.fog = new THREE.Fog(BACKGROUND, 140, 230);
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     scene.environmentIntensity = 0.3;
 
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 80);
-    camera.position.set(3.6, 3.2, -4.6);
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
+    camera.position.set(63, 98, -84);
     const controls = new OrbitControls(camera, renderer.domElement);
-    Object.assign(controls, { enableDamping: true, enablePan: false, minDistance: 3, maxDistance: 14, maxPolarAngle: 1.42 });
+    Object.assign(controls, { enableDamping: true, enablePan: false, minDistance: 3, maxDistance: 150, maxPolarAngle: 1.42 });
 
     const key = new THREE.DirectionalLight(0xfff4e6, 1.6);
     key.castShadow = true;
@@ -82,56 +96,25 @@ export function Car3D(props: Props) {
     const rim = new THREE.DirectionalLight(0x6fb8ff, 1.2);
     scene.add(key, key.target, rim, rim.target, new THREE.HemisphereLight(0x9cc8ff, 0x0b0f14, 0.3));
 
-    const floor = mesh(new THREE.PlaneGeometry(200, 200).rotateX(-Math.PI / 2), standard(0x0e131a, 0.92));
+    const floor = mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), standard(0x0e131a, 0.92));
     floor.castShadow = false;
     scene.add(floor);
-    const grid = new THREE.GridHelper(40, 40, 0x35577a, 0x223040);
-    const fine = new THREE.GridHelper(40, 160, 0x141c26, 0x141c26);
-    scene.add(grid, fine);
+    const grid = new THREE.GridHelper(60, 60, 0x35577a, 0x223040);
+    grid.position.y = 0.002;
+    // Clip the grid to the rectangular floor; one scene unit is ten centimetres.
+    grid.material.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 0, 1), 20), new THREE.Plane(new THREE.Vector3(0, 0, -1), 20)];
+    renderer.localClippingEnabled = true;
+    scene.add(grid);
+    const wallMaterial = standard(0x42617e, 0.7, 0.1);
+    const walls = Array.from({ length: 4 }, () => mesh(new THREE.BoxGeometry(1, 1, 1), wallMaterial));
+    scene.add(...walls);
+    const ray = mesh(new THREE.BoxGeometry(0.025, 0.025, 1), new THREE.MeshBasicMaterial({ color: 0x4cc2ff }));
+    scene.add(ray);
 
-    // Fixed landmarks so motion reads against the world: rings around the start point every 2 m
-    // and traffic cones that are generated endlessly around the car (see placeCones).
     const marking = new THREE.MeshBasicMaterial({ color: 0x3a4d63 });
     for (const radius of [2, 4, 6]) scene.add(mesh(new THREE.RingGeometry(radius - 0.025, radius + 0.025, 96).rotateX(-Math.PI / 2), marking, 0, 0.004, 0));
     scene.add(mesh(new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4cc2ff }), 0, 0.005, 0));
     scene.add(mesh(new THREE.PlaneGeometry(0.12, 0.7).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4cc2ff }), 0, 0.005, 1.3));
-    const coneParts: [THREE.BufferGeometry, THREE.Material][] = [
-      [new THREE.BoxGeometry(0.42, 0.04, 0.42).translate(0, 0.02, 0), standard(0x1a1d22, 0.8)],
-      [new THREE.ConeGeometry(0.16, 0.55, 20, 1, true).translate(0, 0.3, 0), standard(0xff6a1a, 0.55)],
-      [new THREE.CylinderGeometry(0.095, 0.115, 0.1, 20, 1, true).translate(0, 0.33, 0), standard(0xe8ecf1, 0.4)],
-    ];
-    const cones = coneParts.map(([geometry, material]) => {
-      const instances = new THREE.InstancedMesh(geometry, material, (CONE_REACH * 2 + 1) ** 2);
-      instances.castShadow = instances.receiveShadow = true;
-      // Instances move with the car, so the cached bounding sphere would be stale.
-      instances.frustumCulled = false;
-      scene.add(instances);
-      return instances;
-    });
-    // Each CONE_CELL square holds at most one cone; a hash of the cell picks whether and where,
-    // so revisiting a spot shows the same cones. Refilled only when the car enters a new cell.
-    const hash = (i: number, j: number, salt: number) => {
-      const v = Math.sin(i * 127.1 + j * 311.7 + salt * 74.7) * 43758.5453;
-      return v - Math.floor(v);
-    };
-    const placement = new THREE.Matrix4();
-    let coneCell = "";
-    const placeCones = (x: number, z: number) => {
-      const ci = Math.round(x / CONE_CELL), cj = Math.round(z / CONE_CELL);
-      if (`${ci},${cj}` === coneCell) return;
-      coneCell = `${ci},${cj}`;
-      let count = 0;
-      for (let i = ci - CONE_REACH; i <= ci + CONE_REACH; i++) for (let j = cj - CONE_REACH; j <= cj + CONE_REACH; j++) {
-        if (hash(i, j, 0) > CONE_DENSITY) continue;
-        const px = (i + hash(i, j, 1) - 0.5) * CONE_CELL, pz = (j + hash(i, j, 2) - 0.5) * CONE_CELL;
-        if (Math.hypot(px, pz) < 2.5) continue;
-        placement.makeTranslation(px, 0, pz);
-        for (const instances of cones) instances.setMatrixAt(count, placement);
-        count++;
-      }
-      for (const instances of cones) { instances.count = count; instances.instanceMatrix.needsUpdate = true; }
-    };
-    placeCones(0, 0);
 
     // Trail is a flat ribbon (WebGL lines are always 1 px) that fades from the floor colour to the accent.
     const TRAIL_WIDTH = 0.14, FLOOR = new THREE.Color(0x0e131a);
@@ -212,10 +195,19 @@ export function Car3D(props: Props) {
     // Draw only when the picture changes: a parked car with idle controls costs no GPU time.
     let dirty = true, visible = true, renderedEnergy = -1, lastRender = 0;
     const target = new THREE.Vector3(0, 0.6, 0), follow = new THREE.Vector3();
+    let viewAll = true;
     reset.current = () => {
-      pose = { x: 0, z: 0, heading: 0 };
-      trailCount = 0;
-      trailGeometry.setDrawRange(0, 0);
+      viewAll = false;
+      camera.position.set(pose.x + 3.6, 3.2, pose.z - 4.6);
+      target.set(pose.x, 0.6, pose.z);
+      controls.target.copy(target);
+      dirty = true;
+    };
+    overview.current = () => {
+      viewAll = true;
+      camera.position.set(63, 98, -84);
+      target.set(0, 0.6, 0);
+      controls.target.copy(target);
       dirty = true;
     };
 
@@ -237,7 +229,24 @@ export function Car3D(props: Props) {
       const dt = Math.min(0.1, (now - previous) / 1000);
       previous = now;
       const { left, right, charging, firing, energy, shots: count } = latest.current;
-      pose = stepPose(pose, left, right, dt);
+      const world = latest.current.world;
+      const oldPose = pose;
+      if (world) {
+        pose = { x: world.x / 10, z: world.z / 10, heading: world.heading };
+        const width = world.width_cm / 10, depth = world.depth_cm / 10;
+        floor.scale.set(width, 1, depth);
+        for (const i of [0, 1]) {
+          walls[i].scale.set(width + 0.2, 1.2, 0.2);
+          walls[i].position.set(0, 0.6, (i ? 1 : -1) * depth / 2);
+          walls[i + 2].scale.set(0.2, 1.2, depth);
+          walls[i + 2].position.set((i ? 1 : -1) * width / 2, 0.6, 0);
+        }
+        const length = world.distance_cm / 10;
+        ray.scale.z = length;
+        ray.rotation.y = pose.heading;
+        ray.position.set(pose.x + Math.sin(pose.heading) * (1.05 + length / 2), 0.5, pose.z + Math.cos(pose.heading) * (1.05 + length / 2));
+      }
+      if (pose.x !== oldPose.x || pose.z !== oldPose.z || pose.heading !== oldPose.heading) dirty = true;
       car.position.set(pose.x, 0, pose.z);
       car.rotation.y = pose.heading;
       wheels[0].rotation.x += left * MAX_SPEED / WHEEL_RADIUS * dt;
@@ -248,10 +257,6 @@ export function Car3D(props: Props) {
       const settling = Math.abs(car.rotation.x - pitch) + Math.abs(car.rotation.z - roll) > 1e-4;
       car.rotation.x = THREE.MathUtils.lerp(car.rotation.x, pitch, ease);
       car.rotation.z = THREE.MathUtils.lerp(car.rotation.z, roll, ease);
-      grid.position.set(Math.round(pose.x), 0.002, Math.round(pose.z));
-      fine.position.set(Math.round(pose.x), 0.001, Math.round(pose.z));
-      floor.position.set(pose.x, 0, pose.z);
-      placeCones(pose.x, pose.z);
 
       const last = (trailCount - 1) * 6;
       const endX = (trailPoints[last] + trailPoints[last + 3]) / 2, endZ = (trailPoints[last + 2] + trailPoints[last + 5]) / 2;
@@ -311,7 +316,7 @@ export function Car3D(props: Props) {
       }
 
       // Carry the camera along with the car while keeping the viewer's orbit and zoom.
-      follow.set(pose.x, 0.6, pose.z).sub(target);
+      follow.set(viewAll ? 0 : pose.x, 0.6, viewAll ? 0 : pose.z).sub(target);
       target.add(follow);
       camera.position.add(follow);
       controls.target.copy(target);
@@ -343,16 +348,28 @@ export function Car3D(props: Props) {
 
   const { left, right, charging, firing, energy } = props;
   const state = firing ? "发射" : charging ? "充能中" : energy > 0.99 ? "已充满" : "待命";
-  return <div ref={host} className="car3d" role="img" aria-label={`小车 3D 视图：${motion(left, right)}，电磁炮${state}`}>
+  return <div className="car3d-panel" role="group" aria-label={`小车 3D 视图：${motion(left, right)}，电磁炮${state}`}>
+    <div ref={host} className="car3d">
     <div className="car3d-hud">
       <span className="car3d-motion">{motion(left, right)}</span>
       <span className="car3d-wheels"><i>L</i>{Math.round(left * 100)}% <i>R</i>{Math.round(right * 100)}%</span>
     </div>
+    </div>
+    <div className="car3d-controls">
     <div className={`car3d-energy ${firing ? "fire" : charging ? "charge" : ""}`}>
       <span>电磁炮 · {state}</span>
       <div className="bar"><div style={{ width: `${Math.round(energy * 100)}%` }} /></div>
       <b>{Math.round(energy * 100)}%</b>
     </div>
-    <button className="small car3d-reset" onClick={() => reset.current()}>复位</button>
+    <div className="car3d-ranging">
+      <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"}</span>
+      <label>前进 <input aria-label="前进厘米数" type="number" min="1" max="390" value={distance} onChange={event => setDistance(event.target.value)} /> cm</label>
+      <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request(`/api/move_forward?distance_cm=${requestedDistance}`, "POST")}>前进</button>
+      <button onClick={() => void request("/api/stop", "POST")}>停止</button>
+      <button onClick={() => void request("/api/distance")}>测距 / 进度</button>
+      <output aria-live="polite">{reading}</output>
+    </div>
+    <div className="car3d-reset"><button className="small" onClick={() => overview.current()}>全场</button><button className="small" onClick={() => reset.current()}>跟车</button></div>
+    </div>
   </div>;
 }

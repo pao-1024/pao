@@ -19,6 +19,7 @@
 #include <esp_lcd_panel_vendor.h>
 #include <esp_log.h>
 #include <esp_timer.h>
+#include <freertos/task.h>
 #include <wifi_manager.h>
 
 #include <atomic>
@@ -39,6 +40,13 @@ private:
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
+    TaskHandle_t distance_task_ = nullptr;
+    uint32_t chassis_generation_ = 0;
+    bool distance_active_ = false;
+    float start_distance_cm_ = 0;
+    float moved_cm_ = 0;
+    int requested_cm_ = 0;
+    const char* motion_status_ = "idle";
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
@@ -48,14 +56,22 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
-    void DriveChassis(int forward, int turn, int duration_ms) {
-        std::lock_guard<std::mutex> lock(chassis_mutex_);
+    // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
+    void StopChassisLocked(const char* status) {
         chassis_.drive(0, 0);
         chassis_deadline_ = 0;
+        distance_active_ = false;
+        ++chassis_generation_;
+        motion_status_ = status;
         const auto error = esp_timer_stop(chassis_timer_);
         if (error != ESP_ERR_INVALID_STATE) {
             ESP_ERROR_CHECK(error);
         }
+    }
+
+    uint32_t DriveChassis(int forward, int turn, int duration_ms) {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        StopChassisLocked(distance_active_ ? "cancelled" : "idle");
         if (forward != 0 || turn != 0) {
             const int64_t duration_us = static_cast<int64_t>(duration_ms) * 1000;
             chassis_deadline_ = esp_timer_get_time() + duration_us;
@@ -63,6 +79,73 @@ private:
             chassis_.drive(forward / 100.0f, turn / 100.0f);
         }
         ESP_LOGI(TAG, "Chassis drive: forward=%d turn=%d duration_ms=%d", forward, turn, duration_ms);
+        return chassis_generation_;
+    }
+
+    ToolResult MoveForward(int distance_cm, int speed) {
+        const auto generation = DriveChassis(0, 0, 0);
+        float initial_cm = 0;
+        const auto error = ultrasonic_.readDistanceCm(initial_cm);
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        if (generation != chassis_generation_) {
+            return std::unexpected("运动已被新的底盘指令取消");
+        }
+        if (error != ESP_OK) {
+            motion_status_ = "sensor_error";
+            return std::unexpected(std::string("起始测距失败，未启动电机：") + esp_err_to_name(error));
+        }
+        if (initial_cm - distance_cm < 10.0f) {
+            motion_status_ = "obstacle";
+            return std::unexpected("前方空间不足：目标位置须保留至少 10cm 距离，未启动电机");
+        }
+        start_distance_cm_ = initial_cm;
+        requested_cm_ = distance_cm;
+        moved_cm_ = 0;
+        distance_active_ = true;
+        motion_status_ = "moving";
+        chassis_deadline_ = esp_timer_get_time() + 15000000;
+        ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
+        chassis_.drive(speed / 100.0f, 0);
+        xTaskNotifyGive(distance_task_);
+        ESP_LOGI(TAG, "Distance move started: requested=%dcm initial=%.1fcm speed=%d", distance_cm, initial_cm, speed);
+        return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+    }
+
+    void RunDistanceControl() {
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            while (true) {
+                uint32_t generation;
+                {
+                    std::lock_guard<std::mutex> lock(chassis_mutex_);
+                    if (!distance_active_) {
+                        break;
+                    }
+                    generation = chassis_generation_;
+                }
+                float current_cm = 0;
+                // 驱动负责 >=60ms 采样间隔；等待回波时不能持有底盘锁，急停仍可立即执行。
+                const auto error = ultrasonic_.readDistanceCm(current_cm);
+                {
+                    std::lock_guard<std::mutex> lock(chassis_mutex_);
+                    if (generation != chassis_generation_ || !distance_active_) {
+                        continue;
+                    }
+                    if (error != ESP_OK) {
+                        StopChassisLocked("sensor_error");
+                        ESP_LOGW(TAG, "Distance move stopped: %s", esp_err_to_name(error));
+                        continue;
+                    }
+                    moved_cm_ = start_distance_cm_ - current_cm;
+                    if (current_cm <= 10.0f || moved_cm_ >= requested_cm_) {
+                        StopChassisLocked(moved_cm_ >= requested_cm_ ? "reached" : "obstacle");
+                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm", motion_status_, moved_cm_, requested_cm_);
+                    }
+                }
+                // 测距锁释放后让出一个 tick，避免连续重抢导致进度查询一直等到运动结束。
+                vTaskDelay(1);
+            }
+        }
     }
 
     void InitializeChassisTools() {
@@ -74,12 +157,16 @@ private:
             std::lock_guard<std::mutex> lock(board->chassis_mutex_);
             // 已排队的旧定时回调不能中断刚收到的新运动指令。
             if (board->chassis_deadline_ != 0 && esp_timer_get_time() >= board->chassis_deadline_) {
-                board->chassis_.drive(0, 0);
-                board->chassis_deadline_ = 0;
+                board->StopChassisLocked(board->distance_active_ ? "timeout" : "idle");
                 ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
             }
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
+        if (xTaskCreate([](void* arg) {
+                static_cast<PaoBoard*>(arg)->RunDistanceControl();
+            }, "distance_move", 4096, this, 5, &distance_task_) != pdPASS) {
+            ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+        }
 
         auto& mcp = McpServer::GetInstance();
         mcp.AddTool("self.chassis.drive",
@@ -94,6 +181,7 @@ private:
             "- duration_ms（可选，整数 100 到 15000，默认 1000）：行驶毫秒数，到时自动停止；"
             "超过 15000 会报错且不执行，需要更久请分多次调用。\n"
             "速度是电机占空比，不代表实际距离或转过的角度。\n"
+            "按厘米前进请使用 self.chassis.move_forward。\n"
             "返回：true 表示已开始执行。",
             PropertyList({Property("forward", kPropertyTypeInteger, -100, 100),
                           Property("turn", kPropertyTypeInteger, -100, 100),
@@ -105,7 +193,7 @@ private:
             });
         mcp.AddTool("self.chassis.stop",
             "是什么：小车两轮底盘的急停。\n"
-            "能做什么：立刻让两个电机停转，并取消 self.chassis.drive 还没走完的定时运动。"
+            "能做什么：立刻让两个电机停转，并取消当前定时或按距离运动。"
             "用户说停、停下、别动、刹车时调用。\n"
             "参数：无。\n"
             "返回：true 表示已停止。",
@@ -114,6 +202,49 @@ private:
                 DriveChassis(0, 0, 0);
                 return true;
             });
+        mcp.AddTool("self.chassis.move_forward",
+            "是什么：通过前方超声波距离变化反馈控制小车直行。用户要求前进多少厘米时调用。\n"
+            "参数：distance_cm 必填整数 1..390；speed 可选整数 1..100，默认 50，为电机占空比。\n"
+            "以前方同一静止反射物的起始距离减当前距离估算前进量，到达后停车；"
+            "必须有稳定反射物，不支持空旷环境里程测量、倒退或转弯。"
+            "目标位置必须保留至少 10cm；空间不足或起始测距失败直接报错且不启动。"
+            "新底盘指令会替换旧运动；途中无回波、测距错误、前方不足 10cm 或超过 15 秒立即停止。"
+            "受采样间隔和惯性影响，不能保证厘米级精度。\n"
+            "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询进度及停止原因。",
+            PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390),
+                          Property("speed", kPropertyTypeInteger, 50, 1, 100)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                return MoveForward(properties["distance_cm"].value<int>(), properties["speed"].value<int>());
+            });
+        mcp.AddTool("self.ultrasonic.get_distance",
+            "是什么：读取小车前方 HC-SR04 超声波距离，单位厘米，量程 2..400cm。\n"
+            "用户询问前方距离、障碍物距离或按厘米运动进度时调用。参数：无。\n"
+            "返回 JSON：distance_cm（本次失败时为 null）、error（测距错误或 null）、motion_status、"
+            "requested_cm、moved_cm（最近一次按距离运动的估算进度，可为负值）。"
+            "motion_status 为 idle/moving/reached/obstacle/sensor_error/timeout/cancelled；"
+            "只有 reached 表示按测距反馈达到目标。测距失败不能理解为前方没有障碍物。",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                return ReadDistance();
+            });
+    }
+
+    cJSON* ReadDistance() {
+        float distance_cm = 0;
+        const auto error = ultrasonic_.readDistanceCm(distance_cm);
+        auto* result = cJSON_CreateObject();
+        if (error == ESP_OK) {
+            cJSON_AddNumberToObject(result, "distance_cm", distance_cm);
+            cJSON_AddNullToObject(result, "error");
+        } else {
+            cJSON_AddNullToObject(result, "distance_cm");
+            cJSON_AddStringToObject(result, "error", esp_err_to_name(error));
+        }
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        cJSON_AddStringToObject(result, "motion_status", motion_status_);
+        cJSON_AddNumberToObject(result, "requested_cm", requested_cm_);
+        cJSON_AddNumberToObject(result, "moved_cm", moved_cm_);
+        return result;
     }
 
     // 语音工具和网页遥控在不同任务里调用，Launcher 自身串行化继电器脉冲。
@@ -216,6 +347,7 @@ private:
         httpd_resp_set_status(req, status);
         httpd_resp_set_type(req, type);
         httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "http://127.0.0.1:8080");
         return httpd_resp_sendstr(req, body);
     }
 
@@ -264,6 +396,23 @@ private:
             }, this},
             {"/api/stop", HTTP_POST, [](httpd_req_t* req) {
                 Self(req)->DriveChassis(0, 0, 0);
+                return Ok(req);
+            }, this},
+            {"/api/distance", HTTP_GET, [](httpd_req_t* req) {
+                CJsonUniquePtr result(Self(req)->ReadDistance());
+                CJsonStringUniquePtr text(cJSON_PrintUnformatted(result.get()));
+                if (!text) {
+                    return Reply(req, "500 Internal Server Error", "text/plain", "Cannot encode distance");
+                }
+                return Reply(req, "200 OK", "application/json", text.get());
+            }, this},
+            {"/api/move_forward", HTTP_POST, [](httpd_req_t* req) {
+                int distance_cm, speed;
+                if (!QueryInt(req, "distance_cm", 20, 1, 390, distance_cm) || !QueryInt(req, "speed", 50, 1, 100, speed)) {
+                    return BadRequest(req, "distance_cm 取 1..390，speed 取 1..100");
+                }
+                const auto result = Self(req)->MoveForward(distance_cm, speed);
+                if (!result) { return BadRequest(req, result.error().c_str()); }
                 return Ok(req);
             }, this},
             {"/api/launcher/fire", HTTP_POST, [](httpd_req_t* req) {

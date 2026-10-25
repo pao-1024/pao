@@ -1,7 +1,8 @@
-use esp_soc::board::BoardModel;
+use esp_soc::board::{BoardEdge, BoardModel};
 use crate::ssd1306::{Ssd1306, Ssd1306State};
 use crate::trace::{Trace, TracedI2c};
 use std::sync::{Arc, Mutex};
+use std::collections::VecDeque;
 
 /// PAO voice board: SSD1306 on I2C0 SDA41/SCL42, status LED on GPIO48.
 #[derive(Default)]
@@ -9,6 +10,10 @@ pub struct Pao {
     display: Arc<Mutex<Ssd1306State>>,
     led: [[u8; 3]; 1], updates: u64, edges: u64,
     pub trace: Arc<Mutex<Trace>>,
+    trigger: Option<u64>,
+    echo: bool,
+    pending: VecDeque<BoardEdge>,
+    ready: Vec<BoardEdge>,
 }
 impl BoardModel for Pao {
     fn name(&self) -> &'static str { "pao" }
@@ -21,6 +26,33 @@ impl BoardModel for Pao {
         }
     }
     fn gpio_events(&self) -> u64 { self.edges }
+    fn gpio_output_at(&mut self, cycle: u64, changes: &[(u8, bool)], enabled: u64, _output: u64) {
+        self.trace.lock().unwrap().advance(cycle as f64 / 240_000_000.0);
+        for &(pin, high) in changes {
+            if pin != 8 || enabled & (1 << 8) == 0 { continue; }
+            if high { self.trigger = Some(cycle); }
+            else if let Some(start) = self.trigger.take() {
+                if cycle.saturating_sub(start) < 2400 || !self.pending.is_empty() { continue; }
+                let distance = self.trace.lock().unwrap().world.distance_cm();
+                if !(2.0..=400.0).contains(&distance) { continue; }
+                let begin = cycle + 200 * 240;
+                let end = begin + (distance * 58.0).round() as u64 * 240;
+                self.pending.extend([BoardEdge { cycle: begin, pin: 9, level: true }, BoardEdge { cycle: end, pin: 9, level: false }]);
+            }
+        }
+        self.gpio_changes(changes);
+    }
+    fn input_levels(&self) -> Vec<(u8, bool)> { vec![(9, self.echo)] }
+    fn next_deadline(&self) -> Option<u64> { self.pending.front().map(|edge| edge.cycle) }
+    fn advance_to(&mut self, cycle: u64) {
+        while self.pending.front().is_some_and(|edge| edge.cycle <= cycle) {
+            let edge = self.pending.pop_front().unwrap();
+            self.echo = edge.level;
+            self.trace.lock().unwrap().gpio(edge.pin, edge.level);
+            self.ready.push(edge);
+        }
+    }
+    fn take_edges(&mut self) -> Vec<BoardEdge> { std::mem::take(&mut self.ready) }
     fn i2c_devices(&mut self) -> Vec<(u8, u8, Box<dyn esp_periph::i2c::I2cDevice>)> {
         vec![(0, 0x3c, Box::new(TracedI2c::new(Ssd1306::new(self.display.clone(), (41, 42)), 0x3c, self.trace.clone())))]
     }
@@ -37,6 +69,22 @@ impl BoardModel for Pao {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn trigger_generates_timed_echo_for_front_wall() {
+        let mut board = Pao::default();
+        board.gpio_output_at(100, &[(8, true)], 1 << 8, 1 << 8);
+        board.gpio_output_at(2500, &[(8, false)], 1 << 8, 0);
+        assert_eq!(board.next_deadline(), Some(2500 + 200 * 240));
+        board.advance_to(2500 + 200 * 240);
+        assert_eq!(board.take_edges(), vec![BoardEdge { cycle: 50500, pin: 9, level: true }]);
+        let end = 50500 + 10991 * 240;
+        board.advance_to(end);
+        assert_eq!(board.take_edges(), vec![BoardEdge { cycle: end, pin: 9, level: false }]);
+        assert_eq!(board.next_deadline(), None);
+        board.gpio_output_at(end + 1, &[(8, true)], 1 << 8, 1 << 8);
+        board.gpio_output_at(end + 2, &[(8, false)], 1 << 8, 0);
+        assert_eq!(board.next_deadline(), None, "a short Trig pulse cannot produce an echo");
+    }
     #[test]
     fn oled_writes_reach_the_glass_and_gpio48_drives_the_status_led() {
         let mut board = Pao::default();
