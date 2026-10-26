@@ -1,7 +1,7 @@
 #pragma once
 
 // 板载控制页。方向键按住期间通过 WebSocket 每 150 ms 续发一次 400 ms 的运动指令；
-// 页面退出或断网后指令到期停车。运动渐变和配置保存在固件底盘中。
+// 页面退出或断网后指令到期停车。运动配置保存在设备中。
 inline constexpr char kControlPage[] = R"PAO(<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
@@ -52,13 +52,11 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>充能请看模块指示灯</small></button></section>
 <section class="settings"><h2>运动设置</h2>
 <fieldset id="configFields" disabled>
-<label>输出渐变<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
-<label>最小有效输出<input id="minOutput" type="range" min="0" max="99" step="1" value="0"><output id="minOutputOut">0%</output></label>
 <label>左轮比例<input id="leftScale" type="range" min="0" max="1" step="0.01" value="1"><output id="leftScaleOut">1.00</output></label>
 <label>右轮比例<input id="rightScale" type="range" min="0" max="1" step="0.01" value="1"><output id="rightScaleOut">1.00</output></label>
 </fieldset><div class="config-line"><span id="configStatus" class="status" role="status">读取配置中</span><button id="retry" hidden>重试保存</button></div>
 </section>
-<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。最小有效输出须低于前进和旋转最大输出；运动设置在调节结束后保存到设备，并影响语音动作。</p>
+<p class="hint">按住方向键驾驶，松开立即清零输出。中央“停”也可停车；键盘 WASD / 方向键驾驶，空格开炮。运动设置在调节结束后保存到设备，并影响语音动作。</p>
 </main><script>
 const $=id=>document.getElementById(id);
 const statusEl=$("status"),configStatus=$("configStatus");
@@ -111,18 +109,16 @@ for(const button of document.querySelectorAll(".direction")){
 $("stop").onclick=emergencyStop;
 setInterval(()=>syncMotion(),50);
 
-function showConfig(){ $("rampOut").textContent=(Number($("ramp").value)/1000).toFixed(1)+" s";
-  $("minOutputOut").textContent=$("minOutput").value+"%";
+function showConfig(){
   $("leftScaleOut").textContent=Number($("leftScale").value).toFixed(2);
   $("rightScaleOut").textContent=Number($("rightScale").value).toFixed(2);
   $("movePowerOut").textContent=$("movePower").value+"%";
   $("rotatePowerOut").textContent=$("rotatePower").value+"%"}
-function currentConfig(){return {ramp_time_ms:$("ramp").value,left_scale:$("leftScale").value,
+function currentConfig(){return {left_scale:$("leftScale").value,
   right_scale:$("rightScale").value,move_output:$("movePower").value,
-  rotate_output:$("rotatePower").value,min_output:$("minOutput").value}}
+  rotate_output:$("rotatePower").value}}
 async function loadConfig(){try{const config=await call("/api/motion-config");
-  if(!configDirty){$("ramp").value=config.ramp_time_ms;
-    $("minOutput").value=config.min_output;
+  if(!configDirty){
     $("leftScale").value=config.left_scale;$("rightScale").value=config.right_scale;
     $("movePower").value=config.move_output;$("rotatePower").value=config.rotate_output;
     showConfig();setConfigStatus("已从设备加载","ok");$("retry").hidden=true}
@@ -139,7 +135,7 @@ async function saveConfig(){pendingSave=true;if(saving)return;saving=true;
         configDirty=!same;setConfigStatus(same?"已保存到设备":"未保存",same?"ok":"")}}
     catch(e){setConfigStatus(e.message||"保存失败，请重试","bad");$("retry").hidden=false}}
   saving=false}
-for(const id of ["ramp","minOutput","leftScale","rightScale","movePower","rotatePower"]){
+for(const id of ["leftScale","rightScale","movePower","rotatePower"]){
   $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};
   $(id).onchange=saveConfig}
 $("retry").onclick=saveConfig;

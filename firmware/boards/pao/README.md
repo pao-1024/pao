@@ -52,13 +52,13 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 左轮按 `IN4/IN3` 顺序创建 `Motor`，反转左侧安装极性，使两轮正速度均表示车体前进；
 右轮仍按 `IN1/IN2` 顺序。更换电机或接线后需重新核对方向。
 底盘内部提供前进、后退、左转、右转、常规停止和立即停止六个无参数动作；
-常规停止按输出渐变时间减速，立即停止直接清零两轮输出。
+两种停止动作均立即清零两轮输出。
 前进和旋转的最大输出属于可动态调整的 `ChassisConfig`。
 按厘米前进由独立的 `ForwardDistanceMover` 组合前向超声波与底盘实现，不提供按厘米后退。
 底盘通过小智的设备 MCP 协议向灵矽暴露以下工具，联网激活后随设备工具列表上报：
 
 - `self.chassis.control`：`action` 必填，只接受 `forward`（前进）、`backward`（后退）、
-  `turn_left`（逆时针左转）、`turn_right`（顺时针右转）、`stop`（按渐变时间减速）、
+  `turn_left`（逆时针左转）、`turn_right`（顺时针右转）、`stop`（立即清零）、
   `emergency_stop`（立即清零）六种值。四个方向动作使用设备保存的相应最大输出，
   可传 `duration_ms`，范围 `[100, 15000]`，默认 1000 毫秒，到时立即清零输出；
   两种停止动作忽略该参数。新指令替换当前运动及计时。
@@ -98,10 +98,9 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 
 联网后设备在 80 端口提供遥控页，串口日志会打印 `Control page: http://<设备 IP>/`，
 同一局域网内用浏览器打开即可。四个方向按钮分别控制前进、后退和两种原地旋转；
-按住期间每 150 ms 续发一次 400 ms 的动作指令，松开时平滑停车。中央停止键立即清零输出；
+按住期间每 150 ms 续发一次 400 ms 的动作指令，松开时立即清零输出。中央停止键也可停车；
 失焦、页面关闭或断网后停止续发，超时保护在当前指令有效期结束时清零。
-也支持 WASD / 方向键，最近按下且仍按住的方向优先。续发指令不会重置加速过程，
-切换方向时底盘先降至零再升至新目标。
+也支持 WASD / 方向键，最近按下且仍按住的方向优先。切换方向时立即使用新方向和输出。
 开炮键或空格键按一次发射一次。
 网页和语音发射共用约 280ms 的“biu”电子音效，由板子扬声器播放并跟随设备音量；
 若正在播放语音，音效会按现有音频队列顺序播放。音效来源与重新生成命令见[音效说明](../../components/pao/sounds/README.md)。
@@ -113,14 +112,11 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 前进／后退和旋转各有独立的最大输出滑块，范围均为 20%～100%，默认 80%；
 它们用于网页、WebSocket 和语音动作。
 两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
-底盘内部按实际时间渐变输出，
-渐变时间范围 0～3 s，默认 1 s；0 表示直接达到目标。
-最小有效输出范围为 0%～99%，默认 0%，且必须低于前进和旋转的最大输出；
-非零时跳过低占空比区间再渐变，常规停止渐变回阈值后归零，立即停止直接清零。
-左右轮比例均在 0～1 之间，默认 1，仅降低相应侧输出；改变比例时也平滑过渡。
-这四个校准参数也可在网页运行时调整，每次调节结束后保存到 NVS，设备重启后恢复；
+左右轮比例均在 0～1 之间，默认 1，仅降低相应侧输出。
+这四个运动参数可在网页运行时调整，调节结束后保存到 NVS 并立即生效，设备重启后恢复；
 页面打开时读取设备当前值，保存失败会提示重试。开环控制不能保证两轮实际转速相等，
-应在实车上调整比例；某轮最大输出被比例降至阈值以下时，仍可能无法克服起步阻力。
+应在实车上调整比例；某轮输出过低时仍可能无法克服起步阻力。
+设备只加载当前格式且数值有效的运动配置；其他格式使用默认值，可在网页重新设置。
 
 WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` 为正整数，
 `query` 使用 URL 查询串格式。响应为 `{"id":1,"ok":true,"data":...}`；失败时 `ok` 为 `false`，
@@ -132,16 +128,15 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 取值错误返回 `ok: false`：
 
 - `/api/chassis`，`query` 为 `action=&duration_ms=`：`action` 为上述六种值之一，四个方向动作的
-  `duration_ms` 可省略，默认 1000 毫秒；`stop` 为平滑停车，`emergency_stop` 为立即停车。
+  `duration_ms` 可省略，默认 1000 毫秒；`stop` 和 `emergency_stop` 均立即清零输出。
 - `/api/move_forward`，`query` 为 `distance_cm=`：与按厘米运动工具共用控制逻辑，默认 20cm；
   参数错误、起始测距失败或空间不足返回 `ok: false`，接受运动返回 `data: true`。
   方向动作和定距前进都使用设备保存的对应最大输出。
 - `/api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
 - `/api/launcher/fire`：发射一次，无参数。
-- `/api/motion-config`，`query` 为空时读取配置，返回 `ramp_time_ms`、`left_scale`、`right_scale`、
-  `move_output`、`rotate_output`、`min_output`。
-- `/api/motion-config`，`query` 为 `ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=&min_output=` 时校验并保存配置；
-  `move_output`、`rotate_output` 和 `min_output` 可省略，此时保持设备当前值，
+- `/api/motion-config`，`query` 为空时读取配置，返回 `left_scale`、`right_scale`、`move_output`、`rotate_output`。
+- `/api/motion-config`，`query` 为 `left_scale=&right_scale=&move_output=&rotate_output=` 时校验并保存配置；
+  `move_output` 和 `rotate_output` 可省略，此时保持设备当前值，
   NVS 提交成功后生效，保存失败返回 `ok: false`。
 
 HTTP 提供 `GET /` 加载页面，`/ws` 用于升级 WebSocket 连接。
