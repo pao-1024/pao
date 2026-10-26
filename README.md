@@ -34,9 +34,9 @@ PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕
 
 ## 开发
 
-React 硬件工作台在 `platform/`，运行 `task platform:dev` 后访问
-<http://127.0.0.1:4173/>。支持官方器件图形、逐针接线、tscircuit 原理图生成、
-PCB 载板草稿与独立 PAO 模拟器连接，能力边界和使用方法见 [PAO Studio](platform/README.md)。
+实验性 React 硬件工作台在 `experimental/platform/`，运行 `task platform:dev` 后访问
+<http://127.0.0.1:4173/>。支持真实模块自动接线、tscircuit 原理图、PCB 制造文件、
+业务固件生成与编译仿真，能力边界和使用方法见 [PAO Studio](experimental/platform/README.md)。
 
 固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
 或进入 `firmware/` 后运行 `task build`。请先通过 EIM 安装并选择 ESP-IDF；

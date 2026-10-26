@@ -110,4 +110,4 @@ WebSocket 的音频输入和输出同样保序排队，页面长时间不读取�
 
 ## 平台当前接线的业务应用仿真
 
-React 工作台提供按当前接线和业务参数生成实时对讲、声音告警及诊断固件的入口，支持真实浏览器麦克风、独立/共享 I²S 时钟，见 [平台运行说明](../platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。这些本地应用与上述 PAO 灵矽语音参考固件分别管理。
+实验性 React 工作台提供按当前接线和业务参数生成实时对讲、声音告警及诊断固件的入口，支持真实浏览器麦克风、独立/共享 I²S 时钟，见 [平台运行说明](../experimental/platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。这些本地应用与上述 PAO 灵矽语音参考固件分别管理。

@@ -31,7 +31,7 @@ test("mixed sensors share actual I2C pins and allocate address straps; invalid e
 });
 
 test("mixed sensor modules produce connected manufacturable copper and a real schematic", async () => {
-  const root = fileURLToPath(new URL("../", import.meta.url));
+  const root = fileURLToPath(new URL("../../", import.meta.url));
   const result = await buildHardware(root,{...plan(["esp","oled","mcp9808","mcp9808","bh1750","sht31"]),board:{width:180,height:160}},new AbortController().signal,()=>{});
   assert.deepEqual(boardIssues(result.nodes,result.connections,result.traces,result.board),[]);
   assert.equal(JSON.parse(result.manufacturing["drc.json"]).passed,true);
@@ -56,7 +56,7 @@ test("hardware selection creates distinct BOMs and complete electrical dependenc
 });
 
 test("hardware worker produces checked copper and a real schematic, and can be cancelled", async () => {
-  const root = fileURLToPath(new URL("../", import.meta.url));
+  const root = fileURLToPath(new URL("../../", import.meta.url));
   const result = await buildHardware(root, { ...plan(["esp", "oled", "mic", "speaker", "motor"]), sharedI2s: true }, new AbortController().signal, () => {});
   assert.equal(result.traces.length, result.connections.length);
   assert.deepEqual(boardIssues(result.nodes, result.connections, result.traces, result.board), []);

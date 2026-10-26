@@ -2,7 +2,7 @@
 
 把硬件做成模块，把嵌入式开发带入软件工程工作流。
 
-面向独立开发者和小型硬件团队的 React / TypeScript 本地工作台。组合真实器件、逐针接线、用 tscircuit 生成模块接口原理图，并在工作台管理 esp32sim PAO 运行时。平台方向见 [Issue #29](https://github.com/pao-1024/pao/issues/29)。
+位于仓库 `experimental/platform/` 的实验性 React / TypeScript 本地工作台，面向独立开发者和小型硬件团队。组合真实器件、逐针接线、用 tscircuit 生成模块接口原理图，并在工作台管理 esp32sim PAO 运行时。平台方向见 [Issue #29](https://github.com/pao-1024/pao/issues/29)。
 
 ![模块工作台](preview.jpg)
 
@@ -22,7 +22,7 @@ task platform:dev
 task platform:setup
 task platform:check
 task platform:build
-pnpm --dir platform run preview
+pnpm --dir experimental/platform run preview
 ```
 
 构建产物在 `tmp/platform-dist/`。检查入口与 Platform CI 一致：`pnpm run check` 执行类型检查、连接与 PCB 几何回归、真实 tscircuit 生成；`pnpm run build` 执行类型检查与 Vite 构建。tscircuit 引擎在用户点击生成时由独立 Worker 加载，不阻塞编辑器主线程；初次生成需要加载较大的引擎资源。
@@ -84,7 +84,7 @@ PCB 与接线共享端点数据，电气规则通过后在 Worker 中自动布�
 独立 CAM 校验入口使用 Gerbonara 1.6.3 解析实际导出文件、Shapely 2.1.2 检查铜间距、板边、NPTH 及跨层连接，并生成实际 CAM 预览。`uv` 按脚本声明安装隔离依赖：
 
 ```sh
-uv run platform/check-manufacturing.py tmp/pao-pcb-fabrication.zip
+uv run experimental/platform/check-manufacturing.py tmp/pao-pcb-fabrication.zip
 ```
 
 Adafruit 机械数据由 Limor Fried/Ladyada 为 Adafruit Industries 设计，采用 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)；固定源文件链接随 `footprints.json` 导出。KiCad 端子几何来自 KiCad 封装库，采用 CC-BY-SA-4.0 与 library exception。打板文件不包含采购模块的内部 PCB。静态 DRC 不代替样板装配、回流路径、载流温升、射频、声学及实际波形验证；平台不会自动下单。

@@ -12,5 +12,5 @@ export default defineConfig({
       },
     },
   },
-  build: { outDir: "../tmp/platform-dist", emptyOutDir: true },
+  build: { outDir: "../../tmp/platform-dist", emptyOutDir: true },
 });

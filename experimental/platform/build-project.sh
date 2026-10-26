@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 export TMPDIR="$PWD/tmp/temp"
 export IDF_TOOLS_PATH="$PWD/tmp/idf-tools"
 export PYTHONPYCACHEPREFIX="$PWD/tmp/pycache"

@@ -11,7 +11,7 @@ import { agentModel, agentProvider, generateApplication, generateHardwarePlan, b
 import { agentApi } from "./src/agent-spec.ts";
 import type { HardwareResult } from "./src/hardware-plan.ts";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const root = fileURLToPath(new URL("../../", import.meta.url));
 export function allowedRequest(req: IncomingMessage) {
   const host = req.headers.host || "";
   if (!/^127\.0\.0\.1:\d+$/.test(host)) return false;
@@ -56,7 +56,7 @@ export function runtimePlugin(): Plugin {
     state = action === "prepare" || action === "build" ? "preparing" : "starting";
     mkdirSync(resolve(root, "tmp/temp"), { recursive: true });
     child = spawn(action === "prepare" ? "task" : action === "build" ? "bash" : "python3",
-      action === "prepare" ? ["simulator:prepare"] : action === "build" ? ["platform/build-project.sh", directory!] :
+      action === "prepare" ? ["simulator:prepare"] : action === "build" ? ["experimental/platform/build-project.sh", directory!] :
         action === "project" ? ["simulator/run-project.py", directory!] : ["simulator/run-esp32sim.py"], {
         cwd: root, detached: true, stdio: ["ignore", "pipe", "pipe"],
         env: { ...process.env, TMPDIR: resolve(root, "tmp/temp"),
@@ -83,7 +83,7 @@ export function runtimePlugin(): Plugin {
     const generated = firmwareProject(value);
     const files: Record<string, string> = {};
     for (const name of ["CMakeLists.txt", "sdkconfig.defaults", "main/CMakeLists.txt", "main/main.cpp", "main/sensor-driver.h"])
-      files[name] = readFileSync(resolve(root, "platform/firmware", name), "utf8");
+      files[name] = readFileSync(resolve(root, "experimental/platform/firmware", name), "utf8");
     files["main/wiring.h"] = generated.header;
     files["main/motor.cc"] = readFileSync(resolve(root, "firmware/components/pao/motor.cc"), "utf8");
     files["main/motor.h"] = readFileSync(resolve(root, "firmware/components/pao/include/motor.h"), "utf8");

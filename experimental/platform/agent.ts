@@ -74,7 +74,7 @@ export async function buildHardware(root: string, plan: unknown, signal: AbortSi
   signal.throwIfAborted(); phase("wiring");
   const assembled = assembleHardware(plan);
   return new Promise((done, fail) => {
-    const worker = new Worker(resolve(root, "platform/hardware-worker.mjs"), { workerData: assembled });
+    const worker = new Worker(resolve(root, "experimental/platform/hardware-worker.mjs"), { workerData: assembled });
     let settled = false;
     const finish = (error?: unknown, result?: HardwareResult) => {
       if (settled) return; settled = true;
