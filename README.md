@@ -24,6 +24,56 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
+## 系统组成
+
+```mermaid
+flowchart TD
+    Voice["用户语音"] --> Linxi["灵矽服务"]
+    Web["局域网遥控页"] -->|"WebSocket JSON"| Board
+    Linxi -->|"MCP 工具调用"| Board
+
+    subgraph Firmware["ESP32-S3 PAO 固件"]
+        Board["PaoBoard 适配层<br/>参数校验 · 运动状态 · NVS · HTTP"]
+        Board --> Chassis["Chassis"]
+        Chassis --> Motors["Motor × 2"]
+        Motors --> Driver["MX1508"]
+        Driver --> Wheels["左右电机"]
+
+        Board --> Distance["ForwardDistanceMover"]
+        Distance --> Sensor["HcSr04"]
+        Sensor --> Ultrasonic["HC-SR04"]
+
+        Board --> Launcher["Launcher"]
+        Launcher --> Relay["继电器"]
+        Relay --> Gun["电磁发射器按钮"]
+
+        Board --> Peripherals["OLED · I2S 麦克风与功放 · 状态灯"]
+    end
+
+    Firmware -.->|"烧录并运行"| Hardware["实机<br/>真实外设与 Wi-Fi"]
+    Firmware -.->|"正式镜像启动"| Simulator["模拟器<br/>ROM + Flash + 外设模型 + 浏览器音频"]
+```
+
+## 团队与分工
+
+### Zhiqiang Zhang（[@zhangzqs](https://github.com/zhangzqs)）
+
+- 硬件设计：使用 tscircuit 定义电池保护、电源开关、5V 升压、ESP32-S3、麦克风、功放、OLED、HC-SR04、MX1508、发射继电器和发射器接线；统一 44 针开发板引脚、共享网络与电源域，生成原理图并补齐连通性测试。
+- 电机与底盘：实现 MX1508 双路电机驱动、左右轮方向适配、前进／后退／原地旋转／立即停止，以及平移和旋转最大输出、左右轮比例和 NVS 持久化；接入网页、WebSocket 和语音底盘控制。
+- 电磁发射：完成 HU-064 发射器选型和组装，设计常供电、独立 3.3V 与低电平继电器接线；实现单次 300 ms 发射脉冲，以及上电保持断开和并发调用串行化。
+- 距离控制：接入 3.3V 版 HC-SR04，实现 RMT 微秒级回波捕获、60 ms 触发间隔和测距错误处理；实现按前方距离变化前进、10 cm 停止余量、15 秒超时和新指令取消。
+- 板级集成：接入 SSD1306 OLED，建立 PAO 板型、GPIO 配置、MCP 工具、遥控页和 WebSocket 控制服务，使网页、语音和驱动共享同一套板级状态与参数校验。
+- 工程保障：维护 EIM 构建入口、ccache、固件 CI 和产物上传，补充硬件接线测试与仓库配置检查，保证硬件设计、固件编译和文档能够持续验证。
+
+### jimyag（[@jimyag](https://github.com/jimyag)）
+
+- 工程基础：建立固件目录、小智外部组件接入、Task 构建入口和最小语音板型，把上游源码、构建缓存与仓库业务代码分开管理。
+- 模拟器内核：接入固定版本的 esp32sim，从 ROM 启动正式 PAO 固件，模拟 Flash、NVS、Wi-Fi、I2S、RMT、SSD1306 和 GPIO48 状态灯。
+- 观测系统：采集固件真实 GPIO、I2C、MCPWM 和 I2S 活动，解析底盘位姿、前方距离、总线事件和 UART0 日志，并通过 WebSocket 推送到浏览器。
+- 模拟交互：实现 React/Three.js/Canvas 和 AudioWorklet 页面，显示 OLED、可跟随的 3D 小车、场地轨迹、引脚连线、音频波形和串口日志，支持浏览器麦克风和扬声器。
+- 语音与遥控：接入底盘、电磁发射、网络地址和待机 MCP 工具；实现局域网遥控页、方向续发、输出与轮速校准、距离查询、断线停车和新指令替换旧运动。
+- 联调验收：打通测距回波、按距离前进、发射音效和 3D 场景，编写底盘三阶段验收脚本，并记录固件、模拟器和实机交互的验证结果。
+
 ## 功能
 
 - **语音控制**：唤醒词“小炮小炮”；可查询前方距离、前进指定厘米数、前后移动、原地转向、停车、开炮、查询设备 IP 和结束对话。
@@ -67,8 +117,6 @@ GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说�
 模拟器代码、板型模型、网页和 Taskfile 独立放在 `simulator/`。
 在根目录使用 `task simulator:install`、`task simulator:run` 和 `task simulator:check`，
 完整配网与语音验证方法见[模拟器说明](simulator/README.md)。
-
-系统组成、模块接口、数据流、团队分工和验证边界见[架构设计](docs/architecture.md)。
 
 ## 项目 Skill
 

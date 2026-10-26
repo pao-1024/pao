@@ -7,6 +7,10 @@
 `pao` 模拟板将 GPIO41/42 上 SSD1306 的真实 I2C 写入渲染为图像，并显示 GPIO48 状态灯。
 网页使用电脑麦克风和扬声器与设备语音交互。
 
+![模拟器主页面，左侧为跟车视角与设备状态，右侧为引脚级接线和实时信号](images/simulator-overview.png)
+
+完整页面的音频与串口区域见[整页截图](images/simulator-overview-full.jpg)。
+
 板型与 SSD1306 模型在 `pao-sim/src/`，React 网页与 AudioWorklet 在 `web/`。
 内核 fork 只维护通用 CPU、网络、Flash、I2S 支持和库入口，不包含 PAO 板型或页面。
 启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
@@ -64,6 +68,8 @@ task simulator:run
 - I2S 波形与 UART0 日志：日志支持关键字过滤，并从中解析设备状态。
 
 顶栏“遥控”打开固件内置的遥控页 <http://127.0.0.1:8081/>，由启动器把本机 8081 端口转发到设备的 80 端口。
+
+![固件遥控页，提供底盘方向、输出校准、测距和发射操作](images/simulator-control.png)
 
 3D 场景通过 `ws://127.0.0.1:8081/ws` 连接正式固件的遥控服务。
 “前进”输入框调用 `/api/move_forward` 发出厘米指令，“停止”调用 `/api/chassis` 的 `emergency_stop` 动作，
