@@ -5,6 +5,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ControlClient } from "./control.ts";
+import { controlSocketUrl } from "./endpoints.ts";
 import { MAX_SPEED, motion } from "./protocol.ts";
 import type { Pose, World } from "./protocol.ts";
 
@@ -59,7 +60,7 @@ export function Car3D(props: Props) {
   const [reading, setReading] = useState("");
   const control = useRef<ControlClient | null>(null);
   useEffect(() => {
-    const client = control.current = new ControlClient("ws://127.0.0.1:8081/ws");
+    const client = control.current = new ControlClient(controlSocketUrl);
     return () => { control.current = null; client.close(); };
   }, []);
   async function request(path: string, params?: Record<string, string | number>) {

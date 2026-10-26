@@ -3,9 +3,9 @@ name: Simulator
 on:
   push:
     branches: [main]
-    paths: ['simulator/**', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+    paths: ['simulator/**', 'docker/**', '.dockerignore', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
   pull_request:
-    paths: ['simulator/**', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
+    paths: ['simulator/**', 'docker/**', '.dockerignore', '.gitmodules', 'Taskfile.yaml', '.github/workflows/simulator.yml']
 
 permissions:
   contents: read
@@ -15,6 +15,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  caddy:
+    name: Caddy device ownership
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: docker/caddy-single-device
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: docker/caddy-single-device/go.mod
+          cache-dependency-path: docker/caddy-single-device/go.sum
+      - run: go test -race ./...
+      - run: go vet ./...
+
   check:
     name: Simulator static checks
     runs-on: ubuntu-24.04

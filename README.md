@@ -44,14 +44,30 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 
 ## 快速开始
 
+### Docker 启动
+
+安装 Docker Engine 和 Docker Compose v2 后，克隆仓库并启动（当前支持 Linux amd64）：
+
+```sh
+git clone --recurse-submodules https://github.com/pao-1024/pao.git
+cd pao
+docker compose -f docker/compose.yaml up -d --build
+```
+
+首次启动会联网构建正式固件和完整模拟器，耗时较长。打开 <http://127.0.0.1:8080/>，点击启用麦克风和扬声器，并按提示完成设备激活。顶栏“遥控”可打开固件遥控页。
+
+停止时运行 `docker compose -f docker/compose.yaml stop`，保留设备状态。预构建镜像、HTTPS 和状态卷维护见 [Docker 部署说明](docker/README.md)；本机开发启动见[模拟器说明](simulator/README.md#启动)。
+
 <a name="ai-start"></a>
+
+### 让 AI 帮你启动
 
 复制下面的提示词给能操作终端的 AI：
 
 ```text
-请克隆或复用 https://github.com/pao-1024/pao，按 AGENTS.md 和 simulator/README.md 准备依赖。
-在仓库根目录运行 task simulator:prepare，再运行 task simulator:run，保持服务运行并保留设备状态。
-确认固件、模拟器和遥控页正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
+请克隆或复用 https://github.com/pao-1024/pao，阅读 AGENTS.md 和 docker/README.md。
+使用 Docker Compose 启动完整模拟器；从源码构建前先初始化子模块，保持服务运行并保留设备状态。
+确认模拟器页面、后端连接和固件日志正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
 ```
 
 ## 系统组成
@@ -132,7 +148,7 @@ GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说�
 
 [观看模拟器使用演示](https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b)：在浏览器里通过语音控制正式固件，并查看 OLED、3D 小车、I2C、PWM、I2S 和日志。
 
-启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)。
+启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)，也可通过 [Docker Compose](docker/README.md) 部署完整模拟器与 HTTPS 入口。
 
 ## 没有硬件，也能开始设计与验证
 

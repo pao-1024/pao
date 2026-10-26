@@ -64,12 +64,11 @@ def load_identity(state):
     return identity
 
 
-def create_flash(build, flash, device_uuid):
+def create_flash(build, flash, device_uuid, nvs_python=None):
     """Write a blank 16 MB flash whose NVS already holds the virtual AP and device UUID."""
-    description = json.loads((build / "project_description.json").read_text())
-    cache = (build / "CMakeCache.txt").read_text().splitlines()
-    python = next(line.split("=", 1)[1] for line in cache if line.startswith("PYTHON:"))
-    generator = Path(description["idf_path"]) / "components/nvs_flash/nvs_partition_generator/nvs_partition_gen.py"
+    if nvs_python is None:
+        cache = (build / "CMakeCache.txt").read_text().splitlines()
+        nvs_python = next(line.split("=", 1)[1] for line in cache if line.startswith("PYTHON:"))
     with (flash.parent / "nvs.csv").open("w", newline="") as file:
         csv.writer(file).writerows([("key", "type", "encoding", "value"),
                                    ("board", "namespace", "", ""),
@@ -77,7 +76,7 @@ def create_flash(build, flash, device_uuid):
                                    ("wifi", "namespace", "", ""),
                                    ("ssid", "data", "string", SSID),
                                    ("password", "data", "string", PASSWORD)])
-    subprocess.run([python, str(generator), "generate", str(flash.parent / "nvs.csv"),
+    subprocess.run([str(nvs_python), "-m", "esp_idf_nvs_partition_gen", "generate", str(flash.parent / "nvs.csv"),
                     str(flash.parent / "nvs.bin"), "0x4000"], check=True)
     image = bytearray(b"\xff" * (16 * 1024 * 1024))
     image[0x9000:0xd000] = (flash.parent / "nvs.bin").read_bytes()
@@ -87,16 +86,23 @@ def create_flash(build, flash, device_uuid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rom", type=Path, help="ROM ELF (default: active ESP-IDF or selected EIM environment)")
+    parser.add_argument("--firmware-dir", type=Path, help="Directory containing the built ELF and flasher_args.json")
+    parser.add_argument("--state-dir", type=Path, default=ROOT / "tmp/esp32sim-full-flow",
+                        help="Persistent device identity and flash directory")
+    parser.add_argument("--nvs-python", type=Path, help="Python with esp_idf_nvs_partition_gen (default: firmware SDK Python)")
     args = parser.parse_args()
     try:
         rom = find_rom(args.rom)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     emulator = ROOT / "tmp/esp32sim-build/release/pao-sim"
-    state = ROOT / "tmp/esp32sim-full-flow"
+    state = args.state_dir.resolve()
     flash = state / "interactive.bin"
-    revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
-    build = ROOT / "tmp/build" / revision
+    if args.firmware_dir:
+        build = args.firmware_dir.resolve()
+    else:
+        revision = json.loads((ROOT / "tmp/base-revision.json").read_text())["commit"]
+        build = ROOT / "tmp/build" / revision
     elf = build / "xiaozhi.elf"
     for path in [emulator, elf]:
         if not path.is_file():
@@ -106,7 +112,7 @@ def main():
     except (OSError, ValueError) as error:
         parser.error(f"Cannot load {state / 'identity.json'}: {error}")
     if not flash.is_file():
-        create_flash(build, flash, identity["uuid"])
+        create_flash(build, flash, identity["uuid"], args.nvs_python)
     command = [emulator, "--board", "pao", "--boot", "rom", "--rom", rom,
                "--mac", identity["mac"], "--flash-mb", "16", "--psram-mb", "8", "--elf", elf,
                "--flash-file", flash, "--wifi", f"ssid={SSID},psk={PASSWORD}",
