@@ -1,0 +1,47 @@
+version: "3"
+
+tasks:
+  setup:
+    desc: 按锁文件安装 PCB 项目依赖
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  fix:
+    desc: 修复代码并统一格式
+    cmds:
+      - pnpm exec eslint . --fix
+      - pnpm exec prettier . --write
+
+  build:
+    desc: 生成 PCB、原理图及 KiCad 工程
+    cmds:
+      - pnpm exec tsci build --pcb-svgs --schematic-svgs --kicad-project --autorouter-timeout 120s index.tsx
+
+  check:
+    desc: 检查代码、电路、元件摆放及 PCB 布线
+    cmds:
+      - pnpm exec prettier . --check
+      - pnpm exec eslint . --max-warnings 0
+      - pnpm exec tsc --noEmit
+      - pnpm exec tsci check netlist index.tsx
+      - pnpm exec tsci check schematic-placement index.tsx
+      - pnpm exec tsci check placement index.tsx
+      - task: build
+      - pnpm exec tsci check shorts dist/index/circuit.json
+      - pnpm exec tsci check pcb-style dist/index/circuit.json
+
+  test:
+    desc: 完整验证 PCB 工程
+    cmds:
+      - task: check
+
+  bom:
+    desc: 构建电路并更新 BOM.csv
+    cmds:
+      - task: build
+      - node scripts/generate-bom.mjs
+
+  dev:
+    desc: 启动电路与 PCB 预览
+    cmds:
+      - pnpm exec tsci dev index.tsx

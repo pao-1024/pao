@@ -10,14 +10,14 @@
 
 ## 接口
 
-| 接口 | 用途 | 限制 |
-| --- | --- | --- |
-| J_BAT | 1S 锂电池：1 = 正极、2 = 负极、3 = 10 kΩ NTC | 须核对电池线序；没有 NTC 时充电温度检测不能正常工作 |
-| J_MOTOR_R / J_MOTOR_L | 两路 5 V 直流电机 | 上电前核对堵转电流与 DRV8833、升压器、电池及连接器额定值 |
-| J_SPEAKER | 差分扬声器输出 | 两端均不能接地 |
-| J_US | 3.3 V HC-SR04-33：1 = VCC、2 = TRIG、3 = ECHO、4 = GND | 只可直接接支持 3.3 V 供电及 Echo 电平的版本 |
-| J_USB | USB-C 5 V 充电及 ESP32-S3 原生 USB | 充电时关闭电池负载开关；本板没有充电电源路径管理 |
-| J_RF | U.FL 外接 2.4 GHz 天线 | 射频匹配元件需依据实板和天线调试 |
+| 接口                  | 用途                                                   | 限制                                                     |
+| --------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
+| J_BAT                 | 1S 锂电池：1 = 正极、2 = 负极、3 = 10 kΩ NTC           | 须核对电池线序；没有 NTC 时充电温度检测不能正常工作      |
+| J_MOTOR_R / J_MOTOR_L | 两路 5 V 直流电机                                      | 上电前核对堵转电流与 DRV8833、升压器、电池及连接器额定值 |
+| J_SPEAKER             | 差分扬声器输出                                         | 两端均不能接地                                           |
+| J_US                  | 3.3 V HC-SR04-33：1 = VCC、2 = TRIG、3 = ECHO、4 = GND | 只可直接接支持 3.3 V 供电及 Echo 电平的版本              |
+| J_USB                 | USB-C 5 V 充电及 ESP32-S3 原生 USB                     | 充电时关闭电池负载开关；本板没有充电电源路径管理         |
+| J_RF                  | U.FL 外接 2.4 GHz 天线                                 | 射频匹配元件需依据实板和天线调试                         |
 
 J_US 使用 Samtec `SSW-104-01-G-S` 2.54 mm 四针母座，Trig 接 GPIO8、Echo 接 GPIO9，保留现有固件时序。普通 5 V HC-SR04 的 Echo 可能高于 ESP32-S3 允许电压，不能按本接口直接插接。[HC-SR04-33 数据手册](https://cdn.sparkfun.com/assets/a/8/9/c/a/HC-SR04-33_Datasheet.pdf)、[Samtec 插座 PCB 孔位](https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/6129/ssw-s.pdf)。
 
@@ -29,21 +29,16 @@ J_US 使用 Samtec `SSW-104-01-G-S` 2.54 mm 四针母座，Trig 接 GPIO8、Echo
 
 ## 构建与验证
 
-需要 Node.js 24+、pnpm 10.32.1 和 Bun。进入 `hardware_test/` 后运行：
+需要 Node.js 24+、pnpm 10.32.1、Bun 和 Go Task。进入 `hardware_test/` 后运行：
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm exec tsc --noEmit
-pnpm exec tsci check netlist index.tsx
-pnpm exec tsci check schematic-placement index.tsx
-pnpm exec tsci check placement index.tsx
-pnpm exec tsci build --pcb-svgs --schematic-svgs --kicad-project --autorouter-timeout 120s index.tsx
-pnpm exec tsci check shorts dist/index/circuit.json
-pnpm exec tsci check pcb-style dist/index/circuit.json
-node scripts/generate-bom.mjs
+task setup
+task check
 ```
 
-`pcb/` 保存可直接用 KiCad 打开的 PCB 与七页原理图；重新构建的产物位于 `dist/index/`。原理图、电路源码、KiCad 工程及检查结果用于设计审阅；投入生产前需要完成实物尺寸确认、PCB DRC、USB 差分阻抗与走线长度检查、射频匹配、电源满载与堵转测试，以及 OLED 装配试验。本设计未经过实物验证。USB 静电保护器的 SOT-23-6 三维模型尚未包含在工程中，不影响二维 PCB 和原理图。
+`task check` 检查格式、代码、网络表、摆放、布线、铜层短路和走线风格；`task build` 单独生成工程，`task bom` 更新 `BOM.csv`，`task dev` 启动预览。在仓库根目录调用时加 `hardware_test:` 前缀，例如 `task hardware_test:check`。
+
+`pcb/` 保存可直接用 KiCad 打开的 PCB 与七页原理图；`task build` 的新产物位于 `dist/index/`，更新已提交的 KiCad 工程时需同步对应文件。原理图、电路源码、KiCad 工程及检查结果用于设计审阅；投入生产前需要完成实物尺寸确认、PCB DRC、USB 差分阻抗与走线长度检查、射频匹配、电源满载与堵转测试，以及 OLED 装配试验。本设计未经过实物验证。USB 静电保护器的 SOT-23-6 三维模型尚未包含在工程中，不影响二维 PCB 和原理图。
 
 原理图自动排版检查仍会提示少量标签碰撞、电容分组及较长的接地标注路径，需要在 KiCad 中人工整理后再用于生产文档。
 

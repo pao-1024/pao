@@ -9,5 +9,11 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["*.ts", "*.tsx", "sections/**/*.tsx", "components/**/*.tsx", "test/**/*.ts"]
+  "include": [
+    "*.ts",
+    "*.tsx",
+    "sections/**/*.tsx",
+    "components/**/*.tsx",
+    "test/**/*.ts"
+  ]
 }

@@ -4,6 +4,9 @@ includes:
   hardware:
     taskfile: ./hardware/Taskfile.yaml
     dir: ./hardware
+  hardware_test:
+    taskfile: ./hardware_test/Taskfile.yaml
+    dir: ./hardware_test
   firmware:
     taskfile: ./firmware/Taskfile.yaml
     dir: ./firmware
