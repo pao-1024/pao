@@ -42,6 +42,22 @@ PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕
 
 当前覆盖模块接线与原理图，详见 [ESP32-S3 模块接线图与预览说明](hardware/README.md)。
 
+## 固件 · Voice & Motion
+
+**一句话，变成一条设备指令。**
+
+固件基于 ESP-IDF 和小智语音工程，在 ESP32-S3 上完成唤醒词、音频、显示与设备控制。灵矽通过 MCP 调用底盘、测距、电磁发射、网络信息和待机工具；局域网遥控页通过 WebSocket 进入同一套板级控制逻辑。运动参数保存在 NVS，底盘定时停车、测距失败停车和发射继电器脉冲都由设备侧校验与执行。
+
+GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说明见[固件说明](firmware/README.md)。
+
+## 模拟器 · Firmware in the Loop
+
+**同一份正式固件，在浏览器里运行。**
+
+模拟器使用 Rust、esp32sim 和仓库中的 PAO 板型，从芯片 ROM 启动正式固件。页面将固件真实 I2C 写入渲染成 OLED，把 MCPWM 转为可跟随的 3D 小车，把 HC-SR04 回波送进正式 RMT 驱动，并同步显示接线状态、I2C、PWM、I2S、UART 和底盘指令。浏览器麦克风与扬声器可直接进入设备的语音交互链路。
+
+启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)。
+
 ## 开发
 
 固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
