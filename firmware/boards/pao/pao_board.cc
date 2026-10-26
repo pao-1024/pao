@@ -38,6 +38,9 @@ namespace {
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
 constexpr uint32_t kMotionConfigVersion = 4;
+constexpr float kObstacleAlarmDistanceCm = 10.0f;
+constexpr float kObstacleAlarmClearDistanceCm = 12.0f;
+constexpr int64_t kObstacleAlarmIntervalUs = 1500000;
 
 struct StoredMotionConfig {
     uint32_t version;
@@ -47,6 +50,8 @@ struct StoredMotionConfig {
 
 extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
 extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
+extern const char pao_alarm_start[] asm("_binary_pao_alarm_ogg_start");
+extern const char pao_alarm_end[] asm("_binary_pao_alarm_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
@@ -66,6 +71,9 @@ private:
     ForwardDistanceMover distance_mover_{ultrasonic_, chassis_};
     TaskHandle_t distance_task_ = nullptr;
     uint32_t chassis_generation_ = 0;
+    std::atomic<bool> alarm_scheduled_{false};
+    bool obstacle_alarm_active_ = false;
+    int64_t next_obstacle_alarm_us_ = 0;
     esp_timer_handle_t standby_timer_ = nullptr;
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
@@ -216,36 +224,102 @@ private:
         return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
     }
 
+    ToolResult MoveToObstacleDistance(int distance_cm) {
+        const auto generation = StopChassis();
+        float initial_cm = 0;
+        const auto error = distance_mover_.readDistanceCm(initial_cm);
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        if (generation != chassis_generation_) {
+            return std::unexpected("运动已被新的底盘指令取消");
+        }
+        if (error != ESP_OK) {
+            distance_mover_.cancel("sensor_error");
+            return std::unexpected(std::string("起始测距失败，未启动电机：") + esp_err_to_name(error));
+        }
+        if (!distance_mover_.forwardToDistanceCm(distance_cm, initial_cm)) {
+            const auto state = distance_mover_.status();
+            if (std::string_view(state.motion_status) == "reached") {
+                return std::unexpected("前方距离已不大于目标距离，未启动电机");
+            }
+            return std::unexpected("目标距离须保留至少 10cm，未启动电机");
+        }
+        chassis_deadline_ = esp_timer_get_time() + 15000000;
+        ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, 15000000));
+        xTaskNotifyGive(distance_task_);
+        ESP_LOGI(TAG, "Target distance move started: target=%dcm initial=%.1fcm", distance_cm, initial_cm);
+        return std::string("已开始前进到距障碍物目标距离，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+    }
+
+    void PlayObstacleAlarm() {
+        if (alarm_scheduled_.exchange(true)) {
+            return;
+        }
+        Application::GetInstance().Schedule([this]() {
+            alarm_scheduled_ = false;
+            auto& app = Application::GetInstance();
+            // 语音播放期间不排队报警，下一轮检测仍过近时再重试。
+            if (!app.GetAudioService().IsPlaybackIdle()) {
+                return;
+            }
+            const auto size = reinterpret_cast<std::uintptr_t>(pao_alarm_end) -
+                              reinterpret_cast<std::uintptr_t>(pao_alarm_start);
+            app.PlaySound(std::string_view(pao_alarm_start, size));
+        });
+    }
+
+    void UpdateObstacleAlarm(esp_err_t error, float distance_cm) {
+        if (error != ESP_OK || (obstacle_alarm_active_ && distance_cm > kObstacleAlarmClearDistanceCm)) {
+            if (obstacle_alarm_active_) {
+                ESP_LOGI(TAG, "Obstacle alarm cleared");
+            }
+            obstacle_alarm_active_ = false;
+            return;
+        }
+        if (!obstacle_alarm_active_ && distance_cm > kObstacleAlarmDistanceCm) {
+            return;
+        }
+        const int64_t now = esp_timer_get_time();
+        if (!obstacle_alarm_active_) {
+            obstacle_alarm_active_ = true;
+            next_obstacle_alarm_us_ = now;
+            ESP_LOGW(TAG, "Obstacle too close: %.1fcm", distance_cm);
+        }
+        if (now >= next_obstacle_alarm_us_) {
+            next_obstacle_alarm_us_ = now + kObstacleAlarmIntervalUs;
+            PlayObstacleAlarm();
+        }
+    }
+
     void RunDistanceControl() {
         while (true) {
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            while (true) {
-                uint32_t generation;
-                {
-                    std::lock_guard<std::mutex> lock(chassis_mutex_);
-                    if (!distance_mover_.status().active) {
-                        break;
-                    }
-                    generation = chassis_generation_;
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+            uint32_t generation;
+            bool active;
+            {
+                std::lock_guard<std::mutex> lock(chassis_mutex_);
+                active = distance_mover_.status().active;
+                generation = chassis_generation_;
+            }
+            float current_cm = 0;
+            // 驱动负责 >=60ms 采样间隔；等待回波时不能持有底盘锁，急停仍可立即执行。
+            const auto error = distance_mover_.readDistanceCm(current_cm);
+            UpdateObstacleAlarm(error, current_cm);
+
+            if (!active) {
+                continue;
+            }
+            {
+                std::lock_guard<std::mutex> lock(chassis_mutex_);
+                if (generation != chassis_generation_ || !distance_mover_.status().active) {
+                    continue;
                 }
-                float current_cm = 0;
-                // 驱动负责 >=60ms 采样间隔；等待回波时不能持有底盘锁，急停仍可立即执行。
-                const auto error = distance_mover_.readDistanceCm(current_cm);
-                {
-                    std::lock_guard<std::mutex> lock(chassis_mutex_);
-                    if (generation != chassis_generation_ || !distance_mover_.status().active) {
-                        continue;
-                    }
-                    distance_mover_.update(error, current_cm);
-                    const auto state = distance_mover_.status();
-                    if (!state.active) {
-                        ResetMotionLocked(nullptr);
-                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm",
-                                 state.motion_status, state.moved_cm, state.requested_cm);
-                    }
+                distance_mover_.update(error, current_cm);
+                const auto state = distance_mover_.status();
+                if (!state.active) {
+                    ResetMotionLocked(nullptr);
+                    ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm",
+                             state.motion_status, state.moved_cm, state.requested_cm);
                 }
-                // 测距锁释放后让出一个 tick，避免连续重抢导致进度查询一直等到运动结束。
-                vTaskDelay(1);
             }
         }
     }
@@ -267,7 +341,7 @@ private:
         LoadMotionConfig();
         if (xTaskCreate([](void* arg) {
                 static_cast<PaoBoard*>(arg)->RunDistanceControl();
-            }, "distance_move", 4096, this, 5, &distance_task_) != pdPASS) {
+            }, "distance_mon", 4096, this, 5, &distance_task_) != pdPASS) {
             ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
         }
 
@@ -280,7 +354,8 @@ private:
             "四个方向动作使用设备保存的对应最大输出；duration_ms 可选，100..15000 毫秒，"
             "默认 1000，到时立即停；两个停止动作忽略 duration_ms。"
             "输出不是实测速度，不能保证准确距离或角度。"
-            "新动作取消原有定时或按距离运动。前进指定厘米数请用 self.chassis.move_forward。",
+            "新动作取消原有定时或按距离运动。前进指定厘米数请用 self.chassis.move_forward，"
+            "前进到距障碍物指定距离请用 self.chassis.move_to_distance。",
             PropertyList({Property("action", kPropertyTypeString).SetMaxLength(14),
                           Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
             [this](const PropertyList& properties) -> ToolResult {
@@ -306,11 +381,24 @@ private:
             [this](const PropertyList& properties) -> ToolResult {
                 return MoveForward(properties["distance_cm"].value<int>());
             });
+        mcp.AddTool("self.chassis.move_to_distance",
+            "是什么：通过前方超声波反馈，让小车前进到距障碍物指定厘米处。"
+            "用户说前进到离障碍物多少厘米、靠到指定距离时调用。\n"
+            "参数：distance_cm 必填整数 10..390，表示停车后希望保留的前方距离；使用设备保存的前进最大输出。\n"
+            "必须有静止稳定反射物，不支持空旷环境、移动目标、倒退或转弯。"
+            "当前距离已不大于目标时直接报错且不启动；途中无回波、测距错误、意外进入 10cm 内或超过 15 秒立即停止。"
+            "新底盘指令会替换旧运动；受采样间隔和惯性影响，不能保证厘米级精度。\n"
+            "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询当前距离及停止原因。",
+            PropertyList({Property("distance_cm", kPropertyTypeInteger, 20, 10, 390)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                return MoveToObstacleDistance(properties["distance_cm"].value<int>());
+            });
         mcp.AddTool("self.ultrasonic.get_distance",
             "是什么：读取小车前方 HC-SR04 超声波距离，单位厘米，量程 2..400cm。\n"
-            "用户询问前方距离、障碍物距离或按厘米运动进度时调用。参数：无。\n"
+            "用户询问前方距离、障碍物距离或定距运动进度时调用。参数：无。\n"
             "返回 JSON：distance_cm（本次失败时为 null）、error（测距错误或 null）、motion_status、"
-            "requested_cm、moved_cm（最近一次按距离运动的估算进度，可为负值）。"
+            "requested_cm、moved_cm（最近一次按距离运动的估算进度，可为负值）；"
+            "requested_cm 在 move_forward 中表示计划前进量，在 move_to_distance 中表示目标障碍物间距。"
             "motion_status 为 idle/moving/reached/obstacle/sensor_error/timeout/cancelled；"
             "只有 reached 表示按测距反馈达到目标。测距失败不能理解为前方没有障碍物。",
             PropertyList(),
@@ -506,6 +594,12 @@ private:
                 return "distance_cm 取 1..390";
             }
             const auto result = MoveForward(distance_cm);
+            if (!result) { return result.error(); }
+        } else if (path == "/api/move_to_distance") {
+            if (!QueryInt(query, "distance_cm", 20, 10, 390, distance_cm)) {
+                return "distance_cm 取 10..390";
+            }
+            const auto result = MoveToObstacleDistance(distance_cm);
             if (!result) { return result.error(); }
         } else if (path == "/api/launcher/fire") {
             FireLauncher();
