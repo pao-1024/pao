@@ -37,44 +37,11 @@
 namespace {
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
-constexpr char kMotionOutputKey[] = "motion_output";
 constexpr uint32_t kMotionConfigVersion = 4;
-
-// 保持旧版 NVS 的字段布局，以恢复仍在使用的最大输出和左右轮比例。
-struct StoredMotionConfigV1 {
-    uint32_t version;
-    uint32_t ramp_time_ms;
-    float left_scale;
-    float right_scale;
-};
-
-struct StoredMotionConfigV2 {
-    uint32_t version;
-    uint32_t ramp_time_ms;
-    float left_scale;
-    float right_scale;
-    float move_output;
-    float rotate_output;
-};
-
-struct StoredMotionConfigV3 {
-    uint32_t version;
-    uint32_t ramp_time_ms;
-    float left_scale;
-    float right_scale;
-    float move_output;
-    float rotate_output;
-    float min_output;
-};
 
 struct StoredMotionConfig {
     uint32_t version;
     ChassisConfig config;
-};
-
-struct LegacyMotionOutput {
-    uint8_t move_output = 80;
-    uint8_t rotate_output = 80;
 };
 }  // namespace
 
@@ -192,54 +159,6 @@ private:
             StoredMotionConfig saved = {};
             if (nvs_get_blob(handle, kMotionKey, &saved, &size) != ESP_OK ||
                 saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
-                ESP_LOGW(TAG, "Invalid motion config; using defaults");
-            }
-        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV3)) {
-            StoredMotionConfigV3 saved = {};
-            ChassisConfig config;
-            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 3) {
-                config.left_scale = saved.left_scale;
-                config.right_scale = saved.right_scale;
-                config.move_output = saved.move_output;
-                config.rotate_output = saved.rotate_output;
-                if (!chassis_.setConfig(config)) {
-                    ESP_LOGW(TAG, "Invalid motion config; using defaults");
-                }
-            } else {
-                ESP_LOGW(TAG, "Invalid motion config; using defaults");
-            }
-        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV2)) {
-            StoredMotionConfigV2 saved = {};
-            ChassisConfig config;
-            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 2) {
-                config.left_scale = saved.left_scale;
-                config.right_scale = saved.right_scale;
-                config.move_output = saved.move_output;
-                config.rotate_output = saved.rotate_output;
-                if (!chassis_.setConfig(config)) {
-                    ESP_LOGW(TAG, "Invalid motion config; using defaults");
-                }
-            } else {
-                ESP_LOGW(TAG, "Invalid motion config; using defaults");
-            }
-        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV1)) {
-            StoredMotionConfigV1 saved = {};
-            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 1) {
-                ChassisConfig config;
-                config.left_scale = saved.left_scale;
-                config.right_scale = saved.right_scale;
-                LegacyMotionOutput output;
-                size = sizeof(output);
-                if (nvs_get_blob(handle, kMotionOutputKey, &output, &size) == ESP_OK &&
-                    size == sizeof(output) && output.move_output >= 20 && output.move_output <= 100 &&
-                    output.rotate_output >= 20 && output.rotate_output <= 100) {
-                    config.move_output = output.move_output / 100.0f;
-                    config.rotate_output = output.rotate_output / 100.0f;
-                }
-                if (!chassis_.setConfig(config)) {
-                    ESP_LOGW(TAG, "Invalid motion config; using defaults");
-                }
-            } else {
                 ESP_LOGW(TAG, "Invalid motion config; using defaults");
             }
         } else if (error != ESP_ERR_NVS_NOT_FOUND) {
