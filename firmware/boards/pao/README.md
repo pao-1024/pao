@@ -84,7 +84,7 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 按距离运动同样受采样间隔、超声波反射和停车惯性影响，停止后仍可能滑行，不能承诺厘米级精度；
 需在实车上校准合适的占空比与停车余量。
 
-发射器经设备 MCP 协议暴露 `self.launcher.fire`：无参数，继电器吸合 100 毫秒按下发射按钮后返回 `true`。
+发射器经设备 MCP 协议暴露 `self.launcher.fire`：无参数，继电器吸合 300 毫秒按下发射按钮后返回 `true`。
 连续开多炮时多次调用该工具。
 
 `self.network.get_access_info` 无参数，查询当前 IP 地址和后台访问地址 `http://<设备 IP>/`。

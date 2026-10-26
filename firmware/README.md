@@ -158,11 +158,11 @@ chassis.emergencyStop();     // 立即清零两轮输出
 
 Launcher launcher(GPIO_NUM_18);
 
-launcher.fire();      // 吸合 100 ms 再释放，等同于按一下发射键
+launcher.fire();      // 吸合 300 ms 再释放，等同于按一下发射键
 launcher.safeOff();   // 立即释放，可重复调用
 ```
 
-`fire()` 保持发射继电器吸合 `kFirePulseMs`（100 ms）后释放，覆盖触点抖动，
+`fire()` 保持发射继电器吸合 `kFirePulseMs`（300 ms）后释放，覆盖触点抖动，
 足以让发射器识别为一次按下；调用期间独占驱动，其他调用排队等待。
 构造、析构和 `safeOff()` 都保持断开，上电不会误按。
 

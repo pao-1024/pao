@@ -9,7 +9,7 @@ class Launcher {
 public:
     // 发射继电器保持吸合的时长：覆盖触点抖动，足以让发射器识别为一次按下，
     // 又不至于让按钮长时间处于按下状态。
-    static constexpr uint32_t kFirePulseMs = 100;
+    static constexpr uint32_t kFirePulseMs = 300;
 
     // fire_gpio 短接发射器的发射按钮，低电平吸合。
     // 构造时先写断开电平再启用输出，上电不会误按下按钮。
