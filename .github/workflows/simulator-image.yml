@@ -2,7 +2,7 @@ name: Simulator image
 
 on:
   push:
-    tags: ['*']
+    tags: ['**']
   workflow_dispatch:
 
 permissions:

@@ -5,7 +5,7 @@
 在同一个站点中使用一个无参数 `single_device` 指令，放在所有模拟器路由之前：
 
 ```caddyfile
-vps-jp.zhangzqs.cn {
+simulator.example.com {
     single_device
     reverse_proxy simulator:8000
 }
