@@ -74,6 +74,8 @@ PAO 板型在 GPIO8 检测到至少 10µs 的 Trig 脉冲后，向 GPIO9 发送�
 脉宽为厘米数 × 58µs，经内核 RMT RX 和正式 HC-SR04 驱动返回固件，不直接注入驱动返回值。
 超出 2–400cm 量程时不产生回波，固件报告测距失败。仿真只包含矩形四壁，不模拟路锥、噪声、多径或材质差异。
 按厘米运动的参数、15 秒超时和 10cm 停车余量见[板型说明](../firmware/boards/pao/README.md)。
+可通过 WebSocket 调用 `/api/move_to_distance?distance_cm=` 前进到距边界的目标距离；
+车头进入距边界 10cm 内时，正式固件的后台任务会从板载扬声器播放报警音。
 
 引脚数据由 `pao-sim/src/trace.rs` 采集：GPIO 和 I2C 来自板型回调，电机 PWM 由 MMIO 观察者
 解码 MCPWM0 寄存器写入得到，每 50 ms 仿真时间通过同一个 WebSocket 推送一次。
