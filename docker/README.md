@@ -2,6 +2,29 @@
 
 `Dockerfile` 将正式 PAO 固件、ESP32-S3 ROM、Rust 模拟器、3D 网页及固件遥控页打包为一个完整应用镜像。`caddy.Dockerfile` 构建带 [`single_device` 插件](caddy-single-device/README.md)的 Caddy 镜像，提供统一入口、单浏览器独占和自动 HTTPS。当前支持 Linux amd64。
 
+## 本地运行
+
+本地体验只需要 Docker，无需克隆源码或安装编译工具：
+
+```sh
+docker run -d --name pao-simulator --stop-timeout 30 \
+  -p 127.0.0.1:8080:8000 \
+  -v pao-simulator-data:/data \
+  ghcr.io/pao-1024/pao-simulator:sha-106b35f
+```
+
+打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，新设备按提示完成灵矽绑定。
+
+设备激活后，**点击顶栏的 BOOT 按键即可触发语音对话，也可以说“小炮小炮”唤醒。** 顶栏“遥控”使用同一入口下的 `/control/`。该入口仅监听本机；需要 HTTPS 和单浏览器独占时，使用下方 Compose 部署。
+
+```sh
+docker logs -f pao-simulator
+docker stop pao-simulator
+docker start pao-simulator
+```
+
+`pao-simulator-data` 卷保存设备身份、Flash 和 NVS。停止后用 `docker start` 复用容器；更新镜像时先正常停止并移除旧容器，再用新标签和同一个数据卷运行启动命令，保留该卷。
+
 ## 从源码启动
 
 需要 Docker Engine 与 Docker Compose v2。在仓库根目录执行：
@@ -24,11 +47,11 @@ docker compose -f docker/compose.yaml up -d --build
 
 同时生成 `sha-<短提交号>` 标签；也支持在 Actions 页面手动运行。首次发布后，将两个 GHCR 包设为公开，或在部署服务器上使用有读取包权限的凭据执行 `docker login ghcr.io`。
 
-服务器只需下载 `compose.yaml`，在同目录创建 `.env`，将 `<tag>` 换为实际版本：
+服务器只需下载 [`compose.yaml`](compose.yaml)，在同目录创建 `.env`，例如使用 `sha-106b35f`：
 
 ```dotenv
-PAO_SIM_IMAGE=ghcr.io/pao-1024/pao-simulator:<tag>
-PAO_CADDY_IMAGE=ghcr.io/pao-1024/pao-simulator-caddy:<tag>
+PAO_SIM_IMAGE=ghcr.io/pao-1024/pao-simulator:sha-106b35f
+PAO_CADDY_IMAGE=ghcr.io/pao-1024/pao-simulator-caddy:sha-106b35f
 ```
 
 在该目录运行：

@@ -1,13 +1,3 @@
-<a name="ai-start"></a>
-
-复制下面的提示词给能操作终端的 AI：
-
-```arduino
-请克隆或复用 https://github.com/pao-1024/pao，按 AGENTS.md 和 simulator/README.md 准备依赖。
-在仓库根目录运行 task simulator:prepare，再运行 task simulator:run，保持服务运行并保留设备状态。
-确认固件、模拟器和遥控页正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
-```
-
 # PAO
 
 > # PAO = PAO Aims Ordnance
@@ -51,6 +41,37 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 [![PAO 实车演示](https://github.com/pao-1024/pao/releases/download/assets/photo-12-first-rollout.jpg)](docs/making-of.md#演示视频)
 
 观看[实车演示视频](docs/making-of.md#演示视频)，包含语音控制、遥控控制和发射测试。装配照片和过程说明见[PAO 制作过程](docs/making-of.md)。
+
+## 快速开始
+
+### Docker 启动
+
+安装 Docker 后，运行以下命令启动完整模拟器（当前支持 Linux amd64）：
+
+```sh
+docker run -d --name pao-simulator --stop-timeout 30 \
+  -p 127.0.0.1:8080:8000 \
+  -v pao-simulator-data:/data \
+  ghcr.io/pao-1024/pao-simulator:sha-106b35f
+```
+
+首次启动会自动下载镜像，无需克隆源码或安装编译工具。打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，按提示完成设备激活。
+
+设备激活后，**点击顶栏的 BOOT 按键即可触发语音对话，也可以说“小炮小炮”唤醒。** 顶栏“遥控”可打开固件遥控页。
+
+停止时运行 `docker stop pao-simulator`，再次启动用 `docker start pao-simulator`，设备状态保存在数据卷中。HTTPS、设备独占、镜像更新和源码构建见 [Docker 部署说明](docker/README.md)；本机开发启动见[模拟器说明](simulator/README.md#启动)。
+
+<a name="ai-start"></a>
+
+### 让 AI 帮你启动
+
+复制下面的提示词给能操作终端的 AI：
+
+```text
+请按 https://github.com/pao-1024/pao/blob/main/docker/README.md 的本地运行说明，用预构建 Docker 镜像启动完整模拟器。
+保持服务运行并保留设备状态；已有容器和数据卷时优先复用，不覆盖或重置设备身份。
+确认模拟器页面、后端连接和固件日志正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
+```
 
 ## 系统组成
 
