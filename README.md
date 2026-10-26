@@ -15,6 +15,7 @@
 <p>
   <a href="docs/making-of.md#演示视频"><img src="https://img.shields.io/badge/%E5%AE%9E%E8%BD%A6%E6%BC%94%E7%A4%BA-2EA44F?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="实车演示" height="36"></a>
   <a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b"><img src="https://img.shields.io/badge/%E6%A8%A1%E6%8B%9F%E5%99%A8%E6%BC%94%E7%A4%BA-B77B32?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="模拟器演示" height="36"></a>
+  <a href="#online-demo"><img src="https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C-0E8A81?style=for-the-badge&amp;logo=googlechrome&amp;logoColor=white" alt="在线体验" height="36"></a>
   <a href="#ai-start"><img src="https://img.shields.io/badge/AI%20%E5%90%AF%E5%8A%A8%E6%A8%A1%E6%8B%9F%E5%99%A8-2F81F7?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="AI 启动模拟器" height="36"></a>
 </p>
 
@@ -43,6 +44,16 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 观看[实车演示视频](docs/making-of.md#演示视频)，包含语音控制、遥控控制和发射测试。装配照片和过程说明见[PAO 制作过程](docs/making-of.md)。
 
 ## 快速开始
+
+<a name="online-demo"></a>
+
+### 在线体验
+
+打开 [PAO 在线模拟器](https://vps-jp.zhangzqs.cn/)，无需本地安装即可预览 3D 小车、OLED 与固件运行状态。点击顶栏“遥控”可用方向按钮或 WASD 驾驶；体验语音时，先点击“启用麦克风和扬声器”并授权，再点击 **BOOT** 开始对话。当前在线版本关闭了语音唤醒，使用 BOOT 按键切换对话。
+
+> 在线服务运行在配置较低的 x86 服务器上，esp32sim 当前尚无 x86 原生 JIT 加速，语音等计算密集操作可能明显卡顿或长时间无响应。**想要更流畅的体验，请参考 [Docker 部署说明](docker/README.md)，在单核性能更好的本机运行模拟器。** 实车交互效果可参考[实车演示视频](docs/making-of.md#演示视频)。
+
+在线演示共享同一台虚拟设备，同一时间仅允许一个浏览器会话使用；看到占用提示时请稍后重试。体验结束后，请关闭模拟器和遥控页面以释放设备。
 
 ### Docker 启动
 
