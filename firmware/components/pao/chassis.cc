@@ -13,6 +13,17 @@ constexpr TickType_t kUpdateTicks = pdMS_TO_TICKS(20);
 float approach(float current, float target, float step) {
     return current + std::clamp(target - current, -step, step);
 }
+
+float applyMinOutput(float speed, float scale, float motion_max, float min_output) {
+    if (speed == 0 || scale == 0 || min_output == 0) {
+        return speed * scale;
+    }
+    const float full_output = std::max(std::abs(speed), motion_max);
+    const float wheel_max = full_output * scale;
+    const float wheel_min = std::min(min_output, wheel_max);
+    const float progress = std::abs(speed) / full_output;
+    return std::copysign(wheel_min + (wheel_max - wheel_min) * progress, speed);
+}
 }  // namespace
 
 Chassis::Chassis(Motor& left, Motor& right) : left_(left), right_(right) {
@@ -43,7 +54,9 @@ bool Chassis::validConfig(const ChassisConfig& config) {
            std::isfinite(config.right_scale) && config.left_scale >= 0 &&
            config.left_scale <= 1 && config.right_scale >= 0 && config.right_scale <= 1 &&
            std::isfinite(config.move_output) && config.move_output >= 0.2f && config.move_output <= 1 &&
-           std::isfinite(config.rotate_output) && config.rotate_output >= 0.2f && config.rotate_output <= 1;
+           std::isfinite(config.rotate_output) && config.rotate_output >= 0.2f && config.rotate_output <= 1 &&
+           std::isfinite(config.min_output) && config.min_output >= 0 &&
+           config.min_output < config.move_output && config.min_output < config.rotate_output;
 }
 
 bool Chassis::setConfig(const ChassisConfig& config) {
@@ -159,9 +172,10 @@ void Chassis::advanceLocked(float elapsed_seconds) {
 }
 
 void Chassis::writeMotorsLocked() {
-    const float left = current_speed_ * applied_left_scale_ *
-                       (active_ == Motion::Rotate ? -1.0f : 1.0f);
-    const float right = current_speed_ * applied_right_scale_;
+    const float motion_max = active_ == Motion::Rotate ? config_.rotate_output : config_.move_output;
+    const float left_speed = current_speed_ * (active_ == Motion::Rotate ? -1.0f : 1.0f);
+    const float left = applyMinOutput(left_speed, applied_left_scale_, motion_max, config_.min_output);
+    const float right = applyMinOutput(current_speed_, applied_right_scale_, motion_max, config_.min_output);
     if (left != last_left_output_) {
         left_.setSpeed(left);
         last_left_output_ = left;

@@ -50,6 +50,7 @@ async function saveConfig(settings) {
   closeTo(loaded.right_scale, settings.right_scale, 0.00001);
   if (settings.move_output !== undefined) assert.equal(loaded.move_output, settings.move_output);
   if (settings.rotate_output !== undefined) assert.equal(loaded.rotate_output, settings.rotate_output);
+  if (settings.min_output !== undefined) assert.equal(loaded.min_output, settings.min_output);
 }
 
 async function connect() {
@@ -74,17 +75,19 @@ async function connect() {
 
 async function exercise() {
   assert.deepEqual(await config(), { ramp_time_ms: 1000, left_scale: 1, right_scale: 1,
-    move_output: 80, rotate_output: 80 });
+    move_output: 80, rotate_output: 80, min_output: 0 });
   assert.ok(stopped(latest()), 'Motor output must be zero at first boot');
   console.log('PASS: first boot defaults and stopped motors');
 
   await saveConfig({ ramp_time_ms: 1000, left_scale: 1, right_scale: 1,
-    move_output: 60, rotate_output: 60 });
+    move_output: 60, rotate_output: 60, min_output: 20 });
   const started = latest().time;
   await action('forward');
   await waitSim(0.30);
   let ramp = traces.filter(trace => trace.time > started + 0.05);
-  assert.ok(ramp.some(trace => trace.left > 0.05 && trace.left < 0.5));
+  assert.ok(ramp.some(trace => trace.left > 0.2 && trace.left < 0.5));
+  assert.ok(ramp.filter(trace => trace.left > 0.01).every(trace => trace.left >= 0.19),
+    'Forward output entered the configured dead zone');
   assert.ok(ramp.every(trace => trace.left >= -0.01 && trace.right >= -0.01));
   const beforeRepeat = latest().right;
   await action('forward');
@@ -108,11 +111,15 @@ async function exercise() {
   await waitFor(trace => trace.left > 0.15 && trace.right < -0.3, 'clockwise rotation');
   console.log('PASS: rotation signs and motion replacement');
 
+  const stopStarted = latest().time;
   await action('stop');
   await waitSim(0.10);
   assert.ok(Math.abs(latest().right) > 0.05 && Math.abs(latest().right) < 0.6,
     'Zero command must start with a smooth descent');
   await waitFor(stopped, 'soft stop output');
+  assert.ok(traces.filter(trace => trace.time > stopStarted + 0.05 && Math.abs(trace.right) > 0.01)
+    .every(trace => Math.abs(trace.right) >= 0.19),
+    'Soft stop entered the configured dead zone');
   console.log('PASS: soft stop');
 
   await action('forward');
@@ -144,8 +151,11 @@ async function exercise() {
     { ramp_time_ms: 0, left_scale: 'nan', right_scale: 1 },
     { ramp_time_ms: 0, left_scale: 0 },
   ]) await assert.rejects(control.request('/api/motion-config', invalid), /参数需为/);
+  await assert.rejects(control.request('/api/motion-config', {
+    ramp_time_ms: 0, left_scale: 0, right_scale: 1, min_output: 50,
+  }), /最小有效输出/);
   assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1,
-    move_output: 50, rotate_output: 60 });
+    move_output: 50, rotate_output: 60, min_output: 20 });
   await assert.rejects(control.request('/api/drive', { forward: 20, turn: 20 }), /未知控制指令/);
   await assert.rejects(control.request('/api/status'), /未知控制指令/);
   console.log('PASS: invalid values do not alter config; unused commands are absent');
@@ -153,7 +163,7 @@ async function exercise() {
 
 async function restartZero() {
   assert.deepEqual(await config(), { ramp_time_ms: 0, left_scale: 0, right_scale: 1,
-    move_output: 50, rotate_output: 60 });
+    move_output: 50, rotate_output: 60, min_output: 20 });
   assert.ok(stopped(latest()), 'Motors started after NVS recovery');
   console.log('PASS: restart restored valid zero values and stopped motors');
   await saveConfig({ ramp_time_ms: 1200, left_scale: 0.75, right_scale: 0.9,
@@ -167,6 +177,7 @@ async function restartFinal() {
   closeTo(saved.right_scale, 0.9, 0.00001);
   assert.equal(saved.move_output, 100);
   assert.equal(saved.rotate_output, 100);
+  assert.equal(saved.min_output, 20);
   assert.ok(stopped(latest()), 'Motors started after persisted config load');
   await action('forward', 2500);
   await waitSim(1.30);
