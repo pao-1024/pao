@@ -105,6 +105,8 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 | [窄道行驶][video-03] | 在狭窄通道内向前行驶 | 12 秒 |
 | [发射测试][video-04] | 在桌面场景触发电磁发射器 | 11 秒 |
 
+以上视频上传在 [PR #54 的讨论](https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476)，点击后可直接播放。
+
 ## 继续查看
 
 - [硬件接线说明](../hardware/README.md)：模块、GPIO、供电域和发射器接线。
@@ -133,7 +135,7 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 [photo-19]: https://github.com/pao-1024/pao/releases/download/assets/photo-19-launcher-relay.jpg
 [photo-20]: https://github.com/pao-1024/pao/releases/download/assets/photo-20-acrylic-chassis.jpg
 [photo-21]: https://github.com/pao-1024/pao/releases/download/assets/photo-21-final-assembly.jpg
-[video-01]: https://github.com/pao-1024/pao/releases/download/assets/video-01-phone-control.mp4
-[video-02]: https://github.com/pao-1024/pao/releases/download/assets/video-02-driving-demo.mp4
-[video-03]: https://github.com/pao-1024/pao/releases/download/assets/video-03-corridor-drive.mp4
-[video-04]: https://github.com/pao-1024/pao/releases/download/assets/video-04-launcher-test.mp4
+[video-01]: https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476
+[video-02]: https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476
+[video-03]: https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476
+[video-04]: https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476

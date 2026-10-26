@@ -26,9 +26,9 @@
 
 ## 实车演示
 
-[![PAO 实车演示](https://github.com/pao-1024/pao/releases/download/assets/photo-12-first-rollout.jpg)](https://github.com/pao-1024/pao/releases/download/assets/video-02-driving-demo.mp4)
+[![PAO 实车演示](https://github.com/pao-1024/pao/releases/download/assets/photo-12-first-rollout.jpg)](https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476)
 
-[观看 52 秒驾驶演示](https://github.com/pao-1024/pao/releases/download/assets/video-02-driving-demo.mp4)，另有[手机控制界面](https://github.com/pao-1024/pao/releases/download/assets/video-01-phone-control.mp4)、[窄道行驶](https://github.com/pao-1024/pao/releases/download/assets/video-03-corridor-drive.mp4)和[发射测试](https://github.com/pao-1024/pao/releases/download/assets/video-04-launcher-test.mp4)。
+封面可进入[实车演示视频](https://github.com/pao-1024/pao/pull/54#issuecomment-6421052476)，其中包括 52 秒驾驶演示、手机控制界面、窄道行驶和发射测试，均可在 GitHub 页面直接播放。
 
 从零件、底盘和供电，到语音交互、屏幕与电磁发射器装配，完整记录见[PAO 制作过程](docs/making-of.md)。全部照片与视频保存在 [assets release](https://github.com/pao-1024/pao/releases/tag/assets)。
 
