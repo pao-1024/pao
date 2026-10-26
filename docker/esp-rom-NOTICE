@@ -1,0 +1,5 @@
+ESP32-S3 ROM ELF
+Copyright (c) 2015-2022 Espressif Systems (Shanghai) Co. Ltd.
+Distributed under Apache License 2.0; see esp-rom-LICENSE.
+Source: https://github.com/espressif/esp-rom-elfs
+ROM third-party notices: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/COPYRIGHT.html#rom-source-code-copyrights

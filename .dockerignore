@@ -1,0 +1,14 @@
+**/.git
+**/node_modules
+**/__pycache__
+**/target
+.worktrees
+.agents
+.github
+tmp
+hardware
+experimental
+docs
+**/.env*
+**/*.tfstate*
+**/*.log

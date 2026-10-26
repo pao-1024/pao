@@ -71,6 +71,12 @@ task simulator:run
 身份文件损坏，或已有 Flash 却缺少身份文件时，启动器会报错，不覆盖原有设备状态。
 需要新建虚拟设备时，将 `tmp/esp32sim-full-flow/` 整个目录移到别处备份后再启动。
 
+## Docker 部署
+
+完整模拟器镜像包含正式 PAO 固件、ESP32-S3 ROM、Rust 内核、3D 网页和固件遥控页，启动不需要安装 ESP-IDF、Rust 或 Node.js。`docker/` 集中维护镜像、Compose、Caddy 与单浏览器独占插件。
+
+本地构建、GHCR 镜像部署、HTTPS、设备独占和状态卷维护见 [Docker 部署说明](../docker/README.md)。
+
 ## 页面
 
 打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，

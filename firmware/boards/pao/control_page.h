@@ -71,16 +71,18 @@ function call(path,params){if(!socket||socket.readyState!==WebSocket.OPEN)return
     pending.delete(id);reject(Error("WS 请求超时"));connection.close()
   },3000);pending.set(id,{resolve,reject,timer});
   connection.send(JSON.stringify({id,path,query:new URLSearchParams(params||{}).toString()}))})}
-function connect(){const connection=socket=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`);
+function connect(){const connection=socket=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}${location.pathname.replace(/[^/]*$/, "")}ws`);
   connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();pollDistance(connection)};
   connection.onmessage=event=>{let message;try{message=JSON.parse(event.data)}catch(e){connection.close();return}
     const request=pending.get(message.id);if(!request)return;
     pending.delete(message.id);clearTimeout(request.timer);
     if(message.ok)request.resolve(message.data);else request.reject(Error(message.error||"请求失败"))};
-  connection.onclose=()=>{for(const request of pending.values()){
+  connection.onclose=async()=>{for(const request of pending.values()){
     clearTimeout(request.timer);request.reject(Error("连接断开"))}pending.clear();clearControls();
     $("distance").textContent="连接断开";$("distance").style.color="var(--bad)";
-    setStatus("WS 断开，正在重连","bad");setTimeout(connect,1000)};
+    let busy=false;try{const response=await fetch("/_single_device/status",{cache:"no-store",signal:AbortSignal.timeout(3000)});
+      if(response.ok){const state=await response.json();busy=state.available===false&&state.owned===false}}catch(e){}
+    setStatus(busy?"设备正在被其他浏览器使用，空闲后自动重试":"WS 断开，正在重连","bad");setTimeout(connect,busy?5000:1000)};
   connection.onerror=()=>connection.close()}
 function reportError(error){setStatus(error.message||"连接断开","bad")}
 
