@@ -46,17 +46,18 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 
 ### Docker 启动
 
-安装 Docker Engine 和 Docker Compose v2 后，克隆仓库并启动（当前支持 Linux amd64）：
+安装 Docker 后，运行以下命令启动完整模拟器（当前支持 Linux amd64）：
 
 ```sh
-git clone --recurse-submodules https://github.com/pao-1024/pao.git
-cd pao
-docker compose -f docker/compose.yaml up -d --build
+docker run -d --name pao-simulator --stop-timeout 30 \
+  -p 127.0.0.1:8080:8000 \
+  -v pao-simulator-data:/data \
+  ghcr.io/pao-1024/pao-simulator:sha-106b35f
 ```
 
-首次启动会联网构建正式固件和完整模拟器，耗时较长。打开 <http://127.0.0.1:8080/>，点击启用麦克风和扬声器，并按提示完成设备激活。顶栏“遥控”可打开固件遥控页。
+首次启动会自动下载镜像，无需克隆源码或安装编译工具。打开 <http://127.0.0.1:8080/>，点击启用麦克风和扬声器，并按提示完成设备激活。顶栏“遥控”可打开固件遥控页。
 
-停止时运行 `docker compose -f docker/compose.yaml stop`，保留设备状态。预构建镜像、HTTPS 和状态卷维护见 [Docker 部署说明](docker/README.md)；本机开发启动见[模拟器说明](simulator/README.md#启动)。
+停止时运行 `docker stop pao-simulator`，再次启动用 `docker start pao-simulator`，设备状态保存在数据卷中。HTTPS、设备独占、镜像更新和源码构建见 [Docker 部署说明](docker/README.md)；本机开发启动见[模拟器说明](simulator/README.md#启动)。
 
 <a name="ai-start"></a>
 
@@ -65,8 +66,8 @@ docker compose -f docker/compose.yaml up -d --build
 复制下面的提示词给能操作终端的 AI：
 
 ```text
-请克隆或复用 https://github.com/pao-1024/pao，阅读 AGENTS.md 和 docker/README.md。
-使用 Docker Compose 启动完整模拟器；从源码构建前先初始化子模块，保持服务运行并保留设备状态。
+请按 https://github.com/pao-1024/pao/blob/main/docker/README.md 的本地运行说明，用预构建 Docker 镜像启动完整模拟器。
+保持服务运行并保留设备状态；已有容器和数据卷时优先复用，不覆盖或重置设备身份。
 确认模拟器页面、后端连接和固件日志正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
 ```
 
