@@ -1,5 +1,5 @@
 export default {
-  mainEntrypoint: "index.tsx",
+  mainEntrypoint: "hardware-pcb.tsx",
   platformConfig: {
     partsEngineDisabled: true,
   },

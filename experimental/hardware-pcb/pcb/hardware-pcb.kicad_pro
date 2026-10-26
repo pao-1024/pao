@@ -1,0 +1,13 @@
+{
+  "head": {
+    "version": 1,
+    "generator": "tsci"
+  },
+  "project": {
+    "name": "hardware-pcb",
+    "files": {
+      "schematic": "hardware-pcb.kicad_sch",
+      "board": "hardware-pcb.kicad_pcb"
+    }
+  }
+}

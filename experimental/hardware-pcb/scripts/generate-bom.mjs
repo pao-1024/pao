@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs"
 
 const circuit = JSON.parse(
-  readFileSync(new URL("../dist/index/circuit.json", import.meta.url)),
+  readFileSync(new URL("../dist/hardware-pcb/circuit.json", import.meta.url)),
 )
 const components = circuit.filter((item) => item.type === "source_component")
 const pcbComponents = new Map(

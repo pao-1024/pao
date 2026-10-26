@@ -1,10 +1,10 @@
-# PAO 一体化 PCB
+# PAO 实验性一体化 PCB
 
 本目录使用 tscircuit 描述 120 × 90 mm、四层的 PAO 主板。电池充电与保护、5 V 升压、3.3 V 降压、ESP32-S3、SPI Flash、双路电机驱动、I²S 麦克风与功放、OLED 驱动及 USB-C 都在主板上。测距保留 **HC-SR04-33 超声波模组**，通过四针插座连接。四角预留 3.2 mm 安装孔，内层 1 为地平面。
 
 ![PCB 走线预览](pcb-preview.png)
 
-预览图隐藏了内层地铜，以便查看各层走线；[KiCad PCB](pcb/index.kicad_pcb) 保留完整铜层。
+预览图隐藏了内层地铜，以便查看各层走线；[KiCad PCB](pcb/hardware-pcb.kicad_pcb) 保留完整铜层。
 
 设计基于 `hardware/` 中的功能和 `firmware/boards/pao/config.h` 的 GPIO 分配。`hardware/` 里的电磁发射器和继电器未纳入本板；GPIO18 留空，没有发射器接口或驱动电路。
 
@@ -29,16 +29,16 @@ J_US 使用 Samtec `SSW-104-01-G-S` 2.54 mm 四针母座，Trig 接 GPIO8、Echo
 
 ## 构建与验证
 
-需要 Node.js 24+、pnpm 10.32.1、Bun 和 Go Task。进入 `hardware_test/` 后运行：
+需要 Node.js 24+、pnpm 10.32.1、Bun 和 Go Task。进入 `experimental/hardware-pcb/` 后运行：
 
 ```sh
 task setup
 task check
 ```
 
-`task check` 检查格式、代码、网络表、摆放、布线、铜层短路和走线风格；`task build` 单独生成工程，`task bom` 更新 `BOM.csv`，`task dev` 启动预览。在仓库根目录调用时加 `hardware_test:` 前缀，例如 `task hardware_test:check`。
+`task check` 检查格式、代码、网络表、摆放、布线、铜层短路和走线风格；`task build` 单独生成工程，`task bom` 更新 `BOM.csv`，`task dev` 启动预览。在仓库根目录调用时加 `hardware-pcb:` 前缀，例如 `task hardware-pcb:check`。
 
-`pcb/` 保存可直接用 KiCad 打开的 PCB 与七页原理图；`task build` 的新产物位于 `dist/index/`，更新已提交的 KiCad 工程时需同步对应文件。原理图、电路源码、KiCad 工程及检查结果用于设计审阅；投入生产前需要完成实物尺寸确认、PCB DRC、USB 差分阻抗与走线长度检查、射频匹配、电源满载与堵转测试，以及 OLED 装配试验。本设计未经过实物验证。USB 静电保护器的 SOT-23-6 三维模型尚未包含在工程中，不影响二维 PCB 和原理图。
+`pcb/` 保存可直接用 KiCad 打开的 PCB 与七页原理图；`task build` 的新产物位于 `dist/hardware-pcb/`，更新已提交的 KiCad 工程时需同步对应文件。原理图、电路源码、KiCad 工程及检查结果用于设计审阅；投入生产前需要完成实物尺寸确认、PCB DRC、USB 差分阻抗与走线长度检查、射频匹配、电源满载与堵转测试，以及 OLED 装配试验。本设计未经过实物验证。USB 静电保护器的 SOT-23-6 三维模型尚未包含在工程中，不影响二维 PCB 和原理图。
 
 原理图自动排版检查仍会提示少量标签碰撞、电容分组及较长的接地标注路径，需要在 KiCad 中人工整理后再用于生产文档。
 

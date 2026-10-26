@@ -15,7 +15,7 @@ tasks:
   build:
     desc: 生成 PCB、原理图及 KiCad 工程
     cmds:
-      - pnpm exec tsci build --pcb-svgs --schematic-svgs --kicad-project --autorouter-timeout 120s index.tsx
+      - pnpm exec tsci build --pcb-svgs --schematic-svgs --kicad-project --autorouter-timeout 120s hardware-pcb.tsx
 
   check:
     desc: 检查代码、电路、元件摆放及 PCB 布线
@@ -23,12 +23,12 @@ tasks:
       - pnpm exec prettier . --check
       - pnpm exec eslint . --max-warnings 0
       - pnpm exec tsc --noEmit
-      - pnpm exec tsci check netlist index.tsx
-      - pnpm exec tsci check schematic-placement index.tsx
-      - pnpm exec tsci check placement index.tsx
+      - pnpm exec tsci check netlist hardware-pcb.tsx
+      - pnpm exec tsci check schematic-placement hardware-pcb.tsx
+      - pnpm exec tsci check placement hardware-pcb.tsx
       - task: build
-      - pnpm exec tsci check shorts dist/index/circuit.json
-      - pnpm exec tsci check pcb-style dist/index/circuit.json
+      - pnpm exec tsci check shorts dist/hardware-pcb/circuit.json
+      - pnpm exec tsci check pcb-style dist/hardware-pcb/circuit.json
 
   test:
     desc: 完整验证 PCB 工程
@@ -44,4 +44,4 @@ tasks:
   dev:
     desc: 启动电路与 PCB 预览
     cmds:
-      - pnpm exec tsci dev index.tsx
+      - pnpm exec tsci dev hardware-pcb.tsx
