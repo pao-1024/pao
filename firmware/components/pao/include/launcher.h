@@ -25,9 +25,6 @@ public:
     // 不能在 ISR 中调用。
     void fire();
 
-    // 断开继电器，可重复调用；析构时同样执行。
-    void safeOff();
-
 private:
     gpio_num_t fire_gpio_;
     mutable std::mutex mutex_;
