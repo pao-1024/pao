@@ -38,8 +38,9 @@ namespace {
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
 constexpr char kMotionOutputKey[] = "motion_output";
-constexpr uint32_t kMotionConfigVersion = 3;
+constexpr uint32_t kMotionConfigVersion = 4;
 
+// 保持旧版 NVS 的字段布局，以恢复仍在使用的最大输出和左右轮比例。
 struct StoredMotionConfigV1 {
     uint32_t version;
     uint32_t ramp_time_ms;
@@ -54,6 +55,16 @@ struct StoredMotionConfigV2 {
     float right_scale;
     float move_output;
     float rotate_output;
+};
+
+struct StoredMotionConfigV3 {
+    uint32_t version;
+    uint32_t ramp_time_ms;
+    float left_scale;
+    float right_scale;
+    float move_output;
+    float rotate_output;
+    float min_output;
 };
 
 struct StoredMotionConfig {
@@ -97,7 +108,7 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
-    // 续发指令只取消旧任务和定时器，不能先清零 PWM，否则加速会周期性中断。
+    // 续发指令只取消旧任务和定时器，保持当前电机输出。
     // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
     void ResetMotionLocked(const char* status) {
         chassis_deadline_ = 0;
@@ -183,11 +194,24 @@ private:
                 saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
                 ESP_LOGW(TAG, "Invalid motion config; using defaults");
             }
+        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV3)) {
+            StoredMotionConfigV3 saved = {};
+            ChassisConfig config;
+            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 3) {
+                config.left_scale = saved.left_scale;
+                config.right_scale = saved.right_scale;
+                config.move_output = saved.move_output;
+                config.rotate_output = saved.rotate_output;
+                if (!chassis_.setConfig(config)) {
+                    ESP_LOGW(TAG, "Invalid motion config; using defaults");
+                }
+            } else {
+                ESP_LOGW(TAG, "Invalid motion config; using defaults");
+            }
         } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV2)) {
             StoredMotionConfigV2 saved = {};
             ChassisConfig config;
             if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 2) {
-                config.ramp_time_ms = saved.ramp_time_ms;
                 config.left_scale = saved.left_scale;
                 config.right_scale = saved.right_scale;
                 config.move_output = saved.move_output;
@@ -202,7 +226,6 @@ private:
             StoredMotionConfigV1 saved = {};
             if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 1) {
                 ChassisConfig config;
-                config.ramp_time_ms = saved.ramp_time_ms;
                 config.left_scale = saved.left_scale;
                 config.right_scale = saved.right_scale;
                 LegacyMotionOutput output;
@@ -231,10 +254,8 @@ private:
         }
         std::lock_guard<std::mutex> lock(motion_config_mutex_);
         const auto current = chassis_.config();
-        if (current.ramp_time_ms == config.ramp_time_ms &&
-            current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
-            current.move_output == config.move_output && current.rotate_output == config.rotate_output &&
-            current.min_output == config.min_output) {
+        if (current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
+            current.move_output == config.move_output && current.rotate_output == config.rotate_output) {
             return ESP_OK;
         }
         nvs_handle_t handle;
@@ -335,7 +356,7 @@ private:
         // MCP Property 目前没有 enum schema，回调严格校验六种 action 值。
         mcp.AddTool("self.chassis.control",
             "控制两轮底盘。action 必填，只能是 forward（前进）、backward（后退）、"
-            "turn_left（逆时针左转）、turn_right（顺时针右转）、stop（按渐变时间减速）、"
+            "turn_left（逆时针左转）、turn_right（顺时针右转）、stop（立即清零）、"
             "emergency_stop（立即清零输出）之一。"
             "四个方向动作使用设备保存的对应最大输出；duration_ms 可选，100..15000 毫秒，"
             "默认 1000，到时立即停；两个停止动作忽略 duration_ms。"
@@ -530,7 +551,7 @@ private:
     }
 
     std::string ControlCommand(const std::string& path, const char* query) {
-        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output;
+        int duration_ms, distance_cm, move_output, rotate_output;
         if (path == "/api/chassis") {
             char name[20];
             MotionAction action;
@@ -548,21 +569,14 @@ private:
             }
         } else if (path == "/api/motion-config") {
             ChassisConfig config = chassis_.config();
-            if (!QueryInt(query, "ramp_time_ms", -1, 0, 3000, ramp_time_ms) || ramp_time_ms < 0 ||
-                !QueryFloat(query, "left_scale", config.left_scale) ||
+            if (!QueryFloat(query, "left_scale", config.left_scale) ||
                 !QueryFloat(query, "right_scale", config.right_scale) ||
                 !QueryInt(query, "move_output", std::lround(config.move_output * 100), 20, 100, move_output) ||
-                !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output) ||
-                !QueryInt(query, "min_output", std::lround(config.min_output * 100), 0, 99, min_output)) {
-                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100，min_output=0..99";
+                !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output)) {
+                return "参数需为 left_scale/right_scale=0..1，move_output/rotate_output=20..100";
             }
-            if (min_output >= move_output || min_output >= rotate_output) {
-                return "最小有效输出须低于前进和旋转最大输出";
-            }
-            config.ramp_time_ms = ramp_time_ms;
             config.move_output = move_output / 100.0f;
             config.rotate_output = rotate_output / 100.0f;
-            config.min_output = min_output / 100.0f;
             const auto saved = SaveMotionConfig(config);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
@@ -586,12 +600,10 @@ private:
         std::lock_guard<std::mutex> lock(motion_config_mutex_);
         const auto config = chassis_.config();
         auto* result = cJSON_CreateObject();
-        cJSON_AddNumberToObject(result, "ramp_time_ms", config.ramp_time_ms);
         cJSON_AddNumberToObject(result, "left_scale", config.left_scale);
         cJSON_AddNumberToObject(result, "right_scale", config.right_scale);
         cJSON_AddNumberToObject(result, "move_output", std::lround(config.move_output * 100));
         cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
-        cJSON_AddNumberToObject(result, "min_output", std::lround(config.min_output * 100));
         return result;
     }
 
