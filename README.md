@@ -13,7 +13,7 @@
 <p>
   <a href="docs/making-of.md#演示视频"><img src="https://img.shields.io/badge/%E5%AE%9E%E8%BD%A6%E6%BC%94%E7%A4%BA-2EA44F?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="实车演示" height="36"></a>
   <a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b"><img src="https://img.shields.io/badge/%E6%A8%A1%E6%8B%9F%E5%99%A8%E6%BC%94%E7%A4%BA-B77B32?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="模拟器演示" height="36"></a>
-  <a href="#让-ai-启动模拟器"><img src="https://img.shields.io/badge/AI%20%E5%90%AF%E5%8A%A8%E6%A8%A1%E6%8B%9F%E5%99%A8-2F81F7?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="AI 启动模拟器" height="36"></a>
+  <a href="#快速开始-tldr"><img src="https://img.shields.io/badge/AI%20%E5%90%AF%E5%8A%A8%E6%A8%A1%E6%8B%9F%E5%99%A8-2F81F7?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="AI 启动模拟器" height="36"></a>
 </p>
 
 <p>
@@ -29,6 +29,16 @@
 </div>
 
 ---
+
+## 快速开始 TLDR
+
+复制下面的提示词给能操作终端的 AI：
+
+```text
+请克隆或复用 https://github.com/pao-1024/pao，按 AGENTS.md 和 simulator/README.md 准备依赖。
+在仓库根目录运行 task simulator:prepare，再运行 task simulator:run，保持服务运行并保留设备状态。
+确认固件、模拟器和遥控页正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
+```
 
 > ### PAO = PAO Aims Ordnance
 >
@@ -144,25 +154,6 @@ GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说�
 [观看模拟器使用演示](https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b)：在浏览器里通过语音控制正式固件，并查看 OLED、3D 小车、I2C、PWM、I2S 和日志。
 
 启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)。
-
-### 让 AI 启动模拟器
-
-把下面的提示词复制给能够操作本机终端的 AI 编程工具，由 AI 准备环境、构建并启动模拟器。
-首次准备需要联网下载依赖；语音对话还需要完成设备激活，并在浏览器中允许麦克风访问。
-
-```text
-请在本机实际运行 PAO 的完整模拟器，包括正式固件、esp32sim 后端和 React 网页。
-仓库：https://github.com/pao-1024/pao
-已有本仓库检出时直接复用，否则先克隆。阅读 AGENTS.md、README.md 和 simulator/README.md 后执行：
-
-1. 检查并准备 Git、Python 3.10+、Task v3、Node.js 24+、pnpm 10.32.1、稳定版 Rust，以及本系统所需的 C/C++ 构建工具和 ESP-IDF 系统依赖。
-2. 在仓库根目录执行 task simulator:prepare，准备本地 ESP-IDF、构建正式固件、模拟器和网页。优先使用这个入口，不要求我预先手动配置 ESP-IDF。
-3. 准备成功后执行 task simulator:run，保持服务运行，把启动日志保存到仓库 tmp/ 下。已有本项目实例时先检查能否复用；保留已有设备身份和 Flash 状态。
-4. 检查 http://127.0.0.1:8080/ 的模拟器页面和 http://127.0.0.1:8081/ 的固件遥控页可访问，并核对固件启动日志和页面的实时数据连接，不能只把静态网页打开就算完成。
-5. 给出访问地址、日志位置和停止服务的方法。提示我在页面点击“启用麦克风和扬声器”、允许麦克风权限，并按固件日志中的提示完成首次设备激活，之后用“小炮小炮”唤醒。
-
-请实际执行并处理依赖、构建和启动错误，不要只返回操作步骤。需要我完成的授权或激活操作请明确指出；仍无法运行时，给出具体报错和阻塞原因，不要声称已经启动成功。
-```
 
 ## 开发
 
