@@ -1,0 +1,4 @@
+pcb/*.kicad_pcb linguist-generated
+pcb/*.kicad_sch linguist-generated
+pcb/3dmodels/** linguist-generated
+pcb-preview.svg linguist-generated
