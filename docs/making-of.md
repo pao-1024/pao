@@ -7,27 +7,27 @@ PAO 从一组独立模块开始：两个减速电机、1S 电池与保护板、E
 
 本文记录参考机的手工制作路线。模块接线、引脚和供电约束以
 [硬件接线说明](../hardware/README.md)为准，固件行为见[固件说明](../firmware/README.md)。
-全部照片和视频保存在 [assets release](https://github.com/pao-1024/pao/releases/tag/assets)。
+制作过程照片保存在 [assets release](https://github.com/pao-1024/pao/releases/tag/assets)。
 
 ## 从零件到车架
 
 先把电机、轮子、电源、控制和发射模块摊开，按底盘、供电、控制、发射四组整理接口和数量。
-底盘最初用纸板打样轮距、轮径和安装孔，确认两个减速电机、轮组与层板能够对齐后，再切亚克力车架。
+底盘用亚克力板打样轮距、轮径和安装孔，确认两个减速电机、轮组与层板能够对齐。
 
 | 零件摊开 | 模块分组 |
 | --- | --- |
 | [![零件和模块摊开][photo-01]][asset-release] | [![按功能整理模块][photo-11]][asset-release] |
 
-| 纸板结构打样 | 电机和轮组 |
+| 亚克力板结构打样 | 电机和轮组 |
 | --- | --- |
-| [![纸板底盘打样][photo-05]][asset-release] | [![两侧减速电机与轮组][photo-06]][asset-release] |
+| [![亚克力底盘打样][photo-05]][asset-release] | [![两侧减速电机与轮组][photo-06]][asset-release] |
 
 底盘采用上下分层。电机和轮组先固定在底层，再把电源、主控和驱动往上叠，利用层间空间走线，
 同时把较重的电池放低，减少整车重心对转向的影响。
 
-| 底层传动结构 | 顶层装配检查 |
-| --- | --- |
-| [![底层电机和轮组][photo-02]][asset-release] | [![从上方检查层板和设备位置][photo-08]][asset-release] |
+| 顶层装配检查 |
+| --- |
+| [![从上方检查层板和设备位置][photo-08]][asset-release] |
 
 第一轮测试只关心车轮能否稳定驱动、左右方向是否一致，以及起步和停车时车架是否扭动。
 桌面空载测试完成后，再放到地毯上观察负载、偏航和振动。
@@ -46,12 +46,12 @@ PAO 从一组独立模块开始：两个减速电机、1S 电池与保护板、E
 | --- | --- |
 | [![电源与电子模块平铺][photo-16]][asset-release] | [![电池、升压和电机驱动接线][photo-15]][asset-release] |
 
-电机驱动先单独通电测试，再接入车体。屏幕上查看板卡图、接口和线路，能避免按实物排针顺序
-反推信号；绿色转接板把相邻模块的排针和端子集中到一起，减少车体内部的飞线。
+电机驱动先单独通电测试，再接入车体。绿色转接板把相邻模块的排针和端子集中到一起，
+减少车体内部的飞线。
 
-| 电机驱动台架测试 | 板卡和线路图 |
-| --- | --- |
-| [![MX1508 和电源台架测试][photo-04]][asset-release] | [![对照屏幕上的板卡图检查接线][photo-07]][asset-release] |
+| 电机驱动台架测试 |
+| --- |
+| [![MX1508 和电源台架测试][photo-04]][asset-release] |
 
 | 转接板与端子 | 控制层接线 |
 | --- | --- |
@@ -100,18 +100,23 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 
 | 视频 | 内容 | 时长 |
 | --- | --- | --- |
-| [驾驶演示][video-02] | 完整车体在室内地面行驶和转向 | 52 秒 |
-| [手机控制界面][video-01] | 展示手机上的底盘与发射控制界面 | 27 秒 |
-| [窄道行驶][video-03] | 在狭窄通道内向前行驶 | 12 秒 |
+| [语音控制][video-02] | 通过语音控制小车行驶和转向 | 52 秒 |
+| [遥控控制][video-01] | 通过手机遥控页控制底盘和发射 | 27 秒 |
+| [语音控制][video-03] | 通过语音控制小车在室内行驶 | 12 秒 |
 | [发射测试][video-04] | 在桌面场景触发电磁发射器 | 11 秒 |
-
-以上视频通过 [GitHub 附件评论](https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640)提供，点击后可直接播放。
 
 ## 模拟器演示
 
 [模拟器使用演示][video-05]（2 分 11 秒，已裁去开头 1 秒）展示了在浏览器中通过语音控制正式固件，并查看 OLED、3D 小车、I2C、PWM、I2S 和日志。
 
 视频中的回声来自录制时的音频回采，不代表模拟器中的语音效果。
+
+## 彩蛋：502 粘回去
+
+联调时整车从桌边掉到地上，亚克力车架裂开。没有备用板，最后用 502 把断口粘回去，
+重新固定电机和层板，继续完成后面的演示。
+
+[![摔落后检查车架][photo-02]][asset-release]
 
 ## 继续查看
 
@@ -121,12 +126,11 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 
 [asset-release]: https://github.com/pao-1024/pao/releases/tag/assets
 [photo-01]: https://github.com/pao-1024/pao/releases/download/assets/photo-01-parts-overview.jpg
-[photo-02]: https://github.com/pao-1024/pao/releases/download/assets/photo-02-drive-train-base.jpg
+[photo-02]: https://github.com/pao-1024/pao/releases/download/assets/photo-02-dropped-chassis.jpg
 [photo-03]: https://github.com/pao-1024/pao/releases/download/assets/photo-03-motion-check.jpg
 [photo-04]: https://github.com/pao-1024/pao/releases/download/assets/photo-04-motor-driver-bench.jpg
-[photo-05]: https://github.com/pao-1024/pao/releases/download/assets/photo-05-cardboard-chassis-patterns.jpg
+[photo-05]: https://github.com/pao-1024/pao/releases/download/assets/photo-05-acrylic-chassis-patterns.jpg
 [photo-06]: https://github.com/pao-1024/pao/releases/download/assets/photo-06-motor-wheel-assemblies.jpg
-[photo-07]: https://github.com/pao-1024/pao/releases/download/assets/photo-07-pcb-layout.jpg
 [photo-08]: https://github.com/pao-1024/pao/releases/download/assets/photo-08-chassis-top-view.jpg
 [photo-09]: https://github.com/pao-1024/pao/releases/download/assets/photo-09-electronics-integration.jpg
 [photo-10]: https://github.com/pao-1024/pao/releases/download/assets/photo-10-custom-control-board.jpg
@@ -141,8 +145,8 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 [photo-19]: https://github.com/pao-1024/pao/releases/download/assets/photo-19-launcher-relay.jpg
 [photo-20]: https://github.com/pao-1024/pao/releases/download/assets/photo-20-acrylic-chassis.jpg
 [photo-21]: https://github.com/pao-1024/pao/releases/download/assets/photo-21-final-assembly.jpg
-[video-01]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
-[video-02]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
-[video-03]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
-[video-04]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
-[video-05]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421509680
+[video-01]: https://github.com/user-attachments/assets/86558584-a297-4060-9ab0-d9342689d7a4
+[video-02]: https://github.com/user-attachments/assets/00f3ba4a-ebc6-4572-abdd-9d6d226bc902
+[video-03]: https://github.com/user-attachments/assets/1410e80f-5f5c-41c7-aefa-fa4bdb594a81
+[video-04]: https://github.com/user-attachments/assets/52e24651-2d71-49b4-80f9-46e723018991
+[video-05]: https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b
