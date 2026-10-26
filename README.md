@@ -24,6 +24,14 @@
 
 不需要摇杆，不需要 App，不需要记指令表。**说出口，就打出去。**
 
+## 实车演示
+
+[![PAO 实车演示](https://github.com/pao-1024/pao/releases/download/assets/photo-12-first-rollout.jpg)](https://github.com/pao-1024/pao/releases/download/assets/video-02-driving-demo.mp4)
+
+[观看 52 秒驾驶演示](https://github.com/pao-1024/pao/releases/download/assets/video-02-driving-demo.mp4)，另有[手机控制界面](https://github.com/pao-1024/pao/releases/download/assets/video-01-phone-control.mp4)、[窄道行驶](https://github.com/pao-1024/pao/releases/download/assets/video-03-corridor-drive.mp4)和[发射测试](https://github.com/pao-1024/pao/releases/download/assets/video-04-launcher-test.mp4)。
+
+从零件、底盘和供电，到语音交互、屏幕与电磁发射器装配，完整记录见[PAO 制作过程](docs/making-of.md)。全部照片与视频保存在 [assets release](https://github.com/pao-1024/pao/releases/tag/assets)。
+
 ## 系统组成
 
 设备有两条并列控制入口：灵矽服务通过 MCP 调用设备工具，局域网遥控页通过 WebSocket 下发 JSON。两条路径最终汇合到 `PaoBoard`，再进入底盘、测距、发射和外设模块。
