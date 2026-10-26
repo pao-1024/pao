@@ -42,6 +42,8 @@ PAO 用 [tscircuit](https://tscircuit.com/) 把供电、主控、音频、屏幕
 在根目录使用 `task simulator:install`、`task simulator:run` 和 `task simulator:check`，
 完整配网与语音验证方法见[模拟器说明](simulator/README.md)。
 
+系统组成、模块接口、数据流、团队分工和验证边界见[架构设计](docs/architecture.md)。
+
 ## 项目 Skill
 
 先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本（含 npm/npx），然后在仓库目录执行：
