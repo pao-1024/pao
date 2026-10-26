@@ -48,7 +48,7 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 
 复制下面的提示词给能操作终端的 AI：
 
-```arduino
+```text
 请克隆或复用 https://github.com/pao-1024/pao，按 AGENTS.md 和 simulator/README.md 准备依赖。
 在仓库根目录运行 task simulator:prepare，再运行 task simulator:run，保持服务运行并保留设备状态。
 确认固件、模拟器和遥控页正常后，给我访问地址与停止方法；需要设备激活或麦克风授权时提示我。
