@@ -142,32 +142,6 @@ GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说�
 
 启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)。
 
-## 开发
-
-实验性 React 硬件工作台在 `experimental/platform/`，运行 `task platform:dev` 后访问
-<http://127.0.0.1:4173/>。支持真实模块自动接线、tscircuit 原理图、PCB 制造文件、
-业务固件生成与编译仿真，能力边界和使用方法见 [PAO Studio](experimental/platform/README.md)。
-
-固件代码和构建入口统一放在 `firmware/`。在根目录运行 `task firmware:build`，
-或进入 `firmware/` 后运行 `task build`。请先通过 EIM 安装并选择 ESP-IDF；
-构建时会自动准备小智源码。环境安装、上游版本选择、GPIO 和 IDE 配置见[固件说明](firmware/README.md)。
-
-模拟器代码、板型模型、网页和 Taskfile 独立放在 `simulator/`。
-在根目录使用 `task simulator:install`、`task simulator:run` 和 `task simulator:check`，
-完整配网与语音验证方法见[模拟器说明](simulator/README.md)。
-
-## 项目 Skill
-
-先安装 [Task v3](https://taskfile.dev/installation/)、Git 和 Node.js 22.20.0 或更新版本（含 npm/npx），然后在仓库目录执行：
-
-```sh
-task skills:install
-```
-
-该命令会按照 `skills-lock.json` 一次性安装全部项目 skill，目前包含用于电路和 PCB 设计的 `tscircuit`。清单通过上游 commit 固定版本，完整文件安装到 `.agents/skills/`，该目录不纳入 Git。
-
-新增或更新 skill 后，提交更新的 `skills-lock.json` 即可。任务固定使用 `skills@1.7.4` 的 `experimental_install` 命令恢复清单。
-
 ## 没有硬件，也能开始设计与验证
 
 PAO 是一款语音交互小车，也是 PAO Studio 硬件开发平台的首个验证产品。我们用 PAO 验证从需求、模块组合、接线与电路检查，到固件编译、仿真和实物运行的开发流程，让同一套工具能够用于更多智能硬件项目。
