@@ -40,8 +40,9 @@ GPIO41/42 用于屏幕后占用外部 JTAG 引脚，USB GPIO19/20 保留。
 HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9。
 板级创建 `HcSr04` 实例，初始化后 Trig 保持低电平，调用 `readDistanceCm()` 才触发测量。
 仅使用支持 3.3V 供电及信号电平的版本；驱动接口及错误处理见[固件说明](../../README.md#超声波测距)。
-测距通过 `self.ultrasonic.get_distance` 暴露给灵矽；`self.chassis.move_forward` 使用距离反馈前进。
-网页遥控仍使用按时长控制，不自动避障。
+测距通过 `self.ultrasonic.get_distance` 暴露给灵矽；`self.chassis.move_forward` 使用距离反馈前进，
+`self.chassis.move_to_distance` 前进到距障碍物的目标距离。
+测距任务在后台持续采样，前方距离不大于 10cm 时自动播放报警音；方向遥控本身不自动避障。
 
 屏幕复用小智 OLED 界面，显示设备状态、表情和对话。启动时探测屏幕；
 未连接或驱动初始化失败时记录日志、释放已申请的显示资源，并继续以无屏模式运行。
@@ -69,11 +70,17 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
   运动在独立任务中执行，工具返回“已开始”而非“已完成”。最多执行 15 秒，超时、测距失败或前方
   距离降至 10cm 时停止。其他底盘工具及网页遥控指令会取消该运动。
   例如“前进 20 厘米”调用 `{"distance_cm":20}`，随后可用下面的测距工具查询完成情况。
+- `self.chassis.move_to_distance`：`distance_cm` 为必填整数 `[10, 390]`，表示停车后与前方障碍物
+  保留的距离，使用设备保存的前进最大输出。起步前读取当前距离；已经达到或近于目标距离时不启动，
+  低于 10cm 的目标直接拒绝。持续测距直到当前距离不大于目标值后停车；测距失败、意外进入 10cm 内
+  或超过 15 秒时停止。只能向前，必须有同一静止、稳定反射物。
+  例如“前进到离障碍物 20 厘米”调用 `{"distance_cm":20}`，随后可用下面的测距工具查询当前距离与状态。
 - `self.ultrasonic.get_distance`：无参数，返回本次 `distance_cm`、`error` 及最近一次按距离运动的
   `requested_cm`、`moved_cm`、`motion_status`。测距失败时距离为 `null`，错误为 ESP-IDF 错误名称。
   状态为 `idle`（无运动）、`moving`（执行中）、`reached`（达到目标）、`obstacle`（空间不足）、
   `sensor_error`（测距失败）、`timeout`（达到 15 秒上限）或 `cancelled`（被其他指令中断）。
-  `moved_cm` 是距离变化估计值，可因目标变化而为负；只有 `reached` 表示按测距反馈达到目标。
+  `requested_cm` 对 `move_forward` 表示计划前进量，对 `move_to_distance` 表示目标障碍物间距；
+  `moved_cm` 是实际距离变化估计值，可因目标变化而为负。只有 `reached` 表示按测距反馈达到目标。
 
 例如“前进一秒”对应 `self.chassis.control` 参数
 `{"action":"forward","duration_ms":1000}`；“向右转圈”使用 `turn_right`，
@@ -109,6 +116,11 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 连接断开或请求超过 3 秒未响应时清除按键状态，自动重连，不重放之前的运动指令；
 板上时长限制继续生效。
 
+固件后台任务约每 100ms 采样一次前方距离；不大于 10cm 时立即播放约 750ms 的短促报警音，
+持续过近期间每 1.5 秒重播一次，距离恢复到 12cm 以上才解除报警。
+设备正在播放语音或提示音时不会把报警音排队，待播放空闲后的下一轮检测再重试，
+因此报警可能晚于障碍物进入 10cm 的时刻。
+
 前进／后退和旋转各有独立的最大输出滑块，范围均为 20%～100%，默认 80%；
 它们用于网页、WebSocket 和语音动作。
 两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
@@ -132,6 +144,8 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 - `/api/move_forward`，`query` 为 `distance_cm=`：与按厘米运动工具共用控制逻辑，默认 20cm；
   参数错误、起始测距失败或空间不足返回 `ok: false`，接受运动返回 `data: true`。
   方向动作和定距前进都使用设备保存的对应最大输出。
+- `/api/move_to_distance`，`query` 为 `distance_cm=`：与目标障碍物间距工具共用控制逻辑，默认 20cm；
+  参数错误、起始测距失败、已处于目标距离内或目标低于 10cm 时返回 `ok: false`。
 - `/api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
 - `/api/launcher/fire`：发射一次，无参数。
 - `/api/motion-config`，`query` 为空时读取配置，返回 `left_scale`、`right_scale`、`move_output`、`rotate_output`。
