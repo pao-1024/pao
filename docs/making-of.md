@@ -107,6 +107,12 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 
 以上视频通过 [GitHub 附件评论](https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640)提供，点击后可直接播放。
 
+## 模拟器演示
+
+[模拟器使用演示][video-05]（2 分 11 秒，已裁去开头 1 秒）展示了在浏览器中通过语音控制正式固件，并查看 OLED、3D 小车、I2C、PWM、I2S 和日志。
+
+视频中的回声来自录制时的音频回采，不代表模拟器中的语音效果。
+
 ## 继续查看
 
 - [硬件接线说明](../hardware/README.md)：模块、GPIO、供电域和发射器接线。
@@ -139,3 +145,4 @@ OLED 安装后用于显示设备状态、表情和访问地址。完成语音链
 [video-02]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
 [video-03]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
 [video-04]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421112640
+[video-05]: https://github.com/pao-1024/pao/issues/55#issuecomment-6421509680
