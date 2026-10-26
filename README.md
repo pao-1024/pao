@@ -13,7 +13,7 @@
 <p>
   <a href="docs/making-of.md#演示视频"><img src="https://img.shields.io/badge/%E5%AE%9E%E8%BD%A6%E6%BC%94%E7%A4%BA-2EA44F?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="实车演示" height="36"></a>
   <a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b"><img src="https://img.shields.io/badge/%E6%A8%A1%E6%8B%9F%E5%99%A8%E6%BC%94%E7%A4%BA-B77B32?style=for-the-badge&amp;logo=github&amp;logoColor=white" alt="模拟器演示" height="36"></a>
-  <a href="#快速开始-tldr"><img src="https://img.shields.io/badge/AI%20%E5%90%AF%E5%8A%A8%E6%A8%A1%E6%8B%9F%E5%99%A8-2F81F7?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="AI 启动模拟器" height="36"></a>
+  <a href="#quick-run"><img src="https://img.shields.io/badge/AI%20%E5%90%AF%E5%8A%A8%E6%A8%A1%E6%8B%9F%E5%99%A8-2F81F7?style=for-the-badge&amp;logo=gnubash&amp;logoColor=white" alt="AI 启动模拟器" height="36"></a>
 </p>
 
 <p>
@@ -30,7 +30,9 @@
 
 ---
 
-## 快速开始 TLDR
+<a name="quick-run"></a>
+
+快速运行
 
 复制下面的提示词给能操作终端的 AI：
 
