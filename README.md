@@ -26,11 +26,22 @@
 
 ## 系统组成
 
+设备有两条并列控制入口：灵矽服务通过 MCP 调用设备工具，局域网遥控页通过 WebSocket 下发 JSON。两条路径最终汇合到 `PaoBoard`，再进入底盘、测距、发射和外设模块。
+
 ```mermaid
 flowchart TD
-    Voice["用户语音"] --> Linxi["灵矽服务"]
-    Web["局域网遥控页"] -->|"WebSocket JSON"| Board
-    Linxi -->|"MCP 工具调用"| Board
+    subgraph McpPath["MCP 控制"]
+        direction LR
+        Voice["用户语音"] --> Linxi["灵矽服务"] --> Mcp["MCP 工具调用"]
+    end
+
+    subgraph WebSocketPath["WebSocket 控制"]
+        direction LR
+        Web["局域网遥控页"] --> WebSocket["WebSocket /ws"]
+    end
+
+    Mcp --> Board
+    WebSocket --> Board
 
     subgraph Firmware["ESP32-S3 PAO 固件"]
         Board["PaoBoard 适配层<br/>参数校验 · 运动状态 · NVS · HTTP"]
