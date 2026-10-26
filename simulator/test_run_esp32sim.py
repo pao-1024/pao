@@ -141,7 +141,7 @@ class IdentityTests(unittest.TestCase):
         (root / "tmp/base-revision.json").write_text('{"commit": "test-revision"}')
         (build / "flasher_args.json").write_text('{"flash_files": {}}')
 
-        def create_flash(build_dir, flash, device_uuid):
+        def create_flash(build_dir, flash, device_uuid, nvs_python):
             self.assertEqual(build_dir, build)
             self.assertEqual(str(device_uuid), identity_from_file()["uuid"])
             flash.touch()
@@ -164,6 +164,29 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(identity_from_file(), first_identity)
         self.assertEqual(create.call_count, 1)
         self.assertEqual(execute.call_count, 2)
+
+    def test_packaged_firmware_uses_explicit_paths_without_sdk_metadata(self):
+        root = Path(self.temp.name)
+        build = root / "firmware"
+        emulator = root / "tmp/esp32sim-build/release/pao-sim"
+        rom = root / "rom.elf"
+        for path in [build / "xiaozhi.elf", emulator, rom]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+        (build / "flasher_args.json").write_text('{"flash_files": {}}')
+        state = root / "volume"
+        python = Path("/usr/local/bin/python3")
+        with patch.object(runner, "ROOT", root), \
+                patch("sys.argv", ["run-esp32sim.py", "--rom", str(rom),
+                                   "--firmware-dir", str(build), "--state-dir", str(state),
+                                   "--nvs-python", str(python)]), \
+                patch.object(runner, "create_flash") as create, \
+                patch.object(runner.os, "execv") as execute:
+            runner.main()
+        identity = json.loads((state / "identity.json").read_text())
+        create.assert_called_once_with(build, state / "interactive.bin", identity["uuid"], python)
+        command = execute.call_args.args[1]
+        self.assertEqual(command[command.index("--flash-file") + 1], str(state / "interactive.bin"))
 
 
 if __name__ == "__main__":

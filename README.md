@@ -130,7 +130,7 @@ GPIO、板型、语音工具、局域网遥控、构建方式和实机接入说�
 
 [观看模拟器使用演示](https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b)：在浏览器里通过语音控制正式固件，并查看 OLED、3D 小车、I2C、PWM、I2S 和日志。
 
-启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)。
+启动、配网、语音验证、底盘验收和模拟器架构见[模拟器说明](simulator/README.md)，也可通过 [Docker Compose](docker/README.md) 部署完整模拟器与 HTTPS 入口。
 
 ## 没有硬件，也能开始设计与验证
 

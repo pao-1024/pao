@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, stepLauncher, wheels } from "./protocol.ts";
 import type { Bus, Launcher, Module, Wire, World } from "./protocol.ts";
 import { Car3D } from "./car3d.tsx";
+import { controlPageUrl, deviceBusy, websocketUrl } from "./endpoints.ts";
 import "./style.css";
 
 type Microphone = {
@@ -176,11 +177,12 @@ function App() {
       void stopMicrophone(); void speaker.current?.close(); speaker.current = null;
     }
     function connect() {
-      const connection = new WebSocket(`ws://${location.host}/ws`);
+      const connection = new WebSocket(websocketUrl(new URL("/ws", location.href)));
       connection.binaryType = "arraybuffer"; socket.current = connection;
       connection.onopen = () => {
         setConnected(true);
         if (microphone.current) setHint("正在收音，说“小炮小炮”");
+        else setHint("授权麦克风后说“小炮小炮”。建议使用耳机。");
       };
       connection.onmessage = event => {
         if (event.data instanceof ArrayBuffer) { binary(event.data); return; }
@@ -197,11 +199,17 @@ function App() {
           setHint(`麦克风数据未送达设备：${message.message}`);
         }
       };
-      connection.onclose = () => {
+      connection.onclose = async () => {
         if (disposed) return;
         // The microphone and speaker stay open; audio resumes on the next connection.
         setConnected(false);
-        retry = setTimeout(connect, 1000);
+        const busy = await deviceBusy();
+        if (disposed) return;
+        if (busy) {
+          stopAudio();
+          setHint("设备正在被其他浏览器使用，空闲后自动重试。");
+        }
+        retry = setTimeout(connect, busy ? 5000 : 1000);
       };
     }
     connect();
@@ -322,8 +330,7 @@ function App() {
           {recording ? "关闭麦克风" : "启用麦克风和扬声器"}
         </button>
         <button disabled={!connected} onClick={pressBoot}>BOOT</button>
-        {/* 固件内置遥控页，由 run-esp32sim.py 的 --hostfwd 转发到本机 8081。 */}
-        <a className="button" href="http://127.0.0.1:8081/" target="_blank" rel="noreferrer">遥控</a>
+        <a className="button" href={controlPageUrl} target="_blank" rel="noreferrer">遥控</a>
       </div>
     </header>
     <p className="hint" role="status">{hint}</p>

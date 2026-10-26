@@ -1,0 +1,9 @@
+{
+    admin off
+    order single_device before reverse_proxy
+}
+
+{$PAO_SIM_DOMAIN::80} {
+    single_device
+    reverse_proxy simulator:8000
+}

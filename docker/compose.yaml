@@ -1,0 +1,48 @@
+name: pao-simulator
+
+services:
+  simulator:
+    image: ${PAO_SIM_IMAGE:-pao-simulator:local}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    expose:
+      - '8000'
+    volumes:
+      - simulator-data:/data
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  caddy:
+    image: ${PAO_CADDY_IMAGE:-pao-simulator-caddy:local}
+    build:
+      context: ..
+      dockerfile: docker/caddy.Dockerfile
+    ports:
+      - '${PAO_SIM_BIND:-127.0.0.1}:${PAO_SIM_HTTP_PORT:-8080}:80'
+      - '${PAO_SIM_BIND:-127.0.0.1}:${PAO_SIM_HTTPS_PORT:-8443}:443'
+      - '${PAO_SIM_BIND:-127.0.0.1}:${PAO_SIM_HTTPS_PORT:-8443}:443/udp'
+    environment:
+      PAO_SIM_DOMAIN: ${PAO_SIM_DOMAIN:-:80}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      simulator:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  simulator-data:
+  caddy-data:
+  caddy-config:
