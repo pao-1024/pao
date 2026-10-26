@@ -115,10 +115,12 @@ HC-SR04 的 VCC 接主控 3V3，GND 接系统地，Trig/Echo 分别接 GPIO8/9�
 两个值在调节结束后保存到 NVS，页面打开和设备重启后恢复。
 底盘内部按实际时间渐变输出，
 渐变时间范围 0～3 s，默认 1 s；0 表示直接达到目标。
+最小有效输出范围为 0%～99%，默认 0%，且必须低于前进和旋转的最大输出；
+非零时跳过低占空比区间再渐变，常规停止渐变回阈值后归零，立即停止直接清零。
 左右轮比例均在 0～1 之间，默认 1，仅降低相应侧输出；改变比例时也平滑过渡。
-这三个校准参数也可在网页运行时调整，每次调节结束后保存到 NVS，设备重启后恢复；
+这四个校准参数也可在网页运行时调整，每次调节结束后保存到 NVS，设备重启后恢复；
 页面打开时读取设备当前值，保存失败会提示重试。开环控制不能保证两轮实际转速相等，
-应在实车上调整比例；低占空比可能无法克服起步阻力。
+应在实车上调整比例；某轮最大输出被比例降至阈值以下时，仍可能无法克服起步阻力。
 
 WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` 为正整数，
 `query` 使用 URL 查询串格式。响应为 `{"id":1,"ok":true,"data":...}`；失败时 `ok` 为 `false`，
@@ -137,9 +139,9 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 - `/api/distance`：与测距工具共用结果格式，包含测距值、错误和最近一次按距离运动的状态。
 - `/api/launcher/fire`：发射一次，无参数。
 - `/api/motion-config`，`query` 为空时读取配置，返回 `ramp_time_ms`、`left_scale`、`right_scale`、
-  `move_output`、`rotate_output`。
-- `/api/motion-config`，`query` 为 `ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=` 时校验并保存配置；
-  `move_output` 和 `rotate_output` 可省略，此时保持设备当前值，
+  `move_output`、`rotate_output`、`min_output`。
+- `/api/motion-config`，`query` 为 `ramp_time_ms=&left_scale=&right_scale=&move_output=&rotate_output=&min_output=` 时校验并保存配置；
+  `move_output`、`rotate_output` 和 `min_output` 可省略，此时保持设备当前值，
   NVS 提交成功后生效，保存失败返回 `ok: false`。
 
 HTTP 提供 `GET /` 加载页面，`/ws` 用于升级 WebSocket 连接。

@@ -15,6 +15,7 @@ struct ChassisConfig {
     float right_scale = 1.0f;
     float move_output = 0.8f;
     float rotate_output = 0.8f;
+    float min_output = 0.0f;
 };
 
 class Chassis {
