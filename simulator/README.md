@@ -23,13 +23,13 @@
 ## 组成
 
 板型与 SSD1306 模型在 `pao-sim/src/`，React 网页与 AudioWorklet 在 `web/`。
-内核 fork 只维护通用 CPU、网络、Flash、I2S 支持和库入口，不包含 PAO 板型或页面。
+内核 fork 维护通用 CPU、网络、Flash、I2S 支持和库入口，PAO 板型与页面在本仓库维护。
 启动器复用内核 CLI 的初始化、固件加载、网络、重启及 Flash 保存逻辑，通过公开
 `BoardModel` 接口挂载本地板型；不依赖动态插件 ABI。
 
 `simulator/esp32sim/` 是 [pao-1024/esp32sim](https://github.com/pao-1024/esp32sim)
 的 Git submodule，跟踪组织维护的 `pao` 分支，由父仓库的 gitlink 固定具体 commit。
-内核改动经 PR 合入 `pao`，`main` 保持上游基线；本地 crate 直接依赖子模块源码。
+内核固定在子模块版本；构建入口将仓库 I²S 扩展应用到 `tmp/studio-sim/` 隔离副本，原检出保持不变。修改 Rust 模型后使用 `task simulator:install` 构建，测试目标使用该目录下的 Cargo manifest。
 `Cargo.lock` 固定 crate 依赖关系。
 构建产物为 `tmp/esp32sim-build/release/pao-sim`，React 网页构建到 `tmp/simulator-web/`。
 
@@ -38,6 +38,13 @@
 更新 gitlink；若子模块有本地改动，安装会停止而不覆盖。
 
 ## 启动
+
+也可使用 PAO Studio 的仿真页管理本地环境、构建、启停和日志：运行
+`task platform:dev`，在“仿真”页点击“准备环境 / 重新构建”。
+对应命令 `task simulator:prepare` 将 ESP-IDF 6.0.1 和工具链安装到本工作目录
+`tmp/esp-idf`、`tmp/idf-tools`，再构建固件与模拟器，不改变 EIM 的选择。
+这个入口仍需要本机安装 Git、Python、Task、pnpm、Rust 及 C/C++ 构建工具。
+首次下载、安装、编译需要联网；日志保留具体错误，失败后可以重新执行。
 
 需要 Git、Python 3.10+、Task、Node.js 24+、pnpm 10.32.1 和稳定版 Rust 工具链。
 ESP-IDF 使用主固件相同的 EIM 入口；先安装并选择 SDK，或激活已有 SDK 环境。
@@ -53,7 +60,8 @@ task simulator:run
 已有固件、模拟器和网页构建时，可直接运行 `python3 simulator/run-esp32sim.py` 重新启动。
 
 启动器从已激活 ESP-IDF 环境的 `ESP_ROM_ELF_DIR` 自动定位 `esp32s3_rev0_rom.elf`；
-未激活时，通过 `eim run` 读取当前选中环境的 ROM 目录。
+未激活时优先读取 `task simulator:prepare` 安装到 `tmp/idf-tools` 的 ROM，
+没有本地 ROM 时通过 `eim run` 读取当前选中环境的 ROM 目录。
 需要使用其他 ROM 时，可运行 `task simulator:run -- --rom '<ROM ELF 的绝对路径>'`。
 首次启动自动生成本地单播 MAC 和 UUID，保存到 `tmp/esp32sim-full-flow/identity.json`，
 后续每次启动复用同一身份，无需手动传入设备参数。
@@ -128,5 +136,8 @@ WebSocket 的音频输入和输出同样保序排队，页面长时间不读取�
 ## 仿真范围
 
 仿真覆盖主要功能，不模拟射频干扰、电气特性和声学环境；
-浮点初始估计值不保证与芯片逐位一致。独立的 Simulator CI 仅检查脚本、React 类型和音频封包，
-不编译或运行模拟器；主分支实机固件构建沿用仓库现有 CI。
+浮点初始估计值不保证与芯片逐位一致。Simulator CI 检查脚本、React 类型与音频封包，并构建模拟器、运行板型与 I²S 模型检查；ESP-IDF 应用闭环通过实际编译和运行验证，主分支实机固件构建沿用仓库现有 CI。
+
+## 平台当前接线的业务应用仿真
+
+实验性 React 工作台提供按当前接线和业务参数生成实时对讲、声音告警及诊断固件的入口，支持真实浏览器麦克风、独立/共享 I²S 时钟，见 [平台运行说明](../experimental/platform/README.md#esp32sim-真实运行时)。生成工程位于 `tmp/studio/<内容标识>/`；成功编译后也可运行 `python3 simulator/run-project.py tmp/studio/<内容标识>`。这些本地应用与上述 PAO 灵矽语音参考固件分别管理。

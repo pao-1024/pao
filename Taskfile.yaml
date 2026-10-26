@@ -1,6 +1,9 @@
 version: '3'
 
 includes:
+  platform:
+    taskfile: ./experimental/platform/Taskfile.yaml
+    dir: ./experimental/platform
   hardware:
     taskfile: ./hardware/Taskfile.yaml
     dir: ./hardware

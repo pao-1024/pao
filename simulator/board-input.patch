@@ -1,0 +1,24 @@
+diff --git a/esp-soc/src/board.rs b/esp-soc/src/board.rs
+--- a/esp-soc/src/board.rs
++++ b/esp-soc/src/board.rs
+@@ -26,3 +26,5 @@
+ pub trait BoardModel {
+     fn name(&self) -> &'static str;
++    /// Validated host stimulus for board devices, independent of guest serial input.
++    fn set_input(&mut self, _input: &crate::json::Json) -> Result<(), &'static str> { Err("board input unsupported") }
+     /// GPIO output level changes, in order.
+diff --git a/esp-soc/src/machine/web.rs b/esp-soc/src/machine/web.rs
+--- a/esp-soc/src/machine/web.rs
++++ b/esp-soc/src/machine/web.rs
+@@ -167,4 +167,11 @@
+             let t = field("t").unwrap_or_default();
+             match t.as_str() {
++                "board-input" => {
++                    match self.bus.board().set_input(&message) {
++                        Ok(()) => w.send_text("{\"t\":\"board-input-ack\"}"),
++                        Err(error) => w.send_text(&format!("{{\"t\":\"board-input-error\",\"message\":\"{}\"}}", json_escape(error))),
++                    }
++                }
++
+                 "btn" => { let pin: u8 = field("pin").and_then(|x| x.parse().ok()).unwrap_or(0); let v = field("v").unwrap_or_default() == "1";
+                            self.bus.gpio_set_input(pin, !v); *self.bus.irq_dirty() = true; }

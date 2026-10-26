@@ -6,6 +6,10 @@ env:
   PNPM_HOME: '{{.TASKFILE_DIR}}/../tmp/pnpm-home'
 
 tasks:
+  prepare:
+    desc: 在仓库 tmp 内安装 ESP-IDF 6.0.1、构建固件和模拟器（首次需要联网）
+    cmds:
+      - bash prepare-local.sh
   setup:
     desc: 按锁文件安装 React 网页依赖
     cmds:

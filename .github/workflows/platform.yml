@@ -1,0 +1,32 @@
+name: Platform
+
+on:
+  pull_request:
+    paths: ["experimental/platform/**", ".github/workflows/platform.yml", "Taskfile.yaml"]
+  push:
+    branches: [main]
+    paths: ["experimental/platform/**", ".github/workflows/platform.yml", "Taskfile.yaml"]
+
+permissions:
+  contents: read
+
+jobs:
+  workbench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: experimental/platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: experimental/platform/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: experimental/platform/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build
