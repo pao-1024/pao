@@ -25,6 +25,10 @@ export const nets = {
     sda: net("OLED_SDA"),
     scl: net("OLED_SCL"),
   },
+  ultrasonic: {
+    trig: net("ULTRASONIC_TRIG"),
+    echo: net("ULTRASONIC_ECHO"),
+  },
   motorDrive: {
     in1: net("MOTOR_IN1"),
     in2: net("MOTOR_IN2"),

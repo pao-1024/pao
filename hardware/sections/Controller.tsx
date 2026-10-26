@@ -23,6 +23,8 @@ export function Controller() {
           GPIO16: nets.audioOutput.lrc.selector,
           GPIO41: nets.display.sda.selector,
           GPIO42: nets.display.scl.selector,
+          GPIO8: nets.ultrasonic.trig.selector,
+          GPIO9: nets.ultrasonic.echo.selector,
           GPIO11: nets.motorDrive.in1.selector,
           GPIO12: nets.motorDrive.in2.selector,
           GPIO13: nets.motorDrive.in3.selector,

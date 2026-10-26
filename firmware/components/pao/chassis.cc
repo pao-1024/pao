@@ -1,6 +1,5 @@
 #include "chassis.h"
 
-#include <algorithm>
 #include <cmath>
 
 #include "esp_err.h"
@@ -10,28 +9,79 @@ Chassis::Chassis(Motor& left, Motor& right) : left_(left), right_(right) {
     if (&left_ == &right_) {
         ESP_ERROR_CHECK(ESP_ERR_INVALID_ARG);
     }
-    drive(0, 0);
+    left_.setSpeed(0);
+    right_.setSpeed(0);
 }
 
 Chassis::~Chassis() {
-    drive(0, 0);
+    stop();
 }
 
-void Chassis::drive(float forward, float turn) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!std::isfinite(forward) || !std::isfinite(turn)) {
-        forward = 0;
-        turn = 0;
-    }
-    forward = std::clamp(forward, -1.0f, 1.0f);
-    turn = std::clamp(turn, -1.0f, 1.0f);
+bool Chassis::validConfig(const ChassisConfig& config) {
+    return std::isfinite(config.left_scale) &&
+           std::isfinite(config.right_scale) && config.left_scale >= 0 &&
+           config.left_scale <= 1 && config.right_scale >= 0 && config.right_scale <= 1 &&
+           std::isfinite(config.move_output) && config.move_output >= 0.2f && config.move_output <= 1 &&
+           std::isfinite(config.rotate_output) && config.rotate_output >= 0.2f && config.rotate_output <= 1;
+}
 
-    // 差速量随前进速度减小：原地（forward=0）时为 turn，全速时减半，
-    // 使边走边转时内侧轮仍同向转动，而不是停住或反转。
-    const float steer = turn * (1.0f - 0.5f * std::fabs(forward));
-    const float left_speed = forward - steer;
-    const float right_speed = forward + steer;
-    const float scale = std::max({1.0f, std::fabs(left_speed), std::fabs(right_speed)});
-    left_.setSpeed(left_speed / scale);
-    right_.setSpeed(right_speed / scale);
+bool Chassis::setConfig(const ChassisConfig& config) {
+    if (!validConfig(config)) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    config_ = config;
+    writeMotorsLocked();
+    return true;
+}
+
+ChassisConfig Chassis::config() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return config_;
+}
+
+void Chassis::setMotion(Motion motion, int direction) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    motion_ = motion;
+    direction_ = direction;
+    writeMotorsLocked();
+}
+
+void Chassis::forward() {
+    setMotion(Motion::Move, 1);
+}
+
+void Chassis::backward() {
+    setMotion(Motion::Move, -1);
+}
+
+void Chassis::turnLeft() {
+    setMotion(Motion::Rotate, 1);
+}
+
+void Chassis::turnRight() {
+    setMotion(Motion::Rotate, -1);
+}
+
+void Chassis::stop() {
+    setMotion(Motion::Stopped, 0);
+}
+
+void Chassis::emergencyStop() {
+    stop();
+}
+
+void Chassis::writeMotorsLocked() {
+    const float motion_max = motion_ == Motion::Rotate ? config_.rotate_output : config_.move_output;
+    const float speed = direction_ * motion_max;
+    const float left = speed * config_.left_scale * (motion_ == Motion::Rotate ? -1.0f : 1.0f);
+    const float right = speed * config_.right_scale;
+    if (left != last_left_output_) {
+        left_.setSpeed(left);
+        last_left_output_ = left;
+    }
+    if (right != last_right_output_) {
+        right_.setSpeed(right);
+        last_right_output_ = right;
+    }
 }

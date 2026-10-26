@@ -1,0 +1,324 @@
+(kicad_sch
+  (version 20250114)
+  (generator circuit-json-to-kicad)
+  (generator_version 0.0.1)
+  (uuid 40ab61e3-247c-40bf-b7c3-bcbc9f56eb80)
+  (paper
+    A4
+  )
+  (lib_symbols)
+  (sheet_instances
+    (path "/"
+      (page "1")
+    )
+  )
+  (embedded_fonts no)
+  (sheet
+    (at 25.4 25.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid 5cce58bd-a516-4c95-bdf3-0aead80d3f1c)
+    (property "Sheetname" "主控与存储"
+      (id 0)
+      (at 25.4 24.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "controller.kicad_sch"
+      (id 1)
+      (at 25.4 51.1 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "2")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 85.4 25.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid 9f1f5924-ba60-4319-9962-c34aa291b09f)
+    (property "Sheetname" "电池与电源"
+      (id 0)
+      (at 85.4 24.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "power.kicad_sch"
+      (id 1)
+      (at 85.4 51.1 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "3")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 145.4 25.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid c956e6c9-d136-4c5e-b4e2-a0dafcb4e551)
+    (property "Sheetname" "双路电机"
+      (id 0)
+      (at 145.4 24.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "motors.kicad_sch"
+      (id 1)
+      (at 145.4 51.1 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "4")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 25.4 80.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid aa6e87be-822f-436e-9f09-735ec8ef7ae2)
+    (property "Sheetname" "音频输入与输出"
+      (id 0)
+      (at 25.4 79.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "audio.kicad_sch"
+      (id 1)
+      (at 25.4 106.10000000000001 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "5")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 85.4 80.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid 88f3d7bf-fc4d-43cf-9998-95b6de958049)
+    (property "Sheetname" "OLED 显示"
+      (id 0)
+      (at 85.4 79.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "display.kicad_sch"
+      (id 1)
+      (at 85.4 106.10000000000001 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "6")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 145.4 80.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid 1984b5f1-3a4a-45dc-a6d9-d5a382fb67f0)
+    (property "Sheetname" "USB、状态灯与天线"
+      (id 0)
+      (at 145.4 79.7 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "usbrf.kicad_sch"
+      (id 1)
+      (at 145.4 106.10000000000001 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "7")
+        )
+      )
+    )
+  )
+  (sheet
+    (at 25.4 135.4)
+    (size 40 25)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (fields_autoplaced yes)
+    (stroke
+      (width 0.1524)
+      (type solid)
+    )
+    (fill
+      (color 0 0 0 0)
+    )
+    (uuid 43682019-6287-4f97-bf11-808e6709da57)
+    (property "Sheetname" "超声波模组接口"
+      (id 0)
+      (at 25.4 134.70000000000002 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left bottom)
+      )
+    )
+    (property "Sheetfile" "ultrasonic.kicad_sch"
+      (id 1)
+      (at 25.4 161.1 0)
+      (effects
+        (font
+          (size 1.524 1.524)
+        )
+        (justify left top)
+      )
+    )
+    (instances
+      (project ""
+        (path "/40ab61e3-247c-40bf-b7c3-bcbc9f56eb80"
+          (page "8")
+        )
+      )
+    )
+  )
+)

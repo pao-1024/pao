@@ -3,6 +3,7 @@ mod ssd1306;
 mod trace;
 mod project;
 mod sensors;
+mod world;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().collect();
@@ -28,18 +29,18 @@ fn main() {
     } else {
         let board = board::Pao::default(); let trace = board.trace.clone(); (Box::new(board), trace)
     };
-    // The kernel starts its web server inside `run`; start it here instead so the pin trace
-    // shares the page's WebSocket. Runs without a page skip the trace and its MMIO observer.
+    // Start the web server here so board traces share the page's WebSocket.
     if let Some(port) = options.web_port.take() {
         let Some(dir) = options.web_dir.clone() else {
             eprintln!("pao-sim --web requires --web-dir");
             std::process::exit(2);
         };
         let web = esp_soc::web::WebServer::start(port, dir).expect("web server");
-        machine.add_observer(Box::new(trace::Publisher::new(trace, web.clone())));
         machine.web = Some(web);
         machine.rt.enabled = true;
     }
+    // Motion decoding and echo geometry also run without a browser attached.
+    machine.add_observer(Box::new(trace::Publisher::new(trace, machine.web.clone())));
     machine.bus.board = board;
     machine.bus.attach_board_devices();
     esp32sim::run(machine, &options);

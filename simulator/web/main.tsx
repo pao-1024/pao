@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { createRoot } from "react-dom/client";
 import { decodeSsd1306, hex2, MODULES, motion, PIN_LABEL, RELAY_PINS, stateLabel, stepLauncher, wheels } from "./protocol.ts";
-import type { Bus, Launcher, Module, Wire } from "./protocol.ts";
+import type { Bus, Launcher, Module, Wire, World } from "./protocol.ts";
 import { Car3D } from "./car3d.tsx";
 import "./style.css";
 
@@ -19,7 +19,7 @@ type TraceEvent =
   | { k: "pwm"; pin: number; duty: number }
   | { k: "i2c"; addr: number; read: boolean; len: number; data: string };
 type Stream = { samples: number; peak: number; rate: number };
-type Command = { forward: number; turn: number; duration: number } | null;
+type Command = { action: string; duration: number } | null;
 
 const BUSES: [Bus, string][] = [["i2c", "I2C"], ["pwm", "PWM"], ["gpio", "GPIO"], ["i2s", "I2S"]];
 const ROWS = 400, LOG_LINES = 800, ACTIVE_MS = 450;
@@ -58,6 +58,7 @@ function App() {
   const [device, setDevice] = useState("未知");
   const [command, setCommand] = useState<Command>(null);
   const [launcher, setLauncher] = useState<Launcher>({ energy: 0, shots: 0, lastShot: null });
+  const [world, setWorld] = useState<World | null>(null);
   const launcherTime = useRef(0);
   const [uartBytes, setUartBytes] = useState(0);
   const [audio, setAudio] = useState({ speaker: { rate: 0, peak: 0 }, microphone: { rate: 0, peak: 0 } });
@@ -127,15 +128,16 @@ function App() {
     for (const line of lines) {
       const state = line.match(/State: (\S+) -> (\S+)/);
       if (state) setDevice(state[2]);
-      const drive = line.match(/Chassis drive: forward=(-?\d+) turn=(-?\d+) duration_ms=(\d+)/);
-      if (drive) setCommand({ forward: +drive[1], turn: +drive[2], duration: +drive[3] });
+      const command = line.match(/Chassis action=(forward|backward|turn_left|turn_right) duration_ms=(\d+)/);
+      if (command) setCommand({ action: command[1], duration: +command[2] });
       if (line.includes("Chassis stopped")) setCommand(null);
     }
     if (lines.length) setLogLines(previous => [...previous, ...lines].slice(-LOG_LINES));
   }
 
-  function trace(message: { time: number; levels: string; known: string; pwm: [number, number][]; i2c: [number, number]; dropped: number; events: TraceEvent[] }) {
+  function trace(message: { time: number; levels: string; known: string; pwm: [number, number][]; i2c: [number, number]; dropped: number; events: TraceEvent[]; world: World }) {
     simTime.current = message.time;
+    setWorld(message.world);
     // The interval charges first; a relay pull-in reported in the same batch fires after.
     const fired = message.events.some(event => event.k === "gpio" && event.pin === 18 && !event.v);
     const dt = Math.max(0, message.time - launcherTime.current);
@@ -336,10 +338,10 @@ function App() {
             <span className="led-row"><span className={`led ${led === "rgb(0,0,0)" ? "" : "lit"}`} style={{ "--led": led } as CSSProperties} aria-label={led === "rgb(0,0,0)" ? "状态灯 灭" : "状态灯 亮"} /> GPIO48</span>
           </div>
         </div>
-        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} />
+        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} world={world} />
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
-          <dt>固件指令</dt><dd>{command ? `drive forward=${command.forward} turn=${command.turn} · ${command.duration} ms` : "无进行中的运动"}</dd>
+          <dt>固件指令</dt><dd>{command ? `${command.action} · ${command.duration} ms` : "无进行中的运动"}</dd>
           <dt>发射器</dt><dd>{firing ? "发射中（继电器吸合）" : charging ? "充能中" : "已充满"} · 电量 {percent(launcher.energy)}</dd>
           <dt>发射记录</dt><dd>{launcher.shots ? `共 ${launcher.shots} 发 · 上一发能量 ${percent(launcher.lastShot ?? 0)}${launcher.lastShot ? "" : "（空发）"}` : "尚未发射"}</dd>
         </dl>

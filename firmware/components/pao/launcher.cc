@@ -30,17 +30,13 @@ Launcher::Launcher(gpio_num_t fire_gpio) : fire_gpio_(fire_gpio) {
 }
 
 Launcher::~Launcher() {
-    safeOff();
+    std::lock_guard<std::mutex> lock(mutex_);
+    ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kInactiveLevel));
 }
 
 void Launcher::fire() {
     std::lock_guard<std::mutex> lock(mutex_);
     ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kActiveLevel));
     vTaskDelay(pdMS_TO_TICKS(kFirePulseMs));
-    ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kInactiveLevel));
-}
-
-void Launcher::safeOff() {
-    std::lock_guard<std::mutex> lock(mutex_);
     ESP_ERROR_CHECK(gpio_set_level(fire_gpio_, kInactiveLevel));
 }

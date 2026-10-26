@@ -7,6 +7,9 @@ includes:
   hardware:
     taskfile: ./hardware/Taskfile.yaml
     dir: ./hardware
+  hardware-pcb:
+    taskfile: ./experimental/hardware-pcb/Taskfile.yaml
+    dir: ./experimental/hardware-pcb
   firmware:
     taskfile: ./firmware/Taskfile.yaml
     dir: ./firmware

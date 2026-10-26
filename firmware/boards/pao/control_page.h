@@ -1,105 +1,162 @@
 #pragma once
 
-// 板载控制页，由 GET / 返回。摇杆按住期间每 150 ms 续发一次 400 ms 的运动指令，
-// 松手、切页或断网后指令自然到期停车，不依赖页面发出停止请求。
-// 发射器常供电自动充能，开炮键按下即发射一次。
+// 板载控制页。方向键按住期间通过 WebSocket 每 150 ms 续发一次 400 ms 的运动指令；
+// 页面退出或断网后指令到期停车。运动配置保存在设备中。
 inline constexpr char kControlPage[] = R"PAO(<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>PAO 遥控</title>
 <style>
-:root{color-scheme:dark;--bg:#0a0d12;--panel:#10151c;--line:#222c38;--text:#d8e2ec;--muted:#7c8a99;--accent:#4cc2ff;--bad:#ff6b6b}
+:root{color-scheme:dark;--bg:#0a0d12;--panel:#10151c;--line:#263240;--text:#d8e2ec;--muted:#91a3b5;--accent:#4cc2ff;--good:#4fd18b;--bad:#ff6b6b}
 *{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 html,body{overscroll-behavior:none}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"PingFang SC",sans-serif}
-main{max-width:760px;margin:0 auto;padding:16px;display:grid;gap:12px;grid-template-columns:1fr 1fr}
+main{max-width:760px;margin:auto;padding:16px;display:grid;gap:12px;grid-template-columns:1fr 1fr}
 header,p.hint{grid-column:1/-1}
-h1{margin:0;font-size:20px}header{display:flex;justify-content:space-between;align-items:center}
-.status{font-size:12px;color:var(--muted)}.status.ok{color:#4fd18b}.status.bad{color:var(--bad)}
-section{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:12px}
+header{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:20px}
+.status{font-size:12px;color:var(--muted)}.status.ok{color:var(--good)}.status.bad{color:var(--bad)}
+section{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:13px}
 h2{margin:0;align-self:flex-start;font-size:13px;color:var(--muted);font-weight:600}
-.stick{position:relative;width:220px;height:220px;border-radius:50%;touch-action:none;cursor:grab;
-  background:radial-gradient(circle,#18212c 0 34%,#121921 35% 100%);border:1px solid var(--line);box-shadow:inset 0 0 30px #0006}
-.stick::before,.stick::after{content:"";position:absolute;background:#1f2a36;left:50%;top:12px;bottom:12px;width:1px}
-.stick::after{top:50%;left:12px;right:12px;bottom:auto;width:auto;height:1px}
-.knob{position:absolute;left:50%;top:50%;width:84px;height:84px;margin:-42px;border-radius:50%;z-index:1;
-  background:radial-gradient(circle at 35% 30%,#3a4b5f,#1b2430);border:1px solid #3b4d61;box-shadow:0 6px 16px #0008;transition:transform .15s}
-.stick.active{cursor:grabbing}.stick.active .knob{transition:none;border-color:var(--accent);box-shadow:0 0 18px #4cc2ff55,0 6px 16px #0008}
-.readout{display:flex;gap:16px;font:13px ui-monospace,monospace;color:var(--muted)}.readout b{color:var(--text);font-weight:600}
-.gauge{width:100%;height:6px;border-radius:3px;background:#1c2530;overflow:hidden}.gauge div{height:100%;width:0;background:var(--accent)}
+.pad{display:grid;grid-template-columns:repeat(3,76px);grid-template-rows:repeat(3,68px);gap:5px;grid-template-areas:". up ." "left stop right" ". down ."}
+button{font:inherit;color:var(--text);background:#18222d;border:1px solid #344454;border-radius:12px;cursor:pointer;touch-action:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.direction{font-size:21px;line-height:1.1;font-weight:650}.direction small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:5px}
+.direction.active{background:#19405a;border-color:var(--accent);box-shadow:0 0 0 2px #4cc2ff35}
+.up{grid-area:up}.down{grid-area:down}.left{grid-area:left}.right{grid-area:right}
+.stop{grid-area:stop;color:#ffb9b9;border-color:#805050;background:#342225;font-weight:700}
+.readout{font-size:13px;color:var(--muted)}.readout b{color:var(--text)}
 label{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--muted)}
-input[type=range]{flex:1;accent-color:var(--accent)}output{font-family:ui-monospace,monospace;color:var(--text);min-width:48px;text-align:right}
-button{font:inherit;color:var(--text);background:#161d26;border:1px solid var(--line);border-radius:12px;cursor:pointer;touch-action:none}
-.fire{position:relative;overflow:hidden;width:180px;height:180px;border-radius:50%;font-size:20px;font-weight:700;letter-spacing:.1em;
-  background:#2b1e0e;border:2px solid #7a5420;box-shadow:0 6px 18px #0008}
-.fire span{position:relative;z-index:1}.fire small{display:block;font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0}
+input[type=range]{flex:1;min-width:70px;accent-color:var(--accent)}output{font-family:ui-monospace,monospace;color:var(--text);min-width:48px;text-align:right}
+.settings{align-items:stretch}.settings fieldset{border:0;padding:0;margin:0;display:grid;gap:12px}.settings fieldset:disabled{opacity:.5}
+.config-line{display:flex;align-items:center;justify-content:space-between;gap:8px}.config-line button{padding:5px 9px;font-size:12px}
+.fire{position:relative;overflow:hidden;width:180px;height:180px;border-radius:50%;font-size:20px;font-weight:700;letter-spacing:.1em;background:#2b1e0e;border:2px solid #7a5420;box-shadow:0 6px 18px #0008}
+.fire small{display:block;font-size:12px;font-weight:400;color:var(--muted);letter-spacing:0}
 .fire.flash{animation:flash .35s}@keyframes flash{from{background:#ffd9a0}to{background:#2b1e0e}}
 p.hint{margin:0;font-size:12px;color:var(--muted)}
-@media (max-width:600px){main{grid-template-columns:1fr}}
+@media(max-width:600px){main{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.fire.flash{animation:none}}
 </style></head><body><main>
 <header><h1>PAO 遥控</h1><span id="status" class="status">连接中</span></header>
 <section><h2>底盘</h2>
-<div class="stick" id="stick"><div class="knob" id="knob"></div></div>
-<div class="readout"><span>速度 <b id="fwdOut">0</b></span><span>转向 <b id="turnOut">0</b></span></div>
-<div class="gauge"><div id="gauge"></div></div>
-<label>最高速度<input id="max" type="range" min="20" max="100" value="80"><output id="maxOut">80%</output></label>
-<label>加速时间<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
+<div class="readout">前方障碍物 <b id="distance" aria-live="polite">读取中…</b></div>
+<div class="pad" aria-label="小车方向">
+<button class="direction up" data-dir="forward" aria-label="按住前进">↑<small>前进</small></button>
+<button class="direction left" data-dir="left" aria-label="按住逆时针旋转">↶<small>逆时针</small></button>
+<button class="stop" id="stop" aria-label="立即停止">停</button>
+<button class="direction right" data-dir="right" aria-label="按住顺时针旋转">↷<small>顺时针</small></button>
+<button class="direction down" data-dir="backward" aria-label="按住后退">↓<small>后退</small></button>
+</div>
+<label>前进／后退最大输出<input id="movePower" type="range" min="20" max="100" value="80" disabled><output id="movePowerOut">80%</output></label>
+<label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80" disabled><output id="rotatePowerOut">80%</output></label>
 </section>
-<section><h2>电磁炮</h2>
-<button class="fire" id="fire"><span>开炮<small>发射后约 10 s 充满</small></span></button>
+<section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>充能请看模块指示灯</small></button></section>
+<section class="settings"><h2>运动设置</h2>
+<fieldset id="configFields" disabled>
+<label>左轮比例<input id="leftScale" type="range" min="0" max="1" step="0.01" value="1"><output id="leftScaleOut">1.00</output></label>
+<label>右轮比例<input id="rightScale" type="range" min="0" max="1" step="0.01" value="1"><output id="rightScaleOut">1.00</output></label>
+</fieldset><div class="config-line"><span id="configStatus" class="status" role="status">读取配置中</span><button id="retry" hidden>重试保存</button></div>
 </section>
-<p class="hint">摇杆往前推前进、左右推转向，越久越快；松手立即停车。键盘：WASD / 方向键驾驶，空格开炮。</p>
+<p class="hint">按住方向键驾驶，松开立即清零输出。中央“停”也可停车；键盘 WASD / 方向键驾驶，空格开炮。运动设置在调节结束后保存到设备，并影响语音动作。</p>
 </main><script>
-const $=id=>document.getElementById(id),statusEl=$("status");
-function setStatus(text,cls){statusEl.textContent=text;statusEl.className="status "+(cls||"")}
-async function call(path,params){
-  const query=new URLSearchParams(params||{}).toString();
-  try{const r=await fetch(path+(query?"?"+query:""),{method:"POST"});const t=await r.text();
-    if(!r.ok){setStatus(t||("错误 "+r.status),"bad");return null}setStatus("已连接","ok");return t}
-  catch(e){setStatus("连接断开","bad");return null}}
-for(const [input,fmt] of [["max",v=>v+"%"],["ramp",v=>(v/1000).toFixed(1)+" s"]]){
-  const el=$(input),update=()=>$(input+"Out").textContent=fmt(el.value);el.oninput=update;update()}
+const $=id=>document.getElementById(id);
+const statusEl=$("status"),configStatus=$("configStatus");
+function setStatus(message,kind){statusEl.textContent=message;statusEl.className="status "+(kind||"")}
+function setConfigStatus(message,kind){configStatus.textContent=message;configStatus.className="status "+(kind||"")}
+let socket,sequence=0;const pending=new Map();
+function call(path,params){if(!socket||socket.readyState!==WebSocket.OPEN)return Promise.reject(Error("连接断开"));
+  const connection=socket,id=sequence=sequence%2147483647+1;
+  return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{
+    pending.delete(id);reject(Error("WS 请求超时"));connection.close()
+  },3000);pending.set(id,{resolve,reject,timer});
+  connection.send(JSON.stringify({id,path,query:new URLSearchParams(params||{}).toString()}))})}
+function connect(){const connection=socket=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`);
+  connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();pollDistance(connection)};
+  connection.onmessage=event=>{let message;try{message=JSON.parse(event.data)}catch(e){connection.close();return}
+    const request=pending.get(message.id);if(!request)return;
+    pending.delete(message.id);clearTimeout(request.timer);
+    if(message.ok)request.resolve(message.data);else request.reject(Error(message.error||"请求失败"))};
+  connection.onclose=()=>{for(const request of pending.values()){
+    clearTimeout(request.timer);request.reject(Error("连接断开"))}pending.clear();clearControls();
+    $("distance").textContent="连接断开";$("distance").style.color="var(--bad)";
+    setStatus("WS 断开，正在重连","bad");setTimeout(connect,1000)};
+  connection.onerror=()=>connection.close()}
+function reportError(error){setStatus(error.message||"连接断开","bad")}
 
-// 摇杆给出目标值，实际输出按“加速时间”逐渐逼近目标；回中或反向时快速减速，松手直接停车。
-const stick=$("stick"),knob=$("knob"),R=68;
-let target={f:0,t:0},out={f:0,t:0},active=false,last=performance.now(),lastSend=0,stopped=true;
-function setKnob(x,y){knob.style.transform=`translate(${x*R}px,${y*R}px)`}
-function fromPointer(e){const r=stick.getBoundingClientRect();
-  let x=(e.clientX-r.left-r.width/2)/R,y=(e.clientY-r.top-r.height/2)/R;const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}
-  setKnob(x,y);
-  // 中心 8% 死区，外圈平方曲线，小推杆量更容易微调。
-  const shape=v=>Math.abs(v)<.08?0:Math.sign(v)*((Math.abs(v)-.08)/.92)**2;
-  target={f:shape(-y),t:shape(-x)}}
-stick.onpointerdown=e=>{active=true;stick.classList.add("active");fromPointer(e);stick.setPointerCapture(e.pointerId)};
-stick.onpointermove=e=>{if(active)fromPointer(e)};
-stick.onpointerup=stick.onpointercancel=()=>{active=false;stick.classList.remove("active");setKnob(0,0);release()};
-function release(){target={f:0,t:0};out={f:0,t:0};if(!stopped){stopped=true;call("/api/stop")}}
-function approach(cur,goal,dt){
-  const rampS=$("ramp").value/1000;
-  if(Math.sign(goal)!==Math.sign(cur)||Math.abs(goal)<Math.abs(cur)){const step=dt*4;return Math.abs(goal-cur)<=step?goal:cur+Math.sign(goal-cur)*step}
-  if(rampS===0)return goal;const step=dt/rampS;return Math.abs(goal-cur)<=step?goal:cur+Math.sign(goal-cur)*step}
-function loop(now){requestAnimationFrame(loop);const dt=Math.min(.1,(now-last)/1000);last=now;
-  // 转向上限为最高速度的一半，转弯更柔和。
-  out={f:approach(out.f,target.f,dt),t:approach(out.t,target.t*.5,dt*1.5)};
-  const max=$("max").value,f=Math.round(out.f*max),t=Math.round(out.t*max);
-  $("fwdOut").textContent=f;$("turnOut").textContent=t;$("gauge").style.width=Math.min(100,Math.hypot(f,t))+"%";
-  if((f||t)&&now-lastSend>150){lastSend=now;stopped=false;call("/api/drive",{forward:f,turn:t,duration_ms:400})}}
-requestAnimationFrame(loop);
+const directions={forward:"forward",backward:"backward",left:"turn_left",right:"turn_right"};
+const keys={KeyW:"forward",ArrowUp:"forward",KeyS:"backward",ArrowDown:"backward",
+  KeyA:"left",ArrowLeft:"left",KeyD:"right",ArrowRight:"right"};
+const held=new Map();let pointerDir=null,currentDir=null,lastDir=null,lastSent=0;
+let pendingMotion=null,sendingMotion=false;
+async function queueMotion(path,params){pendingMotion={path,params};if(sendingMotion)return;
+  sendingMotion=true;while(pendingMotion){const next=pendingMotion;pendingMotion=null;
+    try{await call(next.path,next.params);setStatus("WS 已连接","ok")}catch(e){reportError(e)}}sendingMotion=false}
+function selectedDir(){return pointerDir||Array.from(held.values()).at(-1)||null}
+function markDirection(dir){document.querySelectorAll(".direction").forEach(button=>
+  button.classList.toggle("active",button.dataset.dir===dir))}
+function syncMotion(force=false){const dir=selectedDir();markDirection(dir);
+  if(!dir){if(currentDir){queueMotion("/api/chassis",{action:"stop"});currentDir=null;lastDir=null}return}
+  const now=performance.now();
+  if(force||dir!==lastDir||now-lastSent>=150){
+    queueMotion("/api/chassis",{action:directions[dir],duration_ms:400});
+    lastSent=now;lastDir=dir;currentDir=dir}}
+function clearControls(){pointerDir=null;held.clear();currentDir=null;lastDir=null;pendingMotion=null;markDirection(null)}
+function emergencyStop(){clearControls();call("/api/chassis",{action:"emergency_stop"}).catch(reportError)}
+for(const button of document.querySelectorAll(".direction")){
+  button.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();pointerDir=button.dataset.dir;
+    button.setPointerCapture(e.pointerId);syncMotion(true)};
+  button.onpointerup=button.onpointercancel=()=>{if(pointerDir===button.dataset.dir){pointerDir=null;syncMotion(true)}};
+}
+$("stop").onclick=emergencyStop;
+setInterval(()=>syncMotion(),50);
 
-const keys={KeyW:[1,0],ArrowUp:[1,0],KeyS:[-1,0],ArrowDown:[-1,0],KeyA:[0,1],ArrowLeft:[0,1],KeyD:[0,-1],ArrowRight:[0,-1]},down=new Set();
-function fromKeys(){if(active)return;let f=0,t=0;for(const k of down){f+=keys[k][0];t+=keys[k][1]}
-  f=Math.sign(f);t=Math.sign(t);setKnob(-t*.7,-f*.7);f||t?target={f,t}:(setKnob(0,0),release())}
+function showConfig(){
+  $("leftScaleOut").textContent=Number($("leftScale").value).toFixed(2);
+  $("rightScaleOut").textContent=Number($("rightScale").value).toFixed(2);
+  $("movePowerOut").textContent=$("movePower").value+"%";
+  $("rotatePowerOut").textContent=$("rotatePower").value+"%"}
+function currentConfig(){return {left_scale:$("leftScale").value,
+  right_scale:$("rightScale").value,move_output:$("movePower").value,
+  rotate_output:$("rotatePower").value}}
+async function loadConfig(){try{const config=await call("/api/motion-config");
+  if(!configDirty){
+    $("leftScale").value=config.left_scale;$("rightScale").value=config.right_scale;
+    $("movePower").value=config.move_output;$("rotatePower").value=config.rotate_output;
+    showConfig();setConfigStatus("已从设备加载","ok");$("retry").hidden=true}
+  $("configFields").disabled=false;$("movePower").disabled=false;$("rotatePower").disabled=false}
+  catch(e){setConfigStatus("读取配置失败，请刷新页面","bad")}}
+let configDirty=false,pendingSave=false,saving=false;
+async function saveConfig(){pendingSave=true;if(saving)return;saving=true;
+  while(pendingSave){pendingSave=false;
+    const config=currentConfig();
+    setConfigStatus("保存中");$("retry").hidden=true;
+    try{await call("/api/motion-config",config);
+      const shown=currentConfig();
+      if(!pendingSave){const same=JSON.stringify(shown)===JSON.stringify(config);
+        configDirty=!same;setConfigStatus(same?"已保存到设备":"未保存",same?"ok":"")}}
+    catch(e){setConfigStatus(e.message||"保存失败，请重试","bad");$("retry").hidden=false}}
+  saving=false}
+for(const id of ["leftScale","rightScale","movePower","rotatePower"]){
+  $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};
+  $(id).onchange=saveConfig}
+$("retry").onclick=saveConfig;
 
-const fire=$("fire");
-async function shoot(){if(await call("/api/launcher/fire")!==null){fire.classList.remove("flash");void fire.offsetWidth;fire.classList.add("flash")}}
-fire.onclick=shoot;
-
-addEventListener("keydown",e=>{if(e.code==="Space"){e.preventDefault();if(!e.repeat)shoot();return}
-  if(keys[e.code]){e.preventDefault();down.add(e.code);fromKeys()}});
-addEventListener("keyup",e=>{if(keys[e.code]){down.delete(e.code);fromKeys()}});
-addEventListener("blur",()=>{down.clear();if(!active){setKnob(0,0);release()}});
-
-async function poll(){try{await(await fetch("/api/status")).json();setStatus("已连接","ok")}catch(e){setStatus("连接断开","bad")}}
-setInterval(poll,1000);poll();
+const fire=$("fire");fire.onclick=async()=>{try{await call("/api/launcher/fire");
+  fire.classList.remove("flash");void fire.offsetWidth;fire.classList.add("flash")}catch(e){reportError(e)}};
+addEventListener("keydown",e=>{if(e.target instanceof Element&&e.target.closest("input,button"))return;
+  if(e.code==="Space"){e.preventDefault();if(!e.repeat)fire.click();return}
+  if(keys[e.code]){e.preventDefault();if(!held.has(e.code)){held.set(e.code,keys[e.code]);syncMotion(true)}}});
+addEventListener("keyup",e=>{if(keys[e.code]){held.delete(e.code);syncMotion(true)}});
+addEventListener("blur",emergencyStop);
+document.addEventListener("visibilitychange",()=>{if(document.hidden)emergencyStop()});
+addEventListener("pagehide",emergencyStop);
+async function pollDistance(connection){if(socket!==connection||connection.readyState!==WebSocket.OPEN)return;
+  const output=$("distance");try{const state=await call("/api/distance");
+    const valid=!state.error&&Number.isFinite(state.distance_cm);
+    output.textContent=valid?state.distance_cm.toFixed(1)+" cm":
+      state.error==="ESP_ERR_TIMEOUT"?"测距超时（未收到回波）":"测距失败："+(state.error||"无有效读数");
+    output.style.color=valid?"":"var(--bad)"}
+  catch(e){output.textContent="读取失败（连接超时或断开）";output.style.color="var(--bad)"}
+  finally{if(socket===connection)setTimeout(()=>pollDistance(connection),1000)}}
+connect();
 </script></body></html>
 )PAO";
