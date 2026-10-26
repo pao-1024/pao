@@ -17,25 +17,32 @@ PAO 是一台可在局域网或仿真环境中通过语音、网页遥控运动�
 
 ## 系统组成
 
-```text
-用户语音 / 网页遥控
-        |
-        v
-灵矽服务 / 局域网控制页
-        |  MCP 工具调用 / WebSocket JSON
-        v
-PaoBoard 适配层（权限边界校验、运动状态、NVS、HTTP）
-        |
-        +-- Chassis --> Motor × 2 --> MX1508 --> 左右电机
-        +-- ForwardDistanceMover --> HcSr04 --> HC-SR04
-        +-- Launcher --> 继电器 --> 电磁发射器按钮
-        +-- OledDisplay / I2S 麦克风与功放 / 状态灯
-        |
-        v
-ESP32-S3 PAO 固件
-        |
-        +-- 实机：真实外设与 Wi-Fi
-        +-- 模拟器：ROM + Flash + 外设模型 + 浏览器音频
+```mermaid
+flowchart TD
+    Voice["用户语音"] --> Linxi["灵矽服务"]
+    Web["局域网遥控页"] -->|"WebSocket JSON"| Board
+    Linxi -->|"MCP 工具调用"| Board
+
+    subgraph Firmware["ESP32-S3 PAO 固件"]
+        Board["PaoBoard 适配层<br/>参数校验 · 运动状态 · NVS · HTTP"]
+        Board --> Chassis["Chassis"]
+        Chassis --> Motors["Motor × 2"]
+        Motors --> Driver["MX1508"]
+        Driver --> Wheels["左右电机"]
+
+        Board --> Distance["ForwardDistanceMover"]
+        Distance --> Sensor["HcSr04"]
+        Sensor --> Ultrasonic["HC-SR04"]
+
+        Board --> Launcher["Launcher"]
+        Launcher --> Relay["继电器"]
+        Relay --> Gun["电磁发射器按钮"]
+
+        Board --> Peripherals["OLED · I2S 麦克风与功放 · 状态灯"]
+    end
+
+    Firmware -.->|"烧录并运行"| Hardware["实机<br/>真实外设与 Wi-Fi"]
+    Firmware -.->|"正式镜像启动"| Simulator["模拟器<br/>ROM + Flash + 外设模型 + 浏览器音频"]
 ```
 
 ### 用户入口
