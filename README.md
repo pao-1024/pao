@@ -55,7 +55,9 @@ docker run -d --name pao-simulator --stop-timeout 30 \
   ghcr.io/pao-1024/pao-simulator:sha-106b35f
 ```
 
-首次启动会自动下载镜像，无需克隆源码或安装编译工具。打开 <http://127.0.0.1:8080/>，点击启用麦克风和扬声器，并按提示完成设备激活。顶栏“遥控”可打开固件遥控页。
+首次启动会自动下载镜像，无需克隆源码或安装编译工具。打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，按提示完成设备激活。
+
+设备激活后，**点击顶栏的 BOOT 按键即可触发语音对话，也可以说“小炮小炮”唤醒。** 顶栏“遥控”可打开固件遥控页。
 
 停止时运行 `docker stop pao-simulator`，再次启动用 `docker start pao-simulator`，设备状态保存在数据卷中。HTTPS、设备独占、镜像更新和源码构建见 [Docker 部署说明](docker/README.md)；本机开发启动见[模拟器说明](simulator/README.md#启动)。
 

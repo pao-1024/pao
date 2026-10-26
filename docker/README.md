@@ -13,7 +13,9 @@ docker run -d --name pao-simulator --stop-timeout 30 \
   ghcr.io/pao-1024/pao-simulator:sha-106b35f
 ```
 
-打开 <http://127.0.0.1:8080/>，启用麦克风和扬声器，新设备按提示完成灵矽绑定。顶栏“遥控”使用同一入口下的 `/control/`。该入口仅监听本机；需要 HTTPS 和单浏览器独占时，使用下方 Compose 部署。
+打开 <http://127.0.0.1:8080/>，点击“启用麦克风和扬声器”并允许麦克风权限，新设备按提示完成灵矽绑定。
+
+设备激活后，**点击顶栏的 BOOT 按键即可触发语音对话，也可以说“小炮小炮”唤醒。** 顶栏“遥控”使用同一入口下的 `/control/`。该入口仅监听本机；需要 HTTPS 和单浏览器独占时，使用下方 Compose 部署。
 
 ```sh
 docker logs -f pao-simulator
