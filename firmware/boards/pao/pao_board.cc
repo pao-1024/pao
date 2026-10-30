@@ -13,6 +13,7 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
+#include "sequence_parser.h"
 
 #include <driver/i2c_master.h>
 #include <esp_check.h>
@@ -26,15 +27,21 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <string>
 #include <string_view>
 
 #define TAG "PaoBoard"
 
 namespace {
+using pao::ActionSequence;
+using pao::ParseActionSequence;
+using pao::SequenceAction;
+
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
 constexpr uint32_t kMotionConfigVersion = 5;
@@ -46,6 +53,9 @@ struct StoredMotionConfig {
     uint32_t version;
     ChassisConfig config;
 };
+
+static_assert(ActionSequence::kFireDurationMs == Launcher::kFirePulseMs,
+              "sequence fire duration must match the launcher pulse");
 }  // namespace
 
 extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
@@ -71,6 +81,11 @@ private:
     ForwardDistanceMover distance_mover_{ultrasonic_, chassis_};
     TaskHandle_t distance_task_ = nullptr;
     uint32_t chassis_generation_ = 0;
+    std::mutex sequence_mutex_;
+    ActionSequence sequence_;
+    uint32_t sequence_id_ = 0;
+    bool sequence_active_ = false;
+    TaskHandle_t sequence_task_ = nullptr;
     std::atomic<bool> alarm_scheduled_{false};
     bool obstacle_alarm_active_ = false;
     int64_t next_obstacle_alarm_us_ = 0;
@@ -102,7 +117,10 @@ private:
         ResetMotionLocked(status);
     }
 
-    uint32_t StopChassis() {
+    uint32_t StopChassis(bool cancel_sequence = true) {
+        if (cancel_sequence) {
+            CancelSequence();
+        }
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
         return chassis_generation_;
@@ -119,12 +137,15 @@ private:
         return true;
     }
 
-    void RunChassis(MotionAction action, int duration_ms = 0) {
+    void RunChassis(MotionAction action, int duration_ms = 0, bool sequence_step = false) {
         static constexpr const char* kActionNames[] = {
             "forward", "backward", "turn_left", "turn_right", "stop", "emergency_stop"
         };
+        if (!sequence_step) {
+            CancelSequence();
+        }
         if (action == MotionAction::EmergencyStop) {
-            StopChassis();
+            StopChassis(false);
             ESP_LOGI(TAG, "Chassis stopped: emergency_stop");
             return;
         }
@@ -356,7 +377,7 @@ private:
             "四个方向动作使用设备保存的对应最大输出；duration_ms 可选，100..15000 毫秒，"
             "默认 1000，到时立即停；两个停止动作忽略 duration_ms。"
             "输出不是实测速度，不能保证准确距离或角度。"
-            "新动作取消原有定时或按距离运动。前进指定厘米数请用 self.chassis.move_forward，"
+            "新动作取消原有定时、按距离运动和待执行动作序列。前进指定厘米数请用 self.chassis.move_forward，"
             "前进到距障碍物指定距离请用 self.chassis.move_to_distance。",
             PropertyList({Property("action", kPropertyTypeString).SetMaxLength(14),
                           Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
@@ -376,7 +397,7 @@ private:
             "以前方同一静止反射物的起始距离减当前距离估算前进量，到达后停车；"
             "必须有稳定反射物，不支持空旷环境里程测量、倒退或转弯。"
             "目标位置必须保留至少 10cm；空间不足或起始测距失败直接报错且不启动。"
-            "新底盘指令会替换旧运动；途中无回波、测距错误、前方不足 10cm 或超过 15 秒立即停止。"
+            "新底盘指令会替换旧运动并取消待执行动作序列；途中无回波、测距错误、前方不足 10cm 或超过 15 秒立即停止。"
             "受采样间隔和惯性影响，不能保证厘米级精度。\n"
             "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询进度及停止原因。",
             PropertyList({Property("distance_cm", kPropertyTypeInteger, 1, 390)}),
@@ -389,7 +410,7 @@ private:
             "参数：distance_cm 必填整数 10..390，表示停车后希望保留的前方距离；使用设备保存的前进最大输出。\n"
             "必须有静止稳定反射物，不支持空旷环境、移动目标、倒退或转弯。"
             "当前距离已不大于目标时直接报错且不启动；途中无回波、测距错误、意外进入 10cm 内或超过 15 秒立即停止。"
-            "新底盘指令会替换旧运动；受采样间隔和惯性影响，不能保证厘米级精度。\n"
+            "新底盘指令会替换旧运动并取消待执行动作序列；受采样间隔和惯性影响，不能保证厘米级精度。\n"
             "返回：已开始，尚未完成；使用 self.ultrasonic.get_distance 查询当前距离及停止原因。",
             PropertyList({Property("distance_cm", kPropertyTypeInteger, 20, 10, 390)}),
             [this](const PropertyList& properties) -> ToolResult {
@@ -429,7 +450,10 @@ private:
     }
 
     // 语音工具和网页遥控在不同任务里调用，Launcher 自身串行化继电器脉冲。
-    void FireLauncher() {
+    void FireLauncher(bool sequence_step = false) {
+        if (!sequence_step) {
+            CancelSequence();
+        }
         launcher_.fire();
         // 音频入队可能等待正在播放的语音，在主循环处理，避免阻塞遥控指令续发。
         Application::GetInstance().Schedule([]() {
@@ -439,11 +463,177 @@ private:
         ESP_LOGI(TAG, "Launcher fired");
     }
 
+    static void SequenceTaskEntry(void* arg) {
+        static_cast<PaoBoard*>(arg)->RunSequenceTask();
+    }
+
+    void CancelSequence() {
+        bool was_active;
+        {
+            std::lock_guard<std::mutex> lock(sequence_mutex_);
+            was_active = sequence_active_;
+            if (was_active) {
+                sequence_active_ = false;
+                ++sequence_id_;
+                std::lock_guard<std::mutex> chassis_lock(chassis_mutex_);
+                StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
+                if (sequence_task_ != nullptr) {
+                    xTaskNotifyGive(sequence_task_);
+                }
+            }
+        }
+        if (was_active) {
+            ESP_LOGI(TAG, "Action sequence cancelled");
+        }
+    }
+
+    bool SequenceCurrent(uint32_t id) {
+        std::lock_guard<std::mutex> lock(sequence_mutex_);
+        return sequence_active_ && sequence_id_ == id;
+    }
+
+    void DrainSequenceNotifications() {
+        while (ulTaskNotifyTake(pdTRUE, 0) != 0) {
+        }
+    }
+
+    bool WaitSequenceStep(uint32_t id, int duration_ms) {
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(duration_ms));
+        return SequenceCurrent(id);
+    }
+
+    bool StartSequence(const ActionSequence& sequence) {
+        std::lock_guard<std::mutex> lock(sequence_mutex_);
+        if (sequence_task_ == nullptr) {
+            return false;
+        }
+        sequence_active_ = false;
+        ++sequence_id_;
+        {
+            std::lock_guard<std::mutex> chassis_lock(chassis_mutex_);
+            StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
+        }
+        sequence_ = sequence;
+        sequence_active_ = true;
+        xTaskNotifyGive(sequence_task_);
+        ESP_LOGI(TAG, "Action sequence started: steps=%zu total_ms=%d",
+                 sequence_.count, sequence_.total_duration_ms);
+        return true;
+    }
+
+    void RunSequenceTask() {
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            while (true) {
+                ActionSequence sequence;
+                uint32_t id;
+                {
+                    std::lock_guard<std::mutex> lock(sequence_mutex_);
+                    if (!sequence_active_) {
+                        break;
+                    }
+                    sequence = sequence_;
+                    id = sequence_id_;
+                }
+
+                // StartSequence 可能连续通知；先清掉旧通知，避免第一步被提前判定为结束。
+                DrainSequenceNotifications();
+                bool interrupted = false;
+                for (std::size_t i = 0; i < sequence.count; ++i) {
+                    if (!SequenceCurrent(id)) {
+                        interrupted = true;
+                        break;
+                    }
+
+                    const auto step = sequence.steps[i];
+                    if (step.action == SequenceAction::Fire) {
+                        FireLauncher(true);
+                        if (!SequenceCurrent(id)) {
+                            interrupted = true;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    MotionAction action = MotionAction::Stop;
+                    switch (step.action) {
+                    case SequenceAction::Forward: action = MotionAction::Forward; break;
+                    case SequenceAction::Backward: action = MotionAction::Backward; break;
+                    case SequenceAction::TurnLeft: action = MotionAction::TurnLeft; break;
+                    case SequenceAction::TurnRight: action = MotionAction::TurnRight; break;
+                    case SequenceAction::Fire: break;
+                    }
+                    {
+                        std::lock_guard<std::mutex> sequence_lock(sequence_mutex_);
+                        if (!sequence_active_ || sequence_id_ != id) {
+                            interrupted = true;
+                            break;
+                        }
+                        RunChassis(action, step.duration_ms, true);
+                    }
+                    if (!WaitSequenceStep(id, step.duration_ms)) {
+                        interrupted = true;
+                        break;
+                    }
+                }
+                if (interrupted) {
+                    continue;
+                }
+
+                bool completed = false;
+                {
+                    std::lock_guard<std::mutex> sequence_lock(sequence_mutex_);
+                    if (sequence_active_ && sequence_id_ == id) {
+                        std::lock_guard<std::mutex> chassis_lock(chassis_mutex_);
+                        StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
+                        sequence_active_ = false;
+                        completed = true;
+                    }
+                }
+                if (completed) {
+                    ESP_LOGI(TAG, "Action sequence completed: steps=%zu total_ms=%d",
+                             sequence.count, sequence.total_duration_ms);
+                    break;
+                }
+            }
+        }
+    }
+
+    void InitializeSequenceTool() {
+        // 板对象生命周期与进程一致；常驻任务等待通知，避免每次请求创建/删除任务的竞态。
+        if (xTaskCreate(SequenceTaskEntry, "action_seq", 4096, this, 5, &sequence_task_) != pdPASS) {
+            ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+        }
+        McpServer::GetInstance().AddTool("self.sequence.run",
+            "是什么：按顺序执行一组底盘和发射动作，适合用户一次说“前进一秒，然后左转，再开炮”。\n"
+            "参数：steps 必填字符串，格式为 action:duration_ms，多个步骤用英文逗号分隔，不能有空格。"
+            "action 只能是 forward/backward/turn_left/turn_right/fire；前四个动作的 duration_ms 取 100..15000，"
+            "fire 的 duration_ms 必须写 300，对应现有 300ms 发射脉冲。最多 20 步，总时长不能超过 60000ms。"
+            "示例：forward:1000,turn_left:800,fire:300。\n"
+            "执行：按顺序执行，前一步时长结束后才执行下一步，全部结束后自动停车。"
+            "新的底盘控制、手动遥控、stop/emergency_stop、网页停止、断网或新的序列会取消整个待执行序列，"
+            "立即停止当前底盘并取消后续步骤；正在进行的 300ms 发射脉冲会先完成。\n"
+            "返回：true 表示已接受并开始；参数错误返回错误且不启动。",
+            PropertyList({Property("steps", kPropertyTypeString).SetMaxLength(511)}),
+            [this](const PropertyList& properties) -> ToolResult {
+                ActionSequence sequence;
+                std::string error;
+                if (!ParseActionSequence(properties["steps"].value<std::string>(), sequence, error)) {
+                    return std::unexpected(error);
+                }
+                if (!StartSequence(sequence)) {
+                    return std::unexpected("动作序列任务未启动");
+                }
+                return true;
+            });
+    }
+
     void InitializeLauncherTools() {
         McpServer::GetInstance().AddTool("self.launcher.fire",
             "是什么：小车上的电磁炮（电磁发射器），常供电并自动充能，固件只能按下它的发射按钮。\n"
             "能做什么：开炮，立即发射一次。用户说开炮、开火、发射、射击、打一发、biu 一下时调用。"
-            "要连续开多炮就调用多次。没有充能或断电工具。\n"
+            "要连续开多炮就调用多次；单独调用会取消待执行动作序列，与其他底盘动作组合时使用 self.sequence.run。"
+            "没有充能或断电工具。\n"
             "参数：无。\n"
             "返回：true 表示已发射。",
             PropertyList(),
@@ -765,6 +955,7 @@ public:
         }
         InitializeChassisTools();
         InitializeLauncherTools();
+        InitializeSequenceTool();
         InitializeNetworkTools();
         InitializeStandbyTool();
         boot_button_.OnClick([this]() {
@@ -782,6 +973,9 @@ public:
         WifiBoard::SetNetworkEventCallback([this, callback = std::move(callback)](NetworkEvent event, const std::string& data) {
             if (event == NetworkEvent::Connected) {
                 StartControlServer();
+            }
+            if (event == NetworkEvent::Disconnected) {
+                StopChassis();
             }
             if (callback) {
                 callback(event, data);
