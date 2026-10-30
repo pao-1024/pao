@@ -140,7 +140,8 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
 `query` 使用 URL 查询串格式。响应为 `{"id":1,"ok":true,"data":...}`；失败时 `ok` 为 `false`，
 `error` 包含错误原因。`path` 使用下列指令路径，控制成功时 `data` 为 `true`；配置和距离返回对应 JSON 对象。
 请求仅支持不超过 512 字节的完整文本帧；无效格式会关闭连接。构建启用 `CONFIG_HTTPD_WS_SUPPORT=y`；
-已有构建目录若关闭了此选项，需通过 ESP-IDF 配置界面启用 HTTP Server 的 WebSocket 支持后重新编译。
+握手校验还要求启用 `CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y`，用于在升级前检查 Host、Origin 和单控制者。
+已有构建目录若关闭了这些选项，需重新生成或通过 ESP-IDF 配置界面启用后重新编译。
 
 遥控页、模拟器和验收脚本均通过 WebSocket 调用以下指令；参数放在 `query` 中，
 取值错误返回 `ok: false`：
@@ -161,9 +162,15 @@ WebSocket 请求格式为 `{"id":1,"path":"/api/distance","query":""}`，`id` �
   NVS 提交成功后生效，保存失败返回 `ok: false`。
 
 HTTP 提供 `GET /` 加载页面，`/ws` 用于升级 WebSocket 连接。
+`/ws` 同一时间只允许一个活动控制连接：第一个握手成功的页面取得控制权，其他连接收到 `409 Conflict`，
+不能发送控制指令；旧连接关闭后，新页面可以重新连接。
+握手要求存在 `Host` 头；如果请求带有 `Origin`，它必须与 `http://<Host>` 或 `https://<Host>` 同源。
+因此直接访问设备 IP、通过 Caddy 或其他 HTTPS 反向代理访问时都不需要写死域名，但代理必须保留原始 Host。
+没有 `Origin` 的非浏览器客户端仍可连接，这不代表身份认证，也不会改变可信局域网边界。
 页面关闭时通过 WebSocket 尝试立即停车；指令未送达时，方向控制的 400ms 时长限制仍会清零输出。
 
-遥控页没有鉴权，同一网络内的任何人都能控制小车，只应在可信网络中使用。
+遥控页和 WebSocket 没有账号、TLS 或身份认证；单控制者和 Origin 校验只防止多个页面抢控制及跨站页面直接连接，
+不能阻止同一可信网络内的其他客户端访问。只应在可信网络中使用。
 
 继电器为 3.3V 单路、触发跳帽设在 L 档（低电平吸合），触点短接发射器的发射按钮，
 放电回路在发射器内部不经过任何触点。
