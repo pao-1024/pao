@@ -2,6 +2,7 @@
 CONFIG_BOARD_TYPE_PAO=y
 CONFIG_LANGUAGE_ZH_CN=y
 CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y
 CONFIG_OTA_URL="https://xrobo.qiniuapi.com/v1/ota/"
 # Wake word "小炮小炮" is a MultiNet command (pinyin with spaces); there is no pretrained WakeNet for it.
 # Threshold 1-99, lower is more sensitive.

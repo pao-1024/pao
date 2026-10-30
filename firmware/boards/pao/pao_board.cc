@@ -13,6 +13,7 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
+#include "websocket_access.h"
 #include "sequence_parser.h"
 
 #include <driver/i2c_master.h>
@@ -93,6 +94,7 @@ private:
     std::atomic<int64_t> standby_started_{0};
     std::atomic<bool> standby_reply_heard_{false};
     httpd_handle_t control_server_ = nullptr;
+    pao::WebSocketController websocket_controller_;
     i2c_master_bus_handle_t display_i2c_bus_ = nullptr;
     esp_lcd_panel_io_handle_t display_panel_io_ = nullptr;
     esp_lcd_panel_handle_t display_panel_ = nullptr;
@@ -823,6 +825,14 @@ private:
 
     static esp_err_t WebSocketControl(httpd_req_t* req) {
         if (req->method == HTTP_GET) { return ESP_OK; }
+        auto* board = static_cast<PaoBoard*>(req->user_ctx);
+        const int fd = httpd_req_to_sockfd(req);
+        if (board == nullptr || !board->websocket_controller_.Owns(fd) ||
+            httpd_sess_get_ctx(req->handle, fd) != board ||
+            httpd_ws_get_fd_info(req->handle, fd) != HTTPD_WS_CLIENT_WEBSOCKET) {
+            ESP_LOGW(TAG, "Rejected WebSocket control from non-owner fd=%d", fd);
+            return ESP_ERR_INVALID_STATE;
+        }
         httpd_ws_frame_t frame = {};
         ESP_RETURN_ON_ERROR(httpd_ws_recv_frame(req, &frame, 0), TAG, "Cannot read WebSocket frame");
         if (frame.type != HTTPD_WS_TYPE_TEXT || frame.len == 0 || frame.len > 512 || !frame.final) {
@@ -840,7 +850,6 @@ private:
             std::strlen(path->valuestring) > 64 || std::strlen(query->valuestring) > 127) {
             return ESP_ERR_INVALID_ARG;
         }
-        auto* board = static_cast<PaoBoard*>(req->user_ctx);
         CJsonUniquePtr response(cJSON_CreateObject());
         cJSON_AddNumberToObject(response.get(), "id", id->valueint);
         std::string error;
@@ -862,7 +871,59 @@ private:
         return httpd_ws_send_frame(req, &frame);
     }
 
-    // 局域网遥控页，参数范围与同名 MCP 工具一致；没有鉴权，只应在可信网络中使用。
+    static void KeepSessionContext(void*) {}
+
+    bool IsLiveWebSocketControl(int fd) {
+        return control_server_ != nullptr &&
+               httpd_sess_get_ctx(control_server_, fd) == this &&
+               httpd_ws_get_fd_info(control_server_, fd) != HTTPD_WS_CLIENT_INVALID;
+    }
+
+    static esp_err_t RejectWebSocketHandshake(httpd_req_t* req, const char* status,
+                                              const char* message) {
+        httpd_resp_set_status(req, status);
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        httpd_resp_set_hdr(req, "Connection", "close");
+        httpd_resp_sendstr(req, message);
+        return ESP_FAIL;
+    }
+
+    static esp_err_t WebSocketHandshake(httpd_req_t* req) {
+        auto* board = static_cast<PaoBoard*>(req->user_ctx);
+        if (board == nullptr) {
+            return ESP_FAIL;
+        }
+
+        char host[pao::kWebSocketHeaderMaxLength] = {};
+        if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK || host[0] == '\0') {
+            ESP_LOGW(TAG, "WebSocket handshake rejected: missing Host");
+            return RejectWebSocketHandshake(req, "400 Bad Request", "Host header required");
+        }
+
+        char origin[pao::kWebSocketHeaderMaxLength] = {};
+        const auto origin_error = httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin));
+        if (origin_error == ESP_OK &&
+            !pao::WebSocketOriginAllowed(host, true, origin)) {
+            ESP_LOGW(TAG, "WebSocket handshake rejected: Origin=%s Host=%s", origin, host);
+            return RejectWebSocketHandshake(req, "403 Forbidden", "Origin does not match Host");
+        }
+        if (origin_error != ESP_OK && origin_error != ESP_ERR_NOT_FOUND) {
+            ESP_LOGW(TAG, "WebSocket handshake rejected: invalid Origin header");
+            return RejectWebSocketHandshake(req, "403 Forbidden", "Invalid Origin header");
+        }
+
+        const int fd = httpd_req_to_sockfd(req);
+        if (!board->websocket_controller_.Acquire(
+                fd, [board](int candidate) { return board->IsLiveWebSocketControl(candidate); })) {
+            ESP_LOGW(TAG, "WebSocket handshake rejected: controller already active");
+            return RejectWebSocketHandshake(req, "409 Conflict", "Another WebSocket controller is active");
+        }
+        httpd_sess_set_ctx(board->control_server_, fd, board, KeepSessionContext);
+        ESP_LOGI(TAG, "WebSocket controller acquired: fd=%d", fd);
+        return ESP_OK;
+    }
+
+    // 局域网遥控页，参数范围与同名 MCP 工具一致；没有身份认证，只应在可信网络中使用。
     void StartControlServer() {
         if (control_server_ != nullptr) {
             return;
@@ -891,6 +952,7 @@ private:
         websocket.handler = WebSocketControl;
         websocket.user_ctx = this;
         websocket.is_websocket = true;
+        websocket.ws_pre_handshake_cb = WebSocketHandshake;
         ESP_ERROR_CHECK(httpd_register_uri_handler(control_server_, &websocket));
         ESP_LOGI(TAG, "Control page: http://%s/", WifiManager::GetInstance().GetIpAddress().c_str());
     }
