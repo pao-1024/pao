@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAO 发射器 —— 工作原理动画</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;
+        --dim:#8b949e;--accent:#2f81f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center}
+  header{padding:22px 16px 10px;text-align:center}
+  h1{margin:0 0 6px;font-size:20px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px}
+  .wrap{width:100%;max-width:1180px;padding:0 16px 36px}
+  canvas{width:100%;height:auto;display:block;background:#0b0f14;
+    border:1px solid var(--line);border-radius:10px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    margin-top:14px;padding:12px 14px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px}
+  button{background:#21262d;color:var(--fg);border:1px solid var(--line);
+    padding:7px 14px;border-radius:7px;cursor:pointer;font-size:13px}
+  button:hover{background:#30363d}
+  button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  button.fire{background:#da3633;border-color:#da3633;color:#fff}
+  button.fire:hover{background:#f85149}
+  label.ctl{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:13px}
+  input[type=range]{width:110px;accent-color:var(--accent)}
+  .readout{margin-left:auto;display:flex;gap:18px;
+    font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim)}
+  .readout b{color:var(--fg);font-weight:600}
+  .legend{margin-top:14px;display:grid;gap:8px;
+    grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .lg{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;font-size:13px}
+  .sw{width:12px;height:12px;border-radius:3px;margin-top:4px;flex:none}
+  .lg b{display:block;margin-bottom:2px}
+  .lg span{color:var(--dim)}
+  .note{margin-top:14px;padding:12px 14px;font-size:13px;color:var(--dim);
+    background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:8px}
+  .note b{color:var(--fg)}
+  code{background:#21262d;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>PAO 发射器 · 工作原理</h1>
+  <div class="sub">单轮上压式摩擦发射 —— 弹丸叠在轮顶，被轮缘拖入咬口甩出</div>
+</header>
+
+<div class="wrap">
+  <canvas id="cv" width="1180" height="540"></canvas>
+
+  <div class="bar">
+    <button id="btnMotor" class="on">电机 开</button>
+    <button id="btnFire" class="fire">发射（空格）</button>
+    <button id="btnFill">装弹</button>
+    <button id="btnReset">重置（R）</button>
+    <label class="ctl">慢放
+      <input id="spd" type="range" min="4" max="100" value="18">
+      <span id="spdv">0.18×</span></label>
+    <div class="readout">
+      <div>轮速 <b id="rpm">—</b></div>
+      <div>出膛 <b id="mps">—</b></div>
+      <div>余弹 <b id="left">0</b></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><div class="sw" style="background:#1f6feb"></div>
+      <div><b>底板 base-plate</b><span>承载全部零件</span></div></div>
+    <div class="lg"><div class="sw" style="background:#238636"></div>
+      <div><b>送弹斜坡 ramp</b><span>引导弹丸进入轮缘咬口</span></div></div>
+    <div class="lg"><div class="sw" style="background:#1f4e8c"></div>
+      <div><b>弹道筒 barrel</b><span>喉部兼弹仓，前段加盖成封闭弹道</span></div></div>
+    <div class="lg"><div class="sw" style="background:#f0883e"></div>
+      <div><b>摩擦轮 flywheel</b><span>悬于弹道正上方，轮缘压入弹丸 1 mm</span></div></div>
+  </div>
+
+  <div class="note">
+    <b>为什么弹仓必须和轮共位？</b>
+    单轮从<b>上方</b>压弹，储弹腔若不在轮正上方，弹丸落在轮边上就进不了咬口。
+    所以喉部本身就是弹仓，弹丸一列叠在轮顶。轮转动时把最底下一发沿轮面往下拖，
+    压过轮下 <code>10 mm</code> 的缝（弹丸 11 mm，纸团可压缩），挤压加速后甩出。
+    这一段没有弹簧、没有推杆，全靠轮缘摩擦与重力。
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- 几何（对应 params.scad） ----------
+const P = {
+  baseX:100, baseT:6, railGap:13,
+  barX0:2, throatX1:38, barX1:98,
+  wallTop:22, throatH:64, lidT:4,
+  fwX:24, fwR:12, ballD:11,
+  rampX0:4, rampX1:20, rampH:10, wall:2.4,
+};
+const BR = P.ballD / 2;
+const FW_ZC     = P.baseT + P.ballD - 1 + P.fwR;   // 28
+const WHEEL_TOP = FW_ZC + P.fwR;                   // 40
+const THROAT_TOP= P.baseT + P.throatH;             // 70
+const LID_Z     = P.baseT + P.wallTop;             // 28
+const MUZZLE    = P.barX1;
+const GAP       = P.ballD - 1;                     // 10
+const BALL_Z    = P.baseT + BR;                    // 11.5
+const STACK_X   = P.fwX;
+const STACK_Z0  = WHEEL_TOP + BR;                  // 45.5
+
+// ---------- 物理 ----------
+const G = 9000, V_LAUNCH = 2500;
+
+// ---------- 画布 ----------
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const VW = 176;            // 视野宽 mm
+let s = 1, cssH = 540, groundY = 490;
+
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = cv.clientWidth || 1180;
+  cssH = Math.round(cssW * 540 / 1180);
+  cv.width  = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  cv.style.height = cssH + 'px';
+  s = cssW / VW;
+  groundY = cssH - 28;
+}
+const X = x => (x + 10) * s;
+const Z = z => groundY - z * s;
+
+// ---------- 状态 ----------
+const S = {
+  motorOn:true, wheelAng:0, rpm:9000, tScale:0.18,
+  stack:[], active:null, fired:[], lastV:null,
+};
+
+function refill(n = 2) {
+  S.stack = [];
+  for (let i = 0; i < n; i++)
+    S.stack.push({ x:STACK_X, z:STACK_Z0 + i * P.ballD });
+}
+
+function fire() {
+  if (S.active || !S.stack.length) return;
+  const b = S.stack.pop();
+  S.active = { x:b.x, z:b.z, z0:b.z, vx:0, vz:0, t:0, phase:'pinch', trail:[] };
+}
+
+// ---------- 更新 ----------
+function update(dtR) {
+  const dt = dtR * S.tScale;
+  if (S.motorOn) S.wheelAng += (S.rpm / 60) * 2 * Math.PI * dt;
+
+  const b = S.active;
+  if (!b) return;
+
+  if (b.phase === 'pinch') {
+    const k = S.motorOn ? 0.030 : 0.004;
+    b.vx += (V_LAUNCH - b.vx) * k * dt * 60;
+    b.vx = Math.min(b.vx, V_LAUNCH);
+    b.x += b.vx * dt;
+    b.t  = Math.min(1, b.t + dt * 6);
+    b.z  = b.z0 + (BALL_Z - b.z0) * b.t;
+    if (b.x >= MUZZLE) { b.phase = 'fly'; S.lastV = b.vx; }
+  } else {
+    b.vz -= G * dt;
+    b.x += b.vx * dt;
+    b.z += b.vz * dt;
+    b.trail.push({x:b.x, z:b.z});
+    if (b.trail.length > 140) b.trail.shift();
+    if (b.z < BR || b.x > 300) {
+      S.fired.push(b);
+      if (S.fired.length > 2) S.fired.shift();
+      S.active = null;
+    }
+  }
+}
+
+// ---------- 绘制 ----------
+function box(x0, z0, x1, z1, fill) {
+  ctx.fillStyle = fill;
+  ctx.fillRect(X(x0), Z(z1), X(x1) - X(x0), Z(z0) - Z(z1));
+}
+
+function drawScene() {
+  const W = cv.width, H = cv.height;
+  const dpr = W / (cv.clientWidth || W);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, Z(0)); ctx.lineTo(cv.clientWidth, Z(0)); ctx.stroke();
+
+  // 底板
+  box(0, 0, P.baseX, P.baseT, '#1f6feb');
+
+  // 弹道筒：远侧壁
+  box(P.barX0, P.baseT, P.throatX1, THROAT_TOP, '#16324f');
+  box(P.throatX1, P.baseT, MUZZLE, LID_Z + P.lidT, '#16324f');
+
+  // 内腔
+  const wi = P.wall;
+  box(P.barX0 + wi, P.baseT, P.throatX1 - wi, THROAT_TOP - wi, '#0e141c');
+  box(P.throatX1 - wi, P.baseT, MUZZLE, LID_Z, '#0e141c');
+
+  // 近侧壁
+  box(P.barX0, P.baseT, P.barX0 + wi, THROAT_TOP, '#1f4e8c');
+  box(P.throatX1 - wi, P.baseT, P.throatX1, THROAT_TOP, '#1f4e8c');
+  box(P.throatX1, LID_Z, MUZZLE, LID_Z + P.lidT, '#1f4e8c');
+
+  // 送弹斜坡（画在内腔之后，否则会被盖住）
+  ctx.fillStyle = '#238636';
+  ctx.beginPath();
+  ctx.moveTo(X(P.rampX0), Z(P.baseT));
+  ctx.lineTo(X(P.rampX0), Z(P.baseT + P.rampH));
+  ctx.lineTo(X(P.rampX1), Z(P.baseT));
+  ctx.closePath(); ctx.fill();
+
+  // 摩擦轮
+  const cx = X(P.fwX), cy = Z(FW_ZC), r = P.fwR * s;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(S.wheelAng);
+  const gr = ctx.createRadialGradient(0, 0, r * .2, 0, 0, r);
+  gr.addColorStop(0, '#ffb06b'); gr.addColorStop(1, '#b8530e');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#0e141c';
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * r * .6, Math.sin(a) * r * .6, r * .15, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#7a3803';
+  ctx.beginPath(); ctx.arc(0, 0, r * .18, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // 咬口间隙（画在轮下，指向底板顶面）
+  const gx = cx - r * 0.55;
+  const gy0 = Z(FW_ZC - P.fwR), gy1 = Z(P.baseT);
+  ctx.strokeStyle = 'rgba(248,81,73,.85)';
+  ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(gx, gy0); ctx.lineTo(gx, gy1); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#f85149'; ctx.font = '600 11px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(GAP + ' mm', gx + 6, gy1 - 4);
+
+  // 弹丸
+  const ball = (x, z, a = 1) => {
+    ctx.save(); ctx.globalAlpha = a;
+    const rr = BR * s;
+    const g2 = ctx.createRadialGradient(
+      X(x) - rr * .3, Z(z) - rr * .3, rr * .15, X(x), Z(z), rr);
+    g2.addColorStop(0, '#fff'); g2.addColorStop(1, '#a8b2be');
+    ctx.fillStyle = g2;
+    ctx.beginPath(); ctx.arc(X(x), Z(z), rr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.32)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+  };
+
+  for (const f of S.fired)
+    if (f.trail.length > 1) {
+      ctx.strokeStyle = 'rgba(245,245,245,.15)'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      f.trail.forEach((t, i) => i ? ctx.lineTo(X(t.x), Z(t.z)) : ctx.moveTo(X(t.x), Z(t.z)));
+      ctx.stroke();
+    }
+
+  for (const b of S.stack) ball(b.x, b.z);
+
+  if (S.active) {
+    const b = S.active;
+    ball(b.x, b.z);
+    if (b.phase === 'pinch') {
+      ctx.strokeStyle = 'rgba(248,81,73,.6)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(X(b.x - 18), Z(b.z)); ctx.lineTo(X(b.x - 3), Z(b.z));
+      ctx.stroke();
+    }
+  }
+
+  // 标注
+  ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#8b949e';
+  ctx.fillText('弹仓（喉部）', X(P.barX0 + 4), Z(THROAT_TOP) - 6);
+  ctx.fillText('送弹斜坡', X(5), Z(9));
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('摩擦轮', X(P.fwX) + P.fwR * s + 20, Z(FW_ZC) - 2);
+  ctx.fillText('枪口', X(MUZZLE) - 26, Z(LID_Z + P.lidT) - 8);
+}
+
+// ---------- 主循环 ----------
+const elRpm = document.getElementById('rpm');
+const elMps = document.getElementById('mps');
+const elLeft = document.getElementById('left');
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  update(dt);
+  drawScene();
+  elRpm.textContent = S.motorOn ? S.rpm.toLocaleString() : '0';
+  elMps.textContent = S.lastV ? (S.lastV / 1000).toFixed(2) + ' m/s' : '—';
+  elLeft.textContent = S.stack.length;
+  requestAnimationFrame(loop);
+}
+
+// ---------- 交互 ----------
+const btnMotor = document.getElementById('btnMotor');
+btnMotor.onclick = () => {
+  S.motorOn = !S.motorOn;
+  btnMotor.classList.toggle('on', S.motorOn);
+  btnMotor.textContent = '电机 ' + (S.motorOn ? '开' : '关');
+};
+document.getElementById('btnFire').onclick = () => {
+  if (!S.motorOn) btnMotor.click();
+  fire();
+};
+document.getElementById('btnFill').onclick = () => refill(2);
+document.getElementById('btnReset').onclick = () => {
+  S.stack = []; S.active = null; S.fired = []; S.lastV = null; refill(2);
+};
+const spd = document.getElementById('spd'), spdv = document.getElementById('spdv');
+spd.oninput = () => {
+  S.tScale = +spd.value / 100;
+  spdv.textContent = S.tScale.toFixed(2) + '×';
+};
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); document.getElementById('btnFire').click(); }
+  if (e.key === 'r' || e.key === 'R') document.getElementById('btnReset').click();
+});
+addEventListener('resize', fit);
+
+fit();
+refill(2);
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
