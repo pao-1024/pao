@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>皮筋发射器 —— 刚体动力学仿真</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--accent:#2f81f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center}
+  header{padding:20px 16px 8px;text-align:center}
+  h1{margin:0 0 5px;font-size:20px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px}
+  .wrap{width:100%;max-width:1180px;padding:0 16px 34px}
+  canvas{width:100%;height:auto;display:block;background:#0b0f14;
+    border:1px solid var(--line);border-radius:10px}
+  .bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+    margin-top:12px;padding:11px 14px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;font-size:13px}
+  button{background:#21262d;color:var(--fg);border:1px solid var(--line);
+    padding:7px 14px;border-radius:7px;cursor:pointer;font-size:13px}
+  button:hover{background:#30363d}
+  button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  .ctl{display:flex;align-items:center;gap:7px;color:var(--dim)}
+  input[type=range]{width:92px;accent-color:var(--accent)}
+  .val{color:var(--fg);font-variant-numeric:tabular-nums;min-width:66px;display:inline-block}
+  .readout{margin-left:auto;display:flex;gap:16px;color:var(--dim);
+    font-variant-numeric:tabular-nums}
+  .readout b{color:var(--fg)}
+  .note{margin-top:12px;padding:11px 14px;font-size:13px;color:var(--dim);
+    background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:8px}
+  .note b{color:var(--fg)}
+  code{background:#21262d;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>皮筋发射器 · 刚体动力学仿真</h1>
+  <div class="sub">planck.js（Box2D 移植）· 单轴 + 销子 + 带凸台圆板 · 真实接触求解</div>
+</header>
+
+<div class="wrap">
+  <canvas id="cv" width="1180" height="540"></canvas>
+
+  <div class="bar">
+    <button id="btnRun" class="on">暂停</button>
+    <button id="btnReset">重置</button>
+    <label class="ctl">慢放 <input id="spd" type="range" min="2" max="100" value="15">
+      <span class="val" id="spdv">0.15×</span></label>
+    <label class="ctl">电机扭矩 <input id="torq" type="range" min="2" max="30" value="8">
+      <span class="val" id="torqv">0.8 kgf·cm</span></label>
+    <label class="ctl">皮筋 <input id="k" type="range" min="2" max="40" value="10">
+      <span class="val" id="kv">0.10 N·m/rad</span></label>
+    <div class="readout">
+      <div>转角 <b id="rPlate">—</b></div>
+      <div>弹速 <b id="rBall">—</b></div>
+      <div>发射 <b id="rShots">0</b></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>结构就三样东西：</b>
+    ① 电机轴穿过圆板中心　② 轴上有个销子跟着转　③ 圆板背面有凸台被销子顶住。
+    销子推着凸台走，转到某个角度就滑出去，皮筋把圆板打回去——
+    打击臂扫过弹丸，出膛。
+  </div>
+</div>
+
+<script src="planck.min.js"></script>
+<script>
+(() => {
+'use strict';
+if (typeof planck === 'undefined') { document.body.innerHTML += '<p>planck 未加载</p>'; return; }
+const pl = planck, Vec2 = pl.Vec2;
+const MM = 0.001, mm = v => v * MM;
+
+/* ---- 几何（mm） ---- */
+const G = {
+  baseX:150, baseT:6,
+  barrelX0:74, barrelX1:150, boreTop:26,
+  magX:86, magH:40, ballD:11,
+  Px:64, Pz:38,
+  plateR:14, armR:34, lobeR:15,
+  armRestDeg:-62,
+  tailAng:200,
+  postR:9, postD:6,
+};
+const BALL_R = mm(G.ballD/2);
+const BALL_MASS = 0.0005;
+const BALL_DENSITY = BALL_MASS / (Math.PI*BALL_R*BALL_R);
+
+const P = {
+  motorTorque: 0.078, motorRPM: 200,
+  springK: 0.10, springC: 0.003,
+  timeScale: 0.15, running: true,
+};
+
+let world, plate, axle, ballBody, restAngle, groundBody;
+let shots = 0, peakV = 0;
+const DT = 1/600;
+
+function buildWorld() {
+  world = new pl.World({ gravity: Vec2(0,-9.8) });
+
+  const ground = world.createBody({ type:'static' });
+  groundBody = ground;
+  ground.createFixture(pl.Edge(Vec2(0,mm(G.baseT)), Vec2(mm(G.baseX),mm(G.baseT))),
+    { friction:0.6 });
+  const holeL = G.magX - G.ballD/2 - 1, holeR = G.magX + G.ballD/2 + 1;
+  ground.createFixture(pl.Box(mm(holeL-G.barrelX0)/2, mm(2),
+    Vec2(mm((G.barrelX0+holeL)/2), mm(G.boreTop-2)), 0), { friction:0.3 });
+  ground.createFixture(pl.Box(mm(G.barrelX1-holeR)/2, mm(2),
+    Vec2(mm((holeR+G.barrelX1)/2), mm(G.boreTop-2)), 0), { friction:0.3 });
+  for (const s of [-1,1])
+    ground.createFixture(pl.Box(mm(2), mm(G.magH)/2,
+      Vec2(mm(G.magX+s*(G.ballD/2+2.8)), mm(G.boreTop+G.magH/2)), 0), { friction:0.3 });
+  ground.createFixture(pl.Edge(Vec2(mm(195),0), Vec2(mm(195),mm(70))), { friction:0.2 });
+
+  /* ---- 圆板 ---- */
+  plate = world.createBody({
+    type:'dynamic', position: Vec2(mm(G.Px), mm(G.Pz)),
+    angularDamping: 0.08, linearDamping: 0.05,
+  });
+  plate.createFixture(pl.Circle(mm(G.plateR)), { density:150, friction:0.4 });
+  const ta = G.tailAng*Math.PI/180;
+  plate.createFixture(pl.Box(mm(5), mm(4),
+    Vec2(mm(G.lobeR*Math.cos(ta)), mm(G.lobeR*Math.sin(ta))), ta),
+    { density:150, friction:0.5 });
+  const ra = G.armRestDeg*Math.PI/180, wa = Math.atan2(4, G.armR);
+  plate.createFixture(pl.Polygon([
+    Vec2(0,0),
+    Vec2(mm(G.armR*Math.cos(ra-wa)), mm(G.armR*Math.sin(ra-wa))),
+    Vec2(mm(G.armR*Math.cos(ra+wa)), mm(G.armR*Math.sin(ra+wa))),
+  ]), { density:150, friction:0.4 });
+  plate.createFixture(pl.Box(mm(3.5), mm(4.5),
+    Vec2(mm(G.armR*Math.cos(ra)), mm(G.armR*Math.sin(ra))), ra),
+    { density:250, friction:0.5 });
+
+  world.createJoint(pl.RevoluteJoint({ collideConnected:false },
+    ground, plate, Vec2(mm(G.Px), mm(G.Pz))));
+  restAngle = plate.getAngle();
+
+  /* ---- 电机轴 + 销子 ---- */
+  axle = world.createBody({ type:'dynamic', position: Vec2(mm(G.Px), mm(G.Pz)) });
+  axle.createFixture(pl.Circle(mm(3)), { density:500, friction:0.1 });
+  axle.createFixture(pl.Circle(mm(G.postD/2), Vec2(mm(G.postR),0)),
+    { density:900, friction:0.5 });
+  world.createJoint(pl.RevoluteJoint({
+    enableMotor:true, motorSpeed:-P.motorRPM*2*Math.PI/60,
+    maxMotorTorque:P.motorTorque, collideConnected:true,
+  }, ground, axle, Vec2(mm(G.Px), mm(G.Pz))));
+  axle.setAngle(G.tailAng*Math.PI/180);
+
+  spawnBall();
+}
+
+function spawnBall() {
+  if (ballBody) { world.destroyBody(ballBody); ballBody = null; }
+  ballBody = world.createBody({
+    type:'dynamic', bullet:true,
+    position: Vec2(mm(G.magX), mm(G.baseT+G.ballD/2+0.3)),
+    linearDamping:0.04, angularDamping:0.4,
+  });
+  ballBody.createFixture(pl.Circle(BALL_R),
+    { density:BALL_DENSITY, friction:0.3, restitution:0.15 });
+}
+
+function simulate(frameDt) {
+  const simTime = frameDt * P.timeScale;
+  let n = Math.min(Math.round(simTime/DT), 400);
+  for (let i=0;i<n;i++) {
+    const th = plate.getAngle() - restAngle;
+    const w  = plate.getAngularVelocity();
+    plate.applyTorque(-P.springK*th - P.springC*w, true);
+    world.step(DT, 8, 3);
+  }
+  if (ballBody) {
+    const v = ballBody.getLinearVelocity(), sp = Math.hypot(v.x,v.y);
+    if (sp > peakV) peakV = sp;
+    if (ballBody.getPosition().x > mm(190)) { shots++; spawnBall(); peakV = 0; }
+  }
+}
+
+/* ---- 绘制 ---- */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let SC=1, OY=0, cssW=1180, cssH=540;
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  cssW = cv.clientWidth || 1180;
+  cssH = Math.round(cssW*540/1180);
+  cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+  cv.style.height = cssH+'px';
+  SC = (cssW-56)/175; OY = cssH-38;
+}
+const X = x => 28 + x*SC, Z = y => OY - y*SC;
+
+function bodyPoly(b, verts, fill, stroke) {
+  const p = b.getPosition(), a = b.getAngle();
+  ctx.beginPath();
+  verts.forEach((v,i) => {
+    const x = (p.x + v[0]*Math.cos(a) - v[1]*Math.sin(a))/MM;
+    const y = (p.y + v[0]*Math.sin(a) + v[1]*Math.cos(a))/MM;
+    i ? ctx.lineTo(X(x),Z(y)) : ctx.moveTo(X(x),Z(y));
+  });
+  ctx.closePath();
+  if (fill){ ctx.fillStyle=fill; ctx.fill(); }
+  if (stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=1.2; ctx.stroke(); }
+}
+
+function draw() {
+  const dpr = cv.width/cssW;
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  ctx.strokeStyle='#21262d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,Z(0)); ctx.lineTo(cssW,Z(0)); ctx.stroke();
+
+  ctx.fillStyle='#1f6feb';
+  ctx.fillRect(X(0), Z(G.baseT), G.baseX*SC, G.baseT*SC);
+  ctx.fillStyle='#1f4e8c';
+  ctx.fillRect(X(G.barrelX0), Z(G.boreTop), (G.barrelX1-G.barrelX0)*SC, 2*SC);
+  for (const s of [-1,1])
+    ctx.fillRect(X(G.magX+s*(G.ballD/2+2.8))-1.5*SC, Z(G.boreTop+G.magH), 3*SC, G.magH*SC);
+
+  // 皮筋
+  const ta = G.tailAng*Math.PI/180 + (plate.getAngle()-restAngle);
+  const tx = G.Px + G.lobeR*Math.cos(ta), ty = G.Pz + G.lobeR*Math.sin(ta);
+  ctx.strokeStyle='#3fb950'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(X(tx),Z(ty)); ctx.lineTo(X(10),Z(46)); ctx.stroke();
+  ctx.fillStyle='#1f6f3a';
+  ctx.fillRect(X(10)-2.5*SC, Z(46), 5*SC, (46-G.baseT)*SC);
+
+  // 电机
+  ctx.fillStyle='#c9b400';
+  ctx.fillRect(X(G.Px-4)-11*SC, Z(G.baseT+21), 22*SC, 18*SC);
+
+  // 圆板
+  const pp = plate.getPosition();
+  ctx.beginPath(); ctx.arc(X(pp.x/MM), Z(pp.y/MM), G.plateR*SC, 0, Math.PI*2);
+  ctx.fillStyle='#1f4e8c'; ctx.fill();
+  ctx.strokeStyle='#5a9adf'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // 凸台
+  const TA = G.tailAng*Math.PI/180;
+  bodyPoly(plate, [
+    [mm(G.lobeR*Math.cos(TA)-5*Math.sin(TA)), mm(G.lobeR*Math.sin(TA)+5*Math.cos(TA))],
+    [mm(G.lobeR*Math.cos(TA)+5*Math.sin(TA)), mm(G.lobeR*Math.sin(TA)-5*Math.cos(TA))],
+    [mm((G.lobeR+8)*Math.cos(TA)+5*Math.sin(TA)), mm((G.lobeR+8)*Math.sin(TA)-5*Math.cos(TA))],
+    [mm((G.lobeR+8)*Math.cos(TA)-5*Math.sin(TA)), mm((G.lobeR+8)*Math.sin(TA)+5*Math.cos(TA))],
+  ], '#2a6ab8', '#5a9adf');
+
+  // 打击臂 + 块
+  const ra = G.armRestDeg*Math.PI/180, wa = Math.atan2(4, G.armR);
+  bodyPoly(plate, [
+    [0,0],
+    [mm(G.armR*Math.cos(ra-wa)), mm(G.armR*Math.sin(ra-wa))],
+    [mm(G.armR*Math.cos(ra+wa)), mm(G.armR*Math.sin(ra+wa))],
+  ], '#2a6ab8', '#5a9adf');
+  const bx0 = G.armR*Math.cos(ra), by0 = G.armR*Math.sin(ra);
+  bodyPoly(plate, [
+    [mm(bx0-3.5*Math.cos(ra)+4.5*Math.sin(ra)), mm(by0-3.5*Math.sin(ra)-4.5*Math.cos(ra))],
+    [mm(bx0+3.5*Math.cos(ra)+4.5*Math.sin(ra)), mm(by0+3.5*Math.sin(ra)-4.5*Math.cos(ra))],
+    [mm(bx0+3.5*Math.cos(ra)-4.5*Math.sin(ra)), mm(by0+3.5*Math.sin(ra)+4.5*Math.cos(ra))],
+    [mm(bx0-3.5*Math.cos(ra)-4.5*Math.sin(ra)), mm(by0-3.5*Math.sin(ra)+4.5*Math.cos(ra))],
+  ], '#c94040', '#e86a6a');
+
+  // 销子
+  const aa = axle.getAngle();
+  const axx = G.Px + G.postR*Math.cos(aa), axy = G.Pz + G.postR*Math.sin(aa);
+  ctx.beginPath(); ctx.arc(X(axx),Z(axy), (G.postD/2)*SC, 0, Math.PI*2);
+  ctx.fillStyle='#f0883e'; ctx.fill();
+  ctx.strokeStyle='#ffb06b'; ctx.lineWidth=1.5; ctx.stroke();
+
+  // 弹丸
+  if (ballBody) {
+    const bp = ballBody.getPosition(), r = BALL_R/MM*SC;
+    const g = ctx.createRadialGradient(X(bp.x/MM)-r*.3, Z(bp.y/MM)-r*.3, r*.15,
+                                       X(bp.x/MM), Z(bp.y/MM), r);
+    g.addColorStop(0,'#fff'); g.addColorStop(1,'#aab4c0');
+    ctx.fillStyle=g; ctx.beginPath();
+    ctx.arc(X(bp.x/MM), Z(bp.y/MM), r, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.font='12px sans-serif'; ctx.fillStyle='#8b949e'; ctx.textAlign='left';
+  ctx.fillText('电机轴（穿过圆板）', X(G.Px)-64, Z(G.Pz+G.plateR+9));
+  ctx.fillText('销子', X(axx)+10, Z(axy)-8);
+  ctx.fillText('凸台', X(tx)-32, Z(ty)+18);
+  ctx.fillText('打击臂', X(G.Px)+18, Z(G.Pz)-26);
+  ctx.fillText('皮筋', X(30), Z(44));
+  ctx.fillText('弹仓', X(G.magX)+32, Z(G.boreTop+G.magH*0.7));
+  ctx.fillText('弹道筒', X(G.barrelX0+30), Z(G.boreTop-5));
+}
+
+const elP=document.getElementById('rPlate'), elB=document.getElementById('rBall'),
+      elS=document.getElementById('rShots');
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000,0.05); last=now;
+  if (P.running) simulate(dt);
+  draw();
+  elP.textContent = ((plate.getAngle()-restAngle)*180/Math.PI).toFixed(1)+'°';
+  elB.textContent = (peakV*1000).toFixed(1)+' m/s';
+  elS.textContent = shots;
+  requestAnimationFrame(loop);
+}
+
+const btnRun=document.getElementById('btnRun');
+btnRun.onclick=()=>{ P.running=!P.running;
+  btnRun.classList.toggle('on',P.running);
+  btnRun.textContent=P.running?'暂停':'继续'; };
+document.getElementById('btnReset').onclick=()=>{ shots=0; peakV=0;
+  world.destroy(); buildWorld(); };
+const spd=document.getElementById('spd'), spdv=document.getElementById('spdv');
+spd.oninput=()=>{ P.timeScale=+spd.value/100; spdv.textContent=P.timeScale.toFixed(2)+'×'; };
+const torq=document.getElementById('torq'), torqv=document.getElementById('torqv');
+torq.oninput=()=>{ P.motorTorque=+torq.value/100;
+  torqv.textContent=(P.motorTorque*10.2).toFixed(1)+' kgf·cm';
+  if (axle) {
+    for (let j = axle.getJointList(); j; j = j.next) {
+      if (j.joint.getJointType && j.joint.getJointType() === 'revolute')
+        j.joint.setMaxMotorTorque(P.motorTorque);
+    }
+  }
+};
+const kk=document.getElementById('k'), kv=document.getElementById('kv');
+kk.oninput=()=>{ P.springK=+kk.value/100; kv.textContent=P.springK.toFixed(3)+' N·m/rad'; };
+addEventListener('resize',fit);
+
+fit(); buildWorld();
+window.__w = () => ({shots, peakV:peakV*1000,
+  plateDeg:(plate.getAngle()-restAngle)*180/Math.PI,
+  axleRPM:-axle.getAngularVelocity()*60/(2*Math.PI)});
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
