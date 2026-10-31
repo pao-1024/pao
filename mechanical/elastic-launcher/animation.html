@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PAO 皮筋储能发射器 —— 自动循环原理</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;
+        --dim:#8b949e;--accent:#2f81f7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;align-items:center}
+  header{padding:22px 16px 10px;text-align:center}
+  h1{margin:0 0 6px;font-size:20px;font-weight:600}
+  .sub{color:var(--dim);font-size:13px}
+  .wrap{width:100%;max-width:1180px;padding:0 16px 36px}
+  canvas{width:100%;height:auto;display:block;background:#0b0f14;
+    border:1px solid var(--line);border-radius:10px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    margin-top:14px;padding:12px 14px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px}
+  button{background:#21262d;color:var(--fg);border:1px solid var(--line);
+    padding:7px 14px;border-radius:7px;cursor:pointer;font-size:13px}
+  button:hover{background:#30363d}
+  button.on{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  label.ctl{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:13px}
+  input[type=range]{width:110px;accent-color:var(--accent)}
+  .readout{margin-left:auto;display:flex;gap:18px;
+    font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim)}
+  .readout b{color:var(--fg);font-weight:600}
+  .phase{color:#f0883e;font-weight:600}
+  .legend{margin-top:14px;display:grid;gap:8px;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .lg{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;font-size:13px}
+  .sw{width:12px;height:12px;border-radius:3px;margin-top:4px;flex:none}
+  .lg b{display:block;margin-bottom:2px}
+  .lg span{color:var(--dim)}
+  .note{margin-top:14px;padding:12px 14px;font-size:13px;color:var(--dim);
+    background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--accent);border-radius:8px}
+  .note b{color:var(--fg)}
+  code{background:#21262d;padding:1px 5px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>PAO 皮筋储能发射器 · 自动循环</h1>
+  <div class="sub">电机上弦 → 齿条脱扣 → 皮筋弹射 → 重新咬合，一圈一发</div>
+</header>
+
+<div class="wrap">
+  <canvas id="cv" width="1180" height="560"></canvas>
+
+  <div class="bar">
+    <button id="btnRun" class="on">运行</button>
+    <button id="btnStep">单步</button>
+    <button id="btnReset">重置</button>
+    <label class="ctl">慢放
+      <input id="spd" type="range" min="5" max="100" value="30">
+      <span id="spdv">0.30×</span></label>
+    <div class="readout">
+      <div>阶段 <b class="phase" id="ph">—</b></div>
+      <div>储能 <b id="energy">0 mJ</b></div>
+      <div>初速 <b id="vel">—</b></div>
+      <div>余弹 <b id="left">0</b></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><div class="sw" style="background:#3fb950"></div>
+      <div><b>皮筋</b><span>3 根并联，k=80 N/m，拉伸 22mm 储能 58 mJ</span></div></div>
+    <div class="lg"><div class="sw" style="background:#f0883e"></div>
+      <div><b>滑块 + 击针</b><span>齿条被拖动后移，脱扣瞬间被皮筋弹回</span></div></div>
+    <div class="lg"><div class="sw" style="background:#a371f7"></div>
+      <div><b>齿条 / 小齿轮</b><span>1:25 减速，一圈一发；齿条到尽头自然脱开</span></div></div>
+    <div class="lg"><div class="sw" style="background:#1f4e8c"></div>
+      <div><b>弹道筒 + 弹仓</b><span>击针把弹丸推出膛</span></div></div>
+  </div>
+
+  <div class="note">
+    <b>为什么储能更少反而打得快？</b>
+    摩擦轮储能 123 mJ 看着更多，但轮缘只接触弹丸几毫秒且持续打滑，
+    实际耦合效率约 10%；皮筋是全程直推，效率约 60%。
+    所以 58 mJ 的皮筋 > 123 mJ 的摩擦轮。爆发力来自<b>能量释放的时间尺度</b>，
+    不是功率。
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- 几何（对应 params.scad） ----------
+const G = {
+  baseX:120, baseT:6, baseY:65,
+  bore:13, wall:2.4, barrelX0:74, barrelX1:120, barrelH:22, magH:40,
+  feedX:82, ballD:11,
+  bodyL:30, rodL:22, stroke:22,
+  pinionX:28, pinionZ:22, pinionR:5,
+  restShuttleX:24,          // 滑块本体静止位起点
+  gearR:25,                 // 大齿轮半径
+};
+const BR = G.ballD/2;
+const CYCLE = 1.6;          // 一个循环的秒数（缩放前）
+
+// ---------- 状态 ----------
+const S = {
+  running:true, tScale:0.30, T:0, shots:0, ballsLeft:6,
+  shuttleX:G.restShuttleX, pinionAng:0, ball:null, fired:[],
+  phase:'',
+};
+
+function reset() {
+  S.T = 0; S.shots = 0; S.ballsLeft = 6;
+  S.shuttleX = G.restShuttleX; S.pinionAng = 0;
+  S.ball = { x:G.feedX, z:G.baseT + BR, vx:0, vz:0, alive:true };
+  S.fired = []; S.phase = '待机';
+}
+
+// 循环相位：0..0.62 上弦  0.62..0.70 释放  0.70..1 空转等待再咬合
+const COCK_END = 0.62, REL_END = 0.70;
+
+function step(dt) {
+  if (!S.running) return;
+  S.T += dt;
+  const c = (S.T % CYCLE) / CYCLE;      // 0..1
+  S.pinionAng = S.T / CYCLE * Math.PI * 2 * 1.0;   // 小齿轮近似 1 转/循环
+
+  if (c < COCK_END) {
+    // 上弦：滑块后移
+    const k = c / COCK_END;
+    S.shuttleX = G.restShuttleX - G.stroke * k;
+    S.phase = '上弦';
+  } else if (c < REL_END) {
+    // 释放：滑块被皮筋猛地前推
+    const k = (c - COCK_END) / (REL_END - COCK_END);
+    S.shuttleX = G.restShuttleX - G.stroke * (1 - k);
+    S.phase = '释放';
+    // 击针撞击弹丸
+    if (S.ball && S.ball.alive && k > 0.85) {
+      S.ball.vx = 11800;                 // 11.8 m/s
+      S.ball.launched = true;
+      S.shots++; S.ballsLeft = Math.max(0, S.ballsLeft - 1);
+    }
+  } else {
+    S.shuttleX = G.restShuttleX;
+    S.phase = '等待咬合';
+  }
+
+  // 弹丸运动
+  if (S.ball && S.ball.alive) {
+    if (S.ball.launched) {
+      S.ball.x += S.ball.vx * dt;
+      if (S.ball.x > G.barrelX1 + 40) {
+        S.fired.push({ x:S.ball.x });
+        S.ball = null;
+      }
+    }
+  }
+  // 重新装弹
+  if (!S.ball && S.ballsLeft > 0 && c > 0.85) {
+    S.ball = { x:G.feedX, z:G.baseT + BR, vx:0, vz:0, alive:true };
+  }
+}
+
+// ---------- 绘制 ----------
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let sc = 1, groundY = 0, cssW = 1180, cssH = 560;
+
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cssW = cv.clientWidth || 1180;
+  cssH = Math.round(cssW * 560 / 1180);
+  cv.width = Math.round(cssW * dpr);
+  cv.height = Math.round(cssH * dpr);
+  cv.style.height = cssH + 'px';
+  sc = cssW / 150;
+  groundY = cssH - 34;
+}
+const X = x => x * sc + 6;
+const Z = z => groundY - z * sc;
+
+function box(x0,z0,x1,z1,fill){ ctx.fillStyle=fill; ctx.fillRect(X(x0),Z(z1),X(x1)-X(x0),Z(z0)-Z(z1)); }
+
+function drawGear(cx, cz, r, ang, teeth, fill) {
+  ctx.save();
+  ctx.translate(X(cx), Z(cz));
+  ctx.rotate(ang);
+  const rr = r * sc;
+  ctx.fillStyle = fill;
+  // 齿
+  for (let i=0;i<teeth;i++){
+    ctx.save(); ctx.rotate(i/teeth*Math.PI*2);
+    ctx.fillRect(-rr*0.09, -rr-2, rr*0.18, rr*0.22);
+    ctx.restore();
+  }
+  ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.beginPath(); ctx.arc(0,0,rr*0.22,0,Math.PI*2);
+  ctx.fillStyle = '#0b0f14'; ctx.fill();
+  ctx.restore();
+}
+
+function draw() {
+  const dpr = cv.width / cssW;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  // 地面
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,Z(0)); ctx.lineTo(cssW,Z(0)); ctx.stroke();
+
+  // 底板
+  box(0,0,G.baseX,G.baseT,'#1f6feb');
+
+  // 弹道筒（剖视）
+  box(G.barrelX0, G.baseT, G.barrelX1, G.baseT+G.barrelH, '#1f4e8c');
+  box(G.barrelX0+2, G.baseT, G.barrelX1, G.baseT+G.barrelH-2, '#0e141c');
+  // 弹仓
+  box(G.feedX-7.5, G.baseT+G.barrelH, G.feedX+7.5, G.baseT+G.barrelH+G.magH, '#1f4e8c');
+  box(G.feedX-5.5, G.baseT+G.barrelH, G.feedX+5.5, G.baseT+G.barrelH+G.magH, '#0e141c');
+  // 仓内待发弹
+  for (let i=0;i<Math.min(3,S.ballsLeft-1);i++){
+    const zc = G.baseT+G.barrelH+G.magH-8-i*11;
+    ctx.fillStyle='#c9d1d9'; ctx.beginPath();
+    ctx.arc(X(G.feedX), Z(zc), BR*sc, 0, Math.PI*2); ctx.fill();
+  }
+
+  // 皮筋（从滑块后端拉到锚架）
+  const bandX0 = X(S.shuttleX - 2), bandX1 = X(108);
+  const stretch = (S.shuttleX - G.restShuttleX) / G.stroke;   // 0..-1
+  ctx.strokeStyle = '#3fb950';
+  ctx.lineWidth = Math.max(2, 3 + (-stretch)*4);
+  ctx.beginPath();
+  ctx.moveTo(bandX0, Z(G.baseT+9));
+  ctx.lineTo(bandX1, Z(G.baseT+18));
+  ctx.stroke();
+
+  // 滑块本体
+  box(S.shuttleX, G.baseT, S.shuttleX+G.bodyL, G.baseT+11, '#f0883e');
+  // 齿条
+  const rackX0 = S.shuttleX + 4;
+  ctx.fillStyle = '#a371f7';
+  for (let i=0;i<6;i++){
+    const tx = rackX0 + i*(Math.PI);
+    ctx.fillRect(X(tx), Z(G.baseT+13), Math.PI*0.5*sc, 2.5*sc);
+  }
+  // 击针
+  ctx.fillStyle = '#d0d7de';
+  ctx.fillRect(X(S.shuttleX+G.bodyL), Z(G.baseT+8), G.rodL*sc, 3*sc);
+
+  // 小齿轮
+  drawGear(G.pinionX, G.pinionZ, G.pinionR, S.pinionAng, 10, '#a371f7');
+  // 减速齿轮组：用紧凑示意，避免遮挡机构
+  ctx.strokeStyle = '#6e7681'; ctx.lineWidth = 1.5;
+  for (const gx of [10, 18]) {
+    ctx.beginPath();
+    ctx.arc(X(gx), Z(40), 4.5*sc, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#6e7681'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText('两级减速 1:25', X(2), Z(48));
+
+  // 弹丸
+  if (S.ball) {
+    const g = ctx.createRadialGradient(
+      X(S.ball.x)-BR*sc*0.3, Z(S.ball.z)-BR*sc*0.3, BR*sc*0.2,
+      X(S.ball.x), Z(S.ball.z), BR*sc);
+    g.addColorStop(0,'#fff'); g.addColorStop(1,'#aeb8c4');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(X(S.ball.x), Z(S.ball.z), BR*sc, 0, Math.PI*2); ctx.fill();
+  }
+
+  // 标注
+  ctx.font = '11px sans-serif'; ctx.fillStyle = '#8b949e'; ctx.textAlign = 'left';
+  ctx.fillText('皮筋 ×3', X(60), Z(G.baseT+20)-6);
+  ctx.fillText('齿条', X(S.shuttleX+4), Z(G.baseT+16)-6);
+  ctx.fillText('小齿轮 z=10', X(G.pinionX-8), Z(G.pinionZ)-G.pinionR*sc-10);
+  ctx.fillText('弹仓', X(G.feedX+10), Z(G.baseT+G.barrelH+G.magH));
+  ctx.fillText('枪口', X(G.barrelX1)-24, Z(G.baseT+G.barrelH)-6);
+  if (S.shots > 0) {
+    ctx.fillStyle = '#3fb950';
+    ctx.fillText('已发射 ' + S.shots, X(4), Z(G.baseT+G.barrelH+G.magH+10));
+  }
+}
+
+// ---------- 主循环 ----------
+const elPh = document.getElementById('ph');
+const elE = document.getElementById('energy');
+const elV = document.getElementById('vel');
+const elL = document.getElementById('left');
+
+let last = performance.now();
+function loop(now){
+  const dt = Math.min((now-last)/1000, 0.05);
+  last = now;
+  step(dt * S.tScale * 3);      // 让循环在慢放下仍然可读
+  draw();
+  elPh.textContent = S.phase;
+  const k = Math.max(0, (G.restShuttleX - S.shuttleX)/G.stroke);
+  elE.textContent = (1.5*80*k*k*Math.pow(G.stroke/1000,2)*1000).toFixed(1) + ' mJ';
+  elV.textContent = (S.ball && S.ball.launched) ? '11.8 m/s' : '—';
+  elL.textContent = S.ballsLeft;
+  requestAnimationFrame(loop);
+}
+
+// ---------- 交互 ----------
+const btnRun = document.getElementById('btnRun');
+btnRun.onclick = () => {
+  S.running = !S.running;
+  btnRun.classList.toggle('on', S.running);
+  btnRun.textContent = S.running ? '运行' : '暂停';
+};
+document.getElementById('btnStep').onclick = () => { S.running = false; btnRun.classList.remove('on'); btnRun.textContent='暂停'; step(0.06); };
+document.getElementById('btnReset').onclick = () => reset();
+const spd = document.getElementById('spd'), spdv = document.getElementById('spdv');
+spd.oninput = () => { S.tScale = +spd.value/100; spdv.textContent = S.tScale.toFixed(2)+'×'; };
+addEventListener('resize', fit);
+
+fit(); reset();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
