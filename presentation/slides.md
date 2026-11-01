@@ -58,11 +58,11 @@ class: slide-light slide-source
 class: slide-light slide-assets
 ---
 
-<div class="eyebrow">ENGINEERING ASSETS / 设计、实现与验收一起版本化</div>
-<h1>全流程工程资产，<br><em>可追溯、可复用、可重建。</em></h1>
+<div class="eyebrow">HARDWARE ASSETS / 硬件设计、实现与验收一起版本化</div>
+<h1>硬件工程资产，<br><em>可追溯、可复用、可重建。</em></h1>
 <div class="assets-body">
   <div class="asset-repository">
-    <span class="detail-label">当前仓库里的真实工程资产</span>
+    <span class="detail-label">当前仓库里的硬件工程资产</span>
     <div><b>电路与图纸</b><code>hardware/index.tsx<br>hardware/schematic.svg</code></div>
     <div><b>固件与配置</b><code>firmware/boards/pao/<br>firmware/base.json</code></div>
     <div><b>仿真与依赖</b><code>simulator/pao-sim/src/<br>simulator/pao-sim/Cargo.lock</code></div>
@@ -78,7 +78,7 @@ class: slide-light slide-assets
 <div class="page-number">03 / 13</div>
 
 <!--
-建议 35 秒。万物皆代码还有一个价值：全流程的工作可以沉淀为可管理的工程资产。电路设计、固件配置、仿真模型与验收规则一起版本化，每次迭代都留下差异和原因；模块与测试也能在后续项目中复用。页面列出当前仓库已跟踪的真实文件，依赖通过 firmware/base.json、Cargo.lock、pnpm-lock.yaml 和 esp32sim gitlink 固定。
+建议 35 秒。把软件工程中成熟的版本管理延伸到硬件工程：电路、图纸、模型和验收规则也能成为可管理的工程资产。电路设计、固件配置、仿真模型与验收规则一起版本化，每次迭代都留下差异和原因；模块与测试也能在后续项目中复用。页面列出当前仓库已跟踪的真实文件，依赖通过 firmware/base.json、Cargo.lock、pnpm-lock.yaml 和 esp32sim gitlink 固定。
 版本管理不仅保存最终文件，还保存源代码、配置、依赖与验收条件，支持查找历史、比较变化，以及恢复工程版本后重新构建验证。构建产物和大型模型可使用制品存储或大文件机制关联提交；不要求全部作为普通源码文件提交。机械建模脚本、参数和模型可沿用同一方式，二进制模型配合预览与仿真证据审查；当前 Blender 工作仍在研发，不宣称已在本仓库落地。
 实验原型生成工程位于 tmp/studio/，需要导出保存并纳入版本管理，不会自动成为已入库资产。可重建指保留重建依据与入口，不承诺逐字节可复现。来源：hardware/、firmware/base.json、simulator/pao-sim/、experimental/platform/、.gitignore。
 -->
@@ -87,9 +87,9 @@ class: slide-light slide-assets
 class: slide-light slide-review
 ---
 
-<div class="eyebrow">COLLABORATION / Git · Pull Request · 持续集成</div>
-<h1>工程变更进入 PR，<br><em>设计与验证一起审查。</em></h1>
-<div class="review-graphic"><img src="/pr-review.svg" alt="工程变更提交 PR，由工具检查和人工审查共同提供依据，再决定合并并保留版本记录" /></div>
+<div class="eyebrow">HARDWARE COLLABORATION / 把软件协作方式延伸到硬件工程</div>
+<h1>硬件变更进入 PR，<br><em>电路与固件一起审查。</em></h1>
+<div class="review-graphic"><img src="/pr-review.svg" alt="硬件变更提交 PR，由工具检查和人工审查共同提供依据，再决定合并并保留版本记录" /></div>
 <div class="review-evidence">
   <div class="review-diff"><span class="detail-label">真实变更 · 新增超声波接线</span><a href="https://github.com/pao-1024/pao/pull/36/files" target="_blank" rel="noopener noreferrer">PR #36 · 9966479 · Controller.tsx ↗</a><code>+ GPIO8: nets.ultrasonic.trig.selector,<br>+ GPIO9: nets.ultrasonic.echo.selector,</code><p>引脚与信号的变化成为可读差异，<br>与驱动、图纸和测试一起审查。</p></div>
   <div class="review-ci"><span class="detail-label">Hardware CI · 已配置的自动检查</span><span class="review-source">hardware/Taskfile.yaml · task test</span><code>node --test test/connectivity.test.ts<br>cmp dist/index/schematic.svg schematic.svg</code><p>检查编译后的连接关系，<br>确认重新生成的图纸与提交版本一致。</p></div>
@@ -98,7 +98,7 @@ class: slide-light slide-review
 <div class="page-number">04 / 13</div>
 
 <!--
-建议 40 秒。工程变成代码以后，硬件迭代也能进入分支、Pull Request 和持续集成工作流。Agent 提交可审查的变更，工具执行已有检查，人审设计意图、约束与证据，再决定是否合并。差异、讨论和验证结果可以关联同一提交，发生问题时可回溯工程版本。
+建议 40 秒。Git、PR 和持续集成本来就是成熟的软件工程方法。这里的价值，是把它们延伸到硬件工程：接线、图纸、驱动和验收规则可以在同一个 PR 中审查。Agent 提交可审查的变更，工具执行已有检查，人审设计意图、约束与证据，再决定是否合并。差异、讨论和验证结果可以关联同一提交，发生问题时可回溯工程版本。
 左侧来自仓库真实提交 99664793053145a98f8d7cd5adfa66f77db139f9（PR #36）：Controller.tsx 新增 GPIO8 的 Trig 与 GPIO9 的 Echo 连接。该 PR 同步了硬件、固件、图纸与说明，用实际改动说明跨层审查。右侧命令来自 hardware/Taskfile.yaml；Hardware workflow 的 pull_request 按路径触发 task test，先执行 check 并生成电路，再测试连通性、比较 SVG。这里只展示已存在的检查配置，不代表本轮重新执行了硬件测试或所有 CI 已通过。
 Firmware PR 当前只做静态检查，完整 ESP-IDF 构建在 main 执行并上传关联提交的固件产物。Simulator 与 Platform CI 包含模型、接线和运行时逻辑测试及构建，不等同于真实固件软件在环或实机验收；Blender 与实机验收也不在这些云端流程中。CI 配置不代表已设置强制合并门禁。来源：.github/workflows/{hardware,firmware,simulator,platform}.yml；hardware/Taskfile.yaml；PR #36。
 -->
@@ -121,30 +121,80 @@ class: slide-light slide-loop
 -->
 
 ---
-class: slide-light slide-detail
+class: slide-light slide-circuit-source
 ---
 
-<div class="eyebrow">电路设计 / tscircuit · 从 TSX 生成原理图与电路网络</div>
-<h1>电路设计，<em>每条连接都可验证。</em></h1>
-<div class="detail-body">
-  <figure class="engineering-evidence"><a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer"><svg class="circuit-preview" viewBox="267 358 130 52" role="img" aria-label="tscircuit 实际生成的 OLED 接线原理图局部，包含电源、地和 SDA、SCL 网络"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg></a><figcaption><b>tscircuit · 真实原理图局部</b><p>代码定义器件、引脚与连接，<br>生成图纸，也生成可测试的电路网络。</p></figcaption></figure>
-  <div class="detail-checks"><span class="detail-label">电路阶段的评估函数</span><div><b>连通性</b><p>比较编译后网络的完整成员，发现漏连和多连。</p></div><div><b>短接与电气约束</b><p>检查电源域、引脚、总线、复位和匹配负载。</p></div><div><b>PCB 制造 DRC</b><p>检查铜连接、净距、线宽与钻孔；违规阻止导出。</p></div></div>
+<div class="eyebrow">电路设计 / tscircuit · 真实 TSX 与生成图纸对照</div>
+<h1>电路设计，<em>用代码定义每条连接。</em></h1>
+<div class="circuit-source-body">
+  <div class="circuit-code-panel">
+    <span class="detail-label">设计源码 · OLED 模块</span>
+    <span class="code-source">hardware/sections/Display.tsx</span>
+    <pre v-pre><code>&lt;OledModule
+  doNotPlace
+  name="OLED"
+  connections={{
+    SDA: nets.display.sda.selector,
+    SCL: nets.display.scl.selector,
+    VCC: nets.power.v3v3.selector,
+    GND: nets.power.gnd.selector,
+  }}
+/&gt;</code></pre>
+    <span class="code-excerpt">真实源码节选 · 省略绘图分区与坐标</span>
+  </div>
+  <figure class="circuit-generated">
+    <span class="detail-label">生成图纸 · 同一个 OLED 模块</span>
+    <a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer"><svg viewBox="267 358 130 52" role="img" aria-label="由左侧 OLED 代码生成的真实原理图局部，含 V3V3、GND、OLED_SDA 和 OLED_SCL"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg></a>
+    <figcaption><b>代码中的网络，成为图上的连接。</b><p>OLED_SDA ↔ GPIO41<br>OLED_SCL ↔ GPIO42</p><span>Controller.tsx 将主控引脚接入同名网络。</span></figcaption>
+  </figure>
 </div>
-<div class="test-example"><div><span>仓库中的短接断言</span><code>assert.match(connectionError(nodes, wires,<br>&nbsp;&nbsp;"2:VIN", "1:J1-22"), /短接/);</code></div><p>VIN 已接 3.3V，<br>再次接入 GND 必须被拒绝。</p></div>
-<div class="bottom-note">反馈给 Agent：具体网络、引脚或几何违规。检查网络与铜几何，不模拟实际短路电流。</div>
+<div class="bottom-note">同一份 TSX 生成原理图与 Circuit JSON；图纸用于审阅，电路网络交给下一页的测试。</div>
 <div class="page-number">06 / 13</div>
 
 <!--
-建议 30 秒。电路代码表达器件与连接关系，工具将它变成可查看的原理图与可计算的网络。PAO 参考图已有针对编译产物的网络单元测试：预期有哪些引脚属于同一网络，就比对实际完整成员，少一个或多一个都失败。
-短接示例来自实验原型的 circuit.test.mjs：VIN 已接到 3.3V 后再次连 GND，必须返回短接错误。载板制造检查还会判断实际铜连接与几何规则，manufacturing.test.mjs 故意删线、改线宽和端点，确认违规会阻止制造包导出。失败可定位到具体网络或规则，供 Agent 修复。
-根目录 hardware/index.tsx 是 PAO 参考接线图；模块载板及 hardware.tsx 等整机产物来自实验原型，不能把两者当成同一个板型。来源：hardware/test/connectivity.test.ts、experimental/platform/circuit.test.mjs、manufacturing.test.mjs。
+建议 30 秒。左边是仓库 Display.tsx 中真实的 OLED 模块定义，只省略绘图分区与坐标；右边直接展示 tscircuit 生成的原始 SVG 局部。代码定义器件、引脚和四条网络连接，图纸由这些设计输入生成。
+nets.ts 将 nets.display.sda 和 scl 定义为 OLED_SDA 与 OLED_SCL；Controller.tsx 把 GPIO41、GPIO42 接入相同网络。电源对应 V3V3 和 GND。图上的同名网络表达电气连接，不要求每条连接都画成长导线。
+OledModule 复用 @tscircuit/header-modules 的真实四针 SSD1306 模块定义。这是 PAO 模块接线参考，不是 Studio 六针 OLED 或 PCB 制造图；doNotPlace 与现有参考图源码一致。来源：hardware/sections/Display.tsx、Controller.tsx、hardware/nets.ts、hardware/components/Oled.tsx、hardware/schematic.svg。
+-->
+
+---
+class: slide-light slide-circuit-tests
+---
+
+<div class="eyebrow">电路验收 / 评估函数 · 单元测试与工程规则</div>
+<h1>电路验收，<em>把接线要求写成单元测试。</em></h1>
+<div class="circuit-tests-body">
+  <div class="circuit-test-panel">
+    <span class="detail-label">PAO 接线图 · OLED 连通性测试</span>
+    <span class="code-source">connectivity.test.ts · 展开现有测试参数</span>
+    <pre v-pre><code>assertNetwork(["ESP32_S3.GPIO41",
+  "OLED.SDA"]);
+assertNetwork(["ESP32_S3.GPIO42",
+  "OLED.SCL"]);</code></pre>
+    <h2>比较整张网络，漏连、多连都失败。</h2>
+    <p>读取构建后的 Circuit JSON，核对完整网络成员。<br>预期接线独立定义，不从电路源码复制生成。</p>
+  </div>
+  <div class="circuit-rules">
+    <div><span class="detail-label">实验平台 · 短接与电气约束</span><p>VIN 已接 3.3V，再次接入 GND 应拒绝。</p><pre v-pre><code>assert.match(connectionError(nodes, wires,
+  "2:VIN", "1:J1-22"), /短接/);</code></pre><span class="code-source">experimental/platform/circuit.test.mjs</span></div>
+    <div><span class="detail-label">实验平台 · 模块载板制造 DRC</span><p>检查铜连接、净距、线宽与钻孔；<br>违规阻止制造包导出。</p></div>
+  </div>
+</div>
+<div class="evaluation-feedback"><b>反馈给 Agent</b><p>预期连接与实际网络差异、具体引脚或规则违规，成为下一轮修复依据。</p></div>
+<div class="bottom-note">PAO 接线图与实验载板分别验收；检查网络和铜几何，不模拟实际短路电流。</div>
+<div class="page-number">07 / 13</div>
+
+<!--
+建议 45 秒。电路设计也能写单元测试。左侧把现有 OLED 测试循环中的两组参数展开：GPIO41 只能与 OLED.SDA 同网，GPIO42 只能与 OLED.SCL 同网。assertNetwork 读取构建后的 Circuit JSON，查找网络全部成员，再与独立记录的接线要求严格比较。少接、多接或短到其他信号都会失败；测试预期不从设计源码导入，避免跟着错误设计一起变化。
+失败时 assert.deepEqual 报告实际和预期成员，并提示哪个引脚的网络成员不符。这些证据可以反馈给 Agent，修改设计后重跑同一套验收；本页展示现有代码与判定机制，不宣称本轮重新执行了硬件测试。
+右侧短接示例来自实验平台 circuit.test.mjs 的另一个模块场景：VIN 已接到 3.3V 后再次连 GND，必须返回短接错误。载板 manufacturing.test.mjs 故意删线、改线宽和端点，确认铜连接或制造规则违规会阻止导出。这些是模块载板能力，不能当作左侧 PAO 参考图的 PCB 或实物验收。来源：hardware/test/connectivity.test.ts、experimental/platform/circuit.test.mjs、manufacturing.test.mjs。
 -->
 
 ---
 class: slide-light slide-schematic
 ---
 
-<div class="eyebrow">电路设计 / tscircuit · TSX 生成的真实工程产物</div>
+<div class="eyebrow">电路设计 / tscircuit · 从局部定义到完整工程产物</div>
 <h1>电路图纸，<em>由 tscircuit 生成。</em></h1>
 <div class="schematic-body">
   <figure class="schematic-overview">
@@ -153,41 +203,19 @@ class: slide-light slide-schematic
     </a>
     <figcaption>tscircuit · PAO 模块接线原理图（参考）<span>点击查看原始 SVG ↗</span></figcaption>
   </figure>
-  <div class="schematic-evidence">
-    <span class="detail-label">原图局部放大 · OLED 接线</span>
-    <svg class="schematic-zoom" viewBox="267 358 130 52" role="img" aria-label="同一原理图中的 OLED 屏幕局部，显示电源、地和 SDA、SCL 网络"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg>
-    <h2>图纸供人审阅，网络交给测试。</h2>
-    <p>同一份 TSX 同时生成原理图与电路网络，测试核对实际连接。</p>
-    <div class="schematic-assert"><span>连通性断言示例 · 展开 OLED 测试参数</span><code>assertNetwork(["ESP32_S3.GPIO41",<br>&nbsp;&nbsp;"OLED.SDA"]);</code></div>
+  <div class="schematic-outputs">
+    <span class="detail-label">同一份设计，面向人和工具</span>
+    <div><code>hardware/index.tsx</code><h2>模块化设计输入</h2><p>组合供电、主控、显示、音频<br>与执行机构的器件和连接。</p></div>
+    <div><code>schematic.svg</code><h2>图纸交给人审阅</h2><p>查看整机接线，核对设计意图。</p></div>
+    <div><code>dist/index/circuit.json</code><h2>电路网络交给工具检查</h2><p>提取实际连接，执行网络断言。</p></div>
   </div>
 </div>
 <div class="bottom-note">来源：hardware/index.tsx → schematic.svg；模块接线参考，尚未实物验证。</div>
-<div class="page-number">07 / 13</div>
-
-<!--
-建议 25 秒。这是仓库由 tscircuit 从 hardware/index.tsx 实际生成的 schematic.svg，直接复用原始矢量图。左侧展示整张图纸，右侧放大同一 SVG 中的 OLED 区域，可点击整图打开原始 SVG 查看所有标注。
-同一份 TSX 构建出 SVG 和 Circuit JSON：图纸让人看得懂，网络让测试可执行。页面将 hardware/test/connectivity.test.ts 测试循环中的 OLED 数据线参数展开为 assertNetwork(["ESP32_S3.GPIO41", "OLED.SDA"])，比对该网络完整成员，漏连或多连都失败。图上的同名网络表达电气连接，不要求每条连接都画成长导线。
-这张图表达模块间接线参考，不是 PCB 制造文件；模块内部电路、封装和机械尺寸不在本图中验证。hardware/README.md 明确该接线参考尚未实物验证。生成入口：hardware/Taskfile.yaml 的 build 与 export。
--->
-
----
-class: slide-light slide-detail
----
-
-<div class="eyebrow">固件编写 / ESP-IDF · 从业务代码到可构建的工程</div>
-<h1>固件编写，<em>把业务需求变成固件。</em></h1>
-<div class="detail-body">
-  <figure class="engineering-evidence"><a href="/reference/agent-preview.jpg" target="_blank" rel="noopener noreferrer"><img src="/reference/agent-preview.jpg" alt="本地实验原型中输入业务需求、生成固件并自动构建与验证的真实界面" /></a><figcaption><b>Agent 写业务，ESP-IDF 构建固件</b><span>业务生成与自动构建界面 · 已有实验原型</span><code>agent-app.h + wiring.h → firmware.bin</code></figcaption></figure>
-  <div class="detail-checks"><span class="detail-label">固件阶段的评估函数</span><div><b>生成结果预检</b><p>检查源码片段规则、验收步骤与参数范围。</p></div><div><b>硬件能力匹配</b><p>验收场景使用的设备与物理量必须存在。</p></div><div><b>真实构建</b><p>由 C++ 编译器检查接口、类型和符号，再完成链接。</p></div></div>
-</div>
-<div class="test-example"><div><span>实际构建失败反馈 · runtime.ts</span><code>if (!await run("build", target))<br>&nbsp;&nbsp;throw Error(`编译失败：${log}`);</code></div><p>实际错误进入下一轮修复，<br>沿用原验收场景重新构建。</p></div>
-<div class="bottom-note">预检通过不等于编译通过；构建成功后，业务是否正确交给下一阶段的运行评估。</div>
 <div class="page-number">08 / 13</div>
 
 <!--
-建议 50 秒。Agent 生成业务函数，平台提供驱动与工程模板，并按接线生成 wiring.h 与 board.json。先检查返回内容的结构、允许的源码片段与场景范围，再确认场景所需设备匹配当前硬件；这些预检不解析 C++，也不证明业务正确。
-真实接口、类型和缺符号问题由 ESP-IDF 的 C++ 编译与链接发现。构建进程失败时，实际日志进入 Agent 的反馈，模型修改后重新构建。源码和接线参与工程标识，构建与运行使用对应目录的产物。
-页面图片复用 experimental/platform/agent-preview.jpg，展示已有实验原型中的业务输入和生成、构建、验证界面。页面代码摘自 experimental/platform/runtime.ts 的实验构建回路；validateAgent 与 validateAgentHardware 在 src/agent-spec.ts。模板驱动不是 Agent 每次从零重写，首份有效验收场景也不能为通过构建而被弱化。构建步骤还会准备模拟器，构建成功不代表软件在环行为验收通过。
+建议 25 秒。从 OLED 局部展开到整机：左侧是 tscircuit 从 hardware/index.tsx 实际生成的完整 schematic.svg，可点击查看所有标注。右侧说明同一份设计的三种形态：TSX 组织模块，SVG 供人审阅，Circuit JSON 供工具检查。
+图纸与网络都来自同一次设计构建，避免图纸和验收各说各话。这里展示模块间接线参考，不是 PCB 制造文件；模块内部电路、封装和机械尺寸不在本图中验证。hardware/README.md 明确该接线参考尚未实物验证。生成入口：hardware/Taskfile.yaml 的 build 与 export。
 -->
 
 ---
@@ -197,14 +225,14 @@ class: slide-light slide-runtime-detail
 <div class="eyebrow">固件运行 / esp32sim · 透明芯片仿真与软件在环评估</div>
 <h1>固件运行，<em>用芯片仿真验证行为。</em></h1>
 <div class="runtime-detail-body">
-  <figure class="runtime-model"><a class="runtime-screen" href="/reference/simulator-overview.png" target="_blank" rel="noopener noreferrer"><img src="/reference/simulator-overview.png" alt="esp32sim 的 PAO 参考模拟器真实界面，显示 OLED、车辆场景、ESP32-S3 引脚与总线活动" /></a><figcaption><b>esp32sim · PAO 参考模拟器</b><p>仿真发生在芯片与外设层，<br>正式驱动和业务逻辑照常执行。</p><a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b" target="_blank" rel="noopener noreferrer">查看模拟器演示 ↗</a></figcaption></figure>
+  <figure class="runtime-model"><a class="runtime-screen" href="/reference/simulator-overview.png" target="_blank" rel="noopener noreferrer"><img src="/reference/simulator-overview.png" alt="esp32sim 的 PAO 参考模拟器真实界面，显示 OLED、车辆场景、ESP32-S3 引脚与总线活动" /></a><figcaption><b>esp32sim · PAO 参考模拟器</b><p>ESP-IDF 构建正式固件，交给芯片级仿真。<br>仿真对固件透明，驱动与业务逻辑照常执行。</p><a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b" target="_blank" rel="noopener noreferrer">查看模拟器演示 ↗</a></figcaption></figure>
   <div class="runtime-checks"><span class="detail-label">自由组合应用 · 运行评估函数</span><div><b>UART 业务状态</b><p>按场景核对告警、音量、音调、电机与状态标签。</p></div><div><b>I²S / MCPWM 实际输出</b><p>检查 PCM 峰值、提示音频率与桥臂占空比，<br>将实测输出和场景预期比较。</p></div><div><b>显示与暂停行为</b><p>确认 OLED 显存到达；暂停后音频和电机归零。</p></div><div class="runtime-example"><b>失败如何反馈</b><p>“实际 PCM 峰值”与“期望值”一并返回 Agent。</p></div></div>
 </div>
 <div class="bottom-note">无实物可执行数字接口与业务验收；OLED 不逐像素判图，物理性能仍需对应模型与实测。</div>
 <div class="page-number">09 / 13</div>
 
 <!--
-建议 65 秒。模拟器从 ROM 启动正式 PAO 固件，固件照常访问 CPU、寄存器和外设接口，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路。屏幕和运动不是预置成功效果。
+建议 70 秒。固件沿用常规软件工程，由 ESP-IDF 编译链接；预检或编译通过不证明业务正确，真正需要强调的是硬件环境中的行为评估。实验平台会将构建失败日志反馈给 Agent 修复，并保留既定验收场景。模拟器从 ROM 启动正式 PAO 固件，固件照常访问 CPU、寄存器和外设接口，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路。屏幕和运动不是预置成功效果。
 运行评估按场景输入音频或传感器数据，读取实际输出。实验 verifyApplication 既检查 UART 业务状态，也核对 PCM 峰值、音调频率和电机桥臂占空比；显示目前只确认实际显存到达，最后还检查暂停归零。当前实现容差为 PCM 峰值差不超过 50、提示音频率差不超过 25Hz、桥臂占空比差不超过 1，这些是软件验收容差，不是实物精度。
 无硬件运行使每轮修改都能获得执行反馈；温升、射频、声学与机械性能不由这些数字接口断言证明。左侧截图复用 simulator/images/simulator-overview.png，展示 esp32sim 的 PAO 参考模拟器；右侧验收机制来自自由组合实验应用，两者使用各自匹配板型。来源：simulator/README.md；experimental/platform/agent.ts:217–236。
 -->

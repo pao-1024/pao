@@ -6,7 +6,7 @@
 
 观众应记住三件事：电路设计、固件编写、固件运行与机械结构都进入 Agent 驱动的开发流程；每个环节都要有对应评估，才能确定下一步修改；代码、工具执行和反馈共同缩短开发迭代。电子工程部分展示现有代码与透明芯片级仿真，机械部分展示当前在 Blender 中开展的 Agent 建模与刚体动力学评估研发。PAO 实机演示之后，再展望 PAO Studio 平台化与全流程 Skill。
 
-讲述顺序是先用“万物皆代码，驱动全流程 Agent 自动化”总览四个部分，再说明工程资产如何入库复用、变更如何通过 PR 共同审查。随后解释评估函数，逐项展开电路、固件、运行和机械结构：各环节由 Agent 操作、工具执行，并以评估反馈驱动修复。区分已有实验实现与当前研发状态，不把全流程方向表述成完整整机已全自动验收。
+讲述顺序是先用“万物皆代码，驱动全流程 Agent 自动化”总览四个部分，再说明如何把软件工程已有的版本管理与 PR 协作方式延伸到硬件工程。随后解释评估函数，电路部分分别展示真实 TSX 与图纸局部、接线单元测试、生成的全图与结构化产物，再展开固件运行和机械结构。ESP-IDF 构建作为运行页的固件输入简述。各环节由 Agent 操作、工具执行，并以评估反馈驱动修复；区分已有实验实现与当前研发状态，不把全流程方向表述成完整整机已全自动验收。
 
 ## 逐页安排
 
@@ -14,13 +14,13 @@
 | --- | --- | --- | --- |
 | 1 · 0:00–0:25 | 探索 Agent 时代的硬件开发新范式 | 开场给出项目定位：把电路、固件、运行环境和机械结构纳入 Agent 可操作的工程，以评估驱动生成、执行与修复，用 PAO 验证这条路径。 | 主视觉呈现“电路设计 / 固件编写 / 固件运行 / 机械结构”。 |
 | 2 · 0:25–1:00 | 万物皆代码，驱动全流程 Agent 自动化。 | 总览各环节如何被 Agent 操作：tscircuit / TSX 电路、ESP-IDF / C++ 固件、esp32sim 芯片仿真，以及当前 Blender 机械研发。工具负责执行，评估结果驱动后续修复。 | 四部分总览，突出各环节的 Agent 操作、执行工具与评估；机械标注“当前研发”。 |
-| 3 · 1:00–1:35 | 全流程工程资产，可追溯、可复用、可重建。 | 将电路、固件、外设模型和评估规则作为工程资产管理。Git 历史可追溯设计变更，模块与验收场景可复用，依赖锁定与构建入口支持按版本重建。临时生成工程需整理保存后入库。 | 真实路径：`hardware/index.tsx` 与 `hardware/schematic.svg`、`firmware/boards/pao/` 与 `firmware/base.json`、`simulator/pao-sim/src/` 与 `simulator/pao-sim/Cargo.lock`、`hardware/test/connectivity.test.ts` 与 `experimental/platform/runtime.test.mjs`。 |
-| 4 · 1:35–2:15 | 工程变更进入 PR，设计与验证一起审查。 | 用新增 HC-SR04 的 [PR #36](https://github.com/pao-1024/pao/pull/36)（提交 `9966479`）展示 `hardware/sections/Controller.tsx` 中 GPIO8 / GPIO9 两行接线代码的实际变更。人审接线与设计意图，工具检查网络和图纸一致性；PR 保留变更、验证记录与对应版本，便于协作和回溯。 | Mermaid `pr-review.mmd` 与真实 diff：`GPIO8: nets.ultrasonic.trig.selector,`、`GPIO9: nets.ultrasonic.echo.selector,`。Hardware CI 运行 `task test`，包含 `node --test test/connectivity.test.ts` 和 `cmp dist/index/schematic.svg schematic.svg`。 |
+| 3 · 1:00–1:35 | 硬件工程资产，可追溯、可复用、可重建。 | 将软件工程的版本管理方式延伸到硬件：电路、固件、外设模型和评估规则一起成为工程资产。Git 历史可追溯接线与设计变更，模块与验收场景可复用，依赖锁定与构建入口支持按版本重建。临时生成工程需整理保存后入库。 | 真实路径：`hardware/index.tsx` 与 `hardware/schematic.svg`、`firmware/boards/pao/` 与 `firmware/base.json`、`simulator/pao-sim/src/` 与 `simulator/pao-sim/Cargo.lock`、`hardware/test/connectivity.test.ts` 与 `experimental/platform/runtime.test.mjs`。 |
+| 4 · 1:35–2:15 | 硬件变更进入 PR，电路与固件一起审查。 | 将软件工程的 PR 协作方式用于硬件变更。以新增 HC-SR04 的 [PR #36](https://github.com/pao-1024/pao/pull/36)（提交 `9966479`）为例，审查 `Controller.tsx` 的 GPIO8 / GPIO9 接线，并合看固件驱动、图纸和测试；设计意图、工具检查与工程版本可以一起回溯。 | Mermaid `pr-review.mmd` 与真实 diff：`GPIO8: nets.ultrasonic.trig.selector,`、`GPIO9: nets.ultrasonic.echo.selector,`。Hardware CI 运行 `task test`，包含 `node --test test/connectivity.test.ts` 和 `cmp dist/index/schematic.svg schematic.svg`。 |
 | 5 · 2:15–3:00 | 评估函数，决定 Agent 能否自己完成闭环 | 以“生成 → 工具执行 → 评估 → 修复”解释明确目标、定位偏差和固定标准复验。工具结果决定是否通过，错误回传 Agent；现有电子工程实验最多运行三轮，首份有效验收步骤固定。 | Mermaid 闭环图配合三项作用，用一条实际错误说明下一步如何确定。 |
-| 6 · 3:00–3:30 | 电路设计，每条连接都可验证。 | tscircuit 从 TSX 描述生成原理图与电路网络，模块载板由本地实验工具生成。PAO 参考电路用 `assertNetwork` 比对完整网络成员；实验代码检查跨网短接、电气约束与制造 DRC，缺线、错误连接或铜几何不合规都应给出错误。 | 左侧放大[原始原理图](../hardware/schematic.svg)的 OLED 区域并说明代码生成，右侧对应连接评估。证据：`hardware/test/connectivity.test.ts`、`experimental/platform/src/electrical.ts`、`experimental/platform/src/manufacturing.ts`。 |
-| 7 · 3:30–3:55 | 电路图纸，由 tscircuit 生成。 | 展示仓库由 tscircuit 实际生成的 PAO 模块接线原理图，将器件、引脚与网络对应到 TSX 代码和真实连通性断言。图纸用于说明工程产物，不作为 PCB 或实物验收证明。 | [原始 SVG](../hardware/schematic.svg)全图、OLED 局部放大与[连通性测试](../hardware/test/connectivity.test.ts)中的真实断言，原图可点击；图注标明“tscircuit · PAO 模块接线原理图（参考）”。 |
-| 8 · 3:55–4:45 | 固件编写，把业务需求变成固件。 | 按接线生成 `main/wiring.h` 与 `board.json`，将 Agent 业务写入 `main/agent-app.h`，配合已有 `main/main.cpp` 与驱动组成 ESP-IDF 工程。`validateAgent` 检查代码和验收结构，`validateAgentHardware` 核对已接外设，再用 ESP-IDF 编译、链接验证工程。 | 左侧复用[业务生成与自动构建实际界面](../experimental/platform/agent-preview.jpg)，标注“已有实验原型”；右侧对应结构校验、硬件匹配与编译链接。证据：`experimental/platform/src/agent-spec.ts`、`experimental/platform/runtime.ts`。 |
-| 9 · 4:45–5:50 | 固件运行，用芯片仿真验证行为。 | esp32sim 从 ROM 启动正式固件，在芯片与外设层执行 CPU 指令、寄存器和总线行为，对固件透明。无实物先运行主要链路，再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧复用[PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，突出 esp32sim 与芯片透明性；右侧对应输出与验收断言，保留[模拟器演示](../simulator/README.md#页面)入口。 |
+| 6 · 3:00–3:30 | 电路设计，用代码定义每条连接。 | 用真实 `Display.tsx` 中的 `OledModule` 说明模块与网络如何由 TSX 定义：SDA / SCL 连接显示总线，VCC / GND 连接电源网络。代码与 OLED 原理图局部对应，连接关系可以被 Agent 修改并进入版本审查。 | 同页展示 [Display.tsx](../hardware/sections/Display.tsx) 代码摘录与[原始原理图](../hardware/schematic.svg) OLED 局部。摘录显式标注省略布局属性，保留真实模块名与连接表达式。 |
+| 7 · 3:30–4:15 | 电路验收，把接线要求写成单元测试。 | 从现有表驱动测试展开 OLED 的 GPIO41 / SDA、GPIO42 / SCL 断言，说明预期接线独立于电路源码。`assertNetwork` 比较编译后网络的完整成员，漏连或多连时返回实际与预期差异，供修复后复验。 | [连通性测试](../hardware/test/connectivity.test.ts)中 OLED 条目的等价展开及 `assert.deepEqual` 比较逻辑；另列实验代码的电气短接检查与 PCB 制造 DRC，明确与 PAO 参考接线测试的范围区别。 |
+| 8 · 4:15–4:40 | 电路图纸，由 tscircuit 生成。 | 展示 tscircuit 从 TSX 生成的两类产物：SVG 用于人工查看和设计审查，Circuit JSON 保留器件、引脚和网络供工具检查。图纸说明代码对应的工程产物，不作为 PCB 或实物验收证明。 | [原始 SVG](../hardware/schematic.svg)全图与原图链接，右侧说明 TSX → SVG / Circuit JSON 的产物与用途；图注标明“tscircuit · PAO 模块接线原理图（参考）”。 |
+| 9 · 4:40–5:50 | 固件运行，用芯片仿真验证行为。 | 正式固件经 ESP-IDF 构建后输入 esp32sim，从 ROM 启动并在芯片与外设层执行，对固件透明。无实物先运行主要链路；自由组合应用再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧复用[PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，突出 esp32sim 与芯片透明性；右侧对应输出与验收断言，保留[模拟器演示](../simulator/README.md#页面)入口。 |
 | 10 · 5:50–6:40 | 机械结构，Agent 建模，刚体仿真评估。 | 外壳、底盘、支架及其装配都属于机械结构。介绍 Blender 中当前开展的 Agent 建模与仿真研发：几何与装配检查回答尺寸、接口和干涉问题，刚体动力学评估回答运动、碰撞与姿态稳定性问题；具体场景与阈值按工程定义。 | 以流程示意表达 Agent 建模、几何 / 装配检查与 Blender 刚体仿真评估，标注“当前研发”；实际运行结论配对应素材。 |
 | 11 · 6:40–7:35 | PAO，把这条路径带到真实世界 | 用 PAO 的语音、运动、测距与 OLED 展示模块、驱动和实物交互。实车证明对应设计与场景的行为；参考机与自由组合工程分别维护，需要实物环境的结论由实际测量确认。 | [实车照片](making-of.md#成品展示)、[实车演示视频](making-of.md#演示视频)，聚焦短程运动与停车。 |
 | 12 · 7:35–8:25 | PAO Studio：把开发流程变成工作台 | 展望将工程路径平台化。已有本地实验原型可在支持模块范围内执行选型、接线、PCB、业务代码、编译与验收，作为产品化起点，继续整合开发工具与结果。 | [Agent 整机设计](../experimental/platform/agent-hardware-preview.jpg)、[PCB 载板](../experimental/platform/agent-pcb-preview.jpg)、[制造预览](../experimental/platform/manufacturing-preview.jpg)，标注“未来展望 / 实验原型”。 |
@@ -34,15 +34,15 @@
 
 “评估函数”是可执行的规则和断言：先明确完成条件，再把工程或运行结果与条件比较，返回通过或具体错误。首份有效验收场景由模型提出，并在修复中固定；仍需核对场景是否充分表达人的需求。固定标准能约束修复过程，不意味着已经完整证明需求正确。
 
-工程资产入库让团队能查看变更历史、复用模块与验收规则，并依据锁定版本重新构建。当前可追踪资产包括 TSX 电路、固件源码、Rust 模型、测试和构建配置；`tmp/studio/` 中的生成工程不会自动进入 Git，需整理源码、配置与验收材料后保存入库。Blender 资产可采用同一流程，二进制模型应附预览和变更说明，较大的构建产物关联明确工程版本；当前仓库没有 `.blend` 文件。
+硬件工程资产入库，是把软件工程已有的版本管理能力用于电路、固件、模型和验收规则，让团队能查看设计变更、复用模块，并依据锁定版本重新构建。当前可追踪资产包括 TSX 电路、固件源码、Rust 模型、测试和构建配置；`tmp/studio/` 中的生成工程不会自动进入 Git，需整理源码、配置与验收材料后保存入库。Blender 资产可采用同一流程，二进制模型应附预览和变更说明，较大的构建产物关联明确工程版本；当前仓库没有 `.blend` 文件。
 
-PR 将设计意图、文件差异与验证结果放到同一审查上下文。示例展示 `Controller.tsx` 新增 Trig / Echo 接线，与同一 PR 的驱动、图纸和测试一起审查。相关 CI 按路径触发：Hardware 检查连通性与重新生成的图纸一致性；Firmware PR 只做静态检查，完整 ESP-IDF 构建在 `main`；Simulator / Platform 做检查、单测与构建，不执行真实应用 SIL。Blender 仿真及实机验收需另附证据。工作流配置说明现有自动检查范围，不表示已配置强制合并门禁。
+硬件变更进入 PR 后，接线、固件驱动、图纸与验证结果可以共同审查。示例展示 `Controller.tsx` 新增 Trig / Echo 接线，说明软件协作方式如何支持跨电路与固件的修改。相关 CI 按路径触发：Hardware 检查连通性与重新生成的图纸一致性；Firmware PR 只做静态检查，完整 ESP-IDF 构建在 `main`；Simulator / Platform 做检查、单测与构建，不执行真实应用 SIL。Blender 仿真及实机验收需另附证据。工作流配置说明现有自动检查范围，不表示已配置强制合并门禁。
 
-电路评估分别来自 PAO 参考电路测试和本地实验代码的电气、PCB 检查。`assertNetwork` 比对编译后网络的全部成员，缺线或额外短接都会失败；`connectionError`、`electricalReport` 和 `manufacturingDrc` 检查接线与制造规则。短接检查依据网络关系和铜几何规则，不计算模拟短路电流。
+电路代码页摘录真实 `Display.tsx` 的 `OledModule`，保留 SDA、SCL、VCC 和 GND 的网络表达式，显式注明省略布局属性。单元测试页将现有表驱动测试中的 OLED 条目等价展开为 GPIO41 / SDA、GPIO42 / SCL 两条断言；预期接线独立记录，不从电路源码导入。`assertNetwork` 比对 Circuit JSON 中网络的全部成员，缺线或额外短接都会失败，断言给出实际与预期差异。图纸页集中说明 SVG 供人审查、Circuit JSON 供工具检查。
 
-固件评估先用 `validateAgent` 检查业务源码和验收数据，用 `validateAgentHardware` 核对场景需要的外设与接线是否匹配，再通过编译、链接判断工程能否生成固件。这些检查不代替运行行为验收；完整工程由平台模板、驱动、接线配置与 Agent 业务代码共同组成。
+PAO 参考接线测试与本地实验的电气、PCB 检查分别说明。后者由 `connectionError`、`electricalReport` 和 `manufacturingDrc` 检查短接、电气约束与制造规则；短接检查依据网络关系和铜几何，不计算模拟短路电流。生成图纸或单元测试通过不能代替 PCB 和实物验收。
 
-运行评估用 `verifyApplication` 核对 UART 状态、实际 I²S PCM 峰值与音调频率、电机桥臂占空比及暂停归零；OLED 当前检查显存是否到达，不逐像素判断画面。PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点是当前实现中的验收容差，不是传感器、电机或实机测量精度；数字波形测量也不等同于真实声学表现。
+正式固件由 ESP-IDF 编译、链接后进入芯片仿真；构建成功只说明生成了固件，业务是否正确仍需运行验证。自由组合应用的运行评估用 `verifyApplication` 核对 UART 状态、实际 I²S PCM 峰值与音调频率、电机桥臂占空比及暂停归零；OLED 当前检查显存是否到达，不逐像素判断画面。PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点是当前实现中的验收容差，不是传感器、电机或实机测量精度；数字波形测量也不等同于真实声学表现。
 
 “全自动”指已支持模块范围内的选型、工程生成、编译、仿真验收和有限轮次修复；需求与验收目标仍需人确认，平台不自动刷写实物或下单生产。根目录 `hardware/` 的 TSX 是 PAO 参考接线图；Studio 生成的是模块安装载板，不表示重新设计了采购模块的内部电路。
 
@@ -55,8 +55,8 @@ PAO Studio 放在实机演示后的未来展望中，表达将工程路径平台
 ## 演示准备
 
 - 第 3 页准备实际工程路径与版本锁定文件；第 4 页准备 PR #36 / `9966479` 中 [Controller.tsx](../hardware/sections/Controller.tsx) 的接线 diff、[Hardware 工作流](../.github/workflows/hardware.yml)与 [Taskfile](../hardware/Taskfile.yaml)，区分历史验证记录和当前 CI 配置。
-- 第 5 页准备具体的编译或运行失败反馈；第 6 页准备连通性、短接检查与制造 DRC 源码；第 7 页确认原理图及原图链接可访问；第 8 页准备同一工程的配置、业务代码与编译日志。
-- 第 9 页准备正式固件的构建与运行入口、验收断言、固件输出及[模拟器演示](../simulator/README.md#页面)。现场语音需要设备激活和麦克风授权，未具备条件时使用已有素材。
+- 第 5 页准备具体的编译或运行失败反馈；第 6 页核对 [Display.tsx](../hardware/sections/Display.tsx) 摘录与 OLED 图纸局部；第 7 页准备 OLED 接线单元测试和失败差异，区分实验短接与制造 DRC 范围；第 8 页确认全图链接及 SVG / Circuit JSON 生成入口。
+- 第 9 页准备正式固件的构建与运行入口、验收断言、固件输出及[模拟器演示](../simulator/README.md#页面)。ESP-IDF 构建只作输入说明，讲述中保留构建成功与业务正确的区别。现场语音需要设备激活和麦克风授权，未具备条件时使用已有素材。
 - 第 10 页按实际可用材料说明 Blender 当前研发与刚体仿真评估。流程图是机制说明；具体运行结论需要对应工程、场景与结果，不能用示意图代替验收证据。
 - 第 11 页的实车演示选择可立即停车的短程动作，确保观众看到车体与反馈；备用为已有[实车视频](making-of.md#演示视频)。技术参数、完整接线和未展开的功能留到答辩追问。
 - 第 12 页以已有实验原型说明未来 PAO Studio 的产品方向。使用预先核验的同一案例，区分原理图、PCB、DRC、Gerber / CAM、固件编译与软件在环结果。截图用于说明实验界面，结论以对应工程记录为准。

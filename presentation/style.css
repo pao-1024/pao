@@ -47,10 +47,6 @@
 .source-card p { margin-top: 22px; color: #475063; font-size: 18px; line-height: 1.7; }
 .source-card code { display: block; margin-top: 24px; color: #677087; font-size: 12px; line-height: 1.8; }
 .takeaway { margin-top: 31px; font-size: 24px; font-weight: 700; }
-.test-example { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 25px; padding: 17px 22px; border-radius: 8px; background: #f5f6fa; }
-.test-example span { display: block; margin-bottom: 8px; color: #626a7a; font-size: 13px; }
-.test-example code { color: #8c492e; font-size: 18px; line-height: 1.55; }
-.test-example p { color: #475063; font-size: 19px; line-height: 1.7; }
 .loop-graphic { display: flex; align-items: center; justify-content: center; height: 279px; margin-top: 12px; }
 .loop-graphic img { width: 100%; max-height: 100%; }
 .loop-rules { display: grid; grid-template-columns: 1.2fr 1.3fr 1fr; gap: 26px; margin-top: 17px; }
@@ -90,12 +86,7 @@
 .repo-address { position: absolute; right: 62px; bottom: 83px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
 @media (prefers-reduced-motion: reduce) { .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { animation: none !important; transition: none !important; } }
 
-.detail-body { display: grid; grid-template-columns: 0.95fr 1.15fr; gap: 34px; align-items: stretch; margin-top: 28px; }
 .detail-label { display: block; margin-bottom: 15px; color: var(--violet); font-size: 17px; font-weight: 700; }
-.detail-checks { padding-top: 5px; }
-.detail-checks > div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; min-height: 85px; border-bottom: 1px solid var(--line); }
-.detail-checks b { color: #202838; font-size: 21px; font-weight: 650; }
-.detail-checks p { color: #475063; font-size: 18px; line-height: 1.6; }
 .runtime-detail-body { display: grid; grid-template-columns: 560px 1fr; gap: 35px; margin-top: 25px; }
 .runtime-model { margin: 0; text-align: center; }
 .runtime-model .runtime-screen { display: block; margin: 0; }
@@ -124,24 +115,39 @@
 .schematic-overview svg { display: block; width: 100%; height: 435px; }
 .schematic-overview figcaption { display: flex; justify-content: space-between; margin-top: 9px; color: #626a7a; font-size: 14px; }
 .schematic-overview figcaption span { color: var(--violet); }
-.schematic-evidence { padding-top: 4px; }
-.schematic-zoom { display: block; width: 100%; height: 135px; margin-bottom: 19px; }
-.schematic-evidence h2 { font-size: 25px; line-height: 1.4; }
-.schematic-evidence p { margin-top: 12px; color: #475063; font-size: 18px; line-height: 1.6; }
-.schematic-assert { margin-top: 17px; padding: 15px 18px; border-radius: 8px; background: #f5f6fa; }
-.schematic-assert span { display: block; margin-bottom: 8px; color: #626a7a; font-size: 13px; }
-.schematic-assert code { color: #8c492e; font-size: 17px; line-height: 1.55; }
-.engineering-evidence { margin: 0; }
-.engineering-evidence a { display: block; }
-.engineering-evidence img { display: block; width: 100%; height: 215px; object-fit: cover; object-position: top; border: 1px solid var(--line); border-radius: 6px; }
-.engineering-evidence figcaption { display: grid; gap: 7px; margin-top: 10px; }
-.engineering-evidence b { color: var(--violet); font-size: 20px; }
-.engineering-evidence span { color: #626a7a; font-size: 14px; }
-.engineering-evidence code { color: #626a7a; font-size: 14px; }
-.schematic-overview a, .engineering-evidence a, .runtime-model .runtime-screen { border: 0; }
+.schematic-overview a, .circuit-generated a, .runtime-model .runtime-screen { border: 0; }
+.schematic-outputs { padding-top: 4px; }
+.schematic-outputs > div { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.schematic-outputs .detail-label { margin-bottom: 11px; }
+.schematic-outputs code { color: var(--violet); font-size: 16px; }
+.schematic-outputs h2 { margin-top: 8px; font-size: 24px; line-height: 1.4; }
+.schematic-outputs p { margin-top: 9px; color: #475063; font-size: 18px; line-height: 1.6; }
 
-.engineering-evidence .circuit-preview { display: block; width: 100%; height: 200px; }
-.engineering-evidence p { margin: 7px 0 0; color: #475063; font-size: 18px; line-height: 1.65; }
+.circuit-source-body, .circuit-tests-body { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 30px; }
+.circuit-code-panel, .circuit-test-panel { padding: 22px 24px; border: 1px solid var(--line); border-radius: 8px; background: #f5f6fa; }
+.circuit-code-panel { padding-block: 18px; }
+.circuit-source-body .detail-label, .circuit-tests-body .detail-label { margin-bottom: 10px; }
+.code-source, .code-excerpt { display: block; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.slidev-layout .circuit-source-body pre, .slidev-layout .circuit-tests-body pre { margin: 18px 0; padding: 0; background: transparent; white-space: pre; }
+.circuit-source-body pre code { color: #34286d; font-size: 18px; line-height: 1.65; }
+.circuit-generated { margin: 0; padding-top: 10px; }
+.circuit-generated a { display: block; margin-top: 30px; }
+.circuit-generated svg { display: block; width: 100%; height: 220px; }
+.circuit-generated figcaption { margin-top: 20px; }
+.circuit-generated b { color: var(--violet); font-size: 23px; }
+.circuit-generated p { margin-top: 12px; color: #475063; font-size: 21px; line-height: 1.6; }
+.circuit-generated figcaption span { display: block; margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.slide-circuit-tests h1 { font-size: 50px; }
+.circuit-tests-body pre code { color: #34286d; font-size: 18px; line-height: 1.65; }
+.circuit-test-panel h2 { font-size: 23px; line-height: 1.5; }
+.circuit-test-panel p { margin-top: 10px; color: #475063; font-size: 17px; line-height: 1.65; }
+.circuit-rules > div { padding: 12px 0 20px; border-bottom: 1px solid var(--line); }
+.circuit-rules > div + div { padding-top: 23px; }
+.circuit-rules p { color: #475063; font-size: 19px; line-height: 1.65; }
+.circuit-rules pre code { color: #8c492e; font-size: 16px; }
+.evaluation-feedback { display: flex; gap: 22px; align-items: center; margin-top: 22px; padding: 17px 22px; border-radius: 8px; background: #f5f6fa; }
+.evaluation-feedback b { flex-shrink: 0; color: var(--violet); font-size: 19px; }
+.evaluation-feedback p { color: #475063; font-size: 18px; line-height: 1.6; }
 
 .assets-body { display: grid; grid-template-columns: 660px 1fr; gap: 40px; margin-top: 24px; }
 .asset-repository { padding: 20px 24px; border: 1px solid var(--line); border-radius: 8px; background: #f5f6fa; }
