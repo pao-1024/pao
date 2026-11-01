@@ -1,8 +1,8 @@
 ---
 theme: default
-title: PAO · AI Agent 时代的硬件开发
-info: 2026 1024 Hackathon · 万物皆代码，评估驱动闭环开发
-class: slide-dark slide-cover
+title: PAO · Agent 时代的硬件开发新流程
+info: 2026 1024 Hackathon · 万物皆代码，评估驱动硬件开发闭环
+class: slide-light slide-cover
 aspectRatio: 16/9
 canvasWidth: 1280
 transition: fade-out
@@ -15,8 +15,8 @@ fonts:
 <div class="eyebrow">PAO / 2026 1024 HACKATHON</div>
 <div class="hero-copy">
   <div class="edition">AI AGENT 时代</div>
-  <h1>让 AI Agent<br><em>跑通硬件开发</em></h1>
-  <p>从电路设计、固件编写，到固件运行与效果评估。<br>让代码驱动全过程，让反馈推动下一次迭代。</p>
+  <h1>构建 Agent 时代的<br><em>硬件开发新流程</em></h1>
+  <p>电路、固件与运行环境皆代码。<br>让 Agent 自动生成、执行、评估，再根据结果修复。</p>
 </div>
 <div class="hero-art">
   <div class="artifact-label">CODE → EXECUTION → EVALUATION</div>
@@ -28,7 +28,7 @@ fonts:
 <div class="page-number">01 / 10</div>
 
 <!--
-建议 35 秒。开场：AI Agent 已经能写代码，硬件开发能不能也像软件一样，自动生成、运行、检查，再修复？我们用 PAO 探索这件事：把电路、固件和运行环境都变成代码，再把判断是否做对的标准交给评估函数。
+建议 35 秒。开场：我们在构建 Agent 时代的一套新硬件开发流程。把电路、固件和运行环境变成代码，把验收标准变成可执行的评估函数，Agent 就能自己生成、运行、检查，再根据失败证据修复。PAO 是验证这套流程的产品，PAO Studio 是承载这套流程的工作台。
 PAO Studio 是本地实验工作台，在已建模器件与业务接口内实现自动闭环。PAO 小车用于验证软硬件路径，不宣称它由 Studio 一次性自动生成。
 -->
 
@@ -54,7 +54,7 @@ class: slide-light slide-source
 -->
 
 ---
-class: slide-dark slide-evaluation
+class: slide-light slide-evaluation
 ---
 
 <div class="eyebrow">EVALUATION / 自动开发的关键接口</div>
@@ -112,7 +112,7 @@ OLED 是真实显存写入，运动是 MCPWM 输出，超声波是 Trig/Echo 经
 -->
 
 ---
-class: slide-dark slide-runtime
+class: slide-light slide-runtime
 ---
 
 <div class="eyebrow">RUN WITHOUT HARDWARE / 让评估随时可执行</div>
@@ -146,7 +146,7 @@ Studio 自动生成模块安装板，不重新设计所购模块的内部电路�
 -->
 
 ---
-class: slide-dark slide-product
+class: slide-light slide-product
 ---
 
 <div class="product-photo"><img src="/release/photo-12-first-rollout.jpg" alt="PAO 语音小车实物" /></div>
@@ -181,18 +181,23 @@ class: slide-light slide-value
 -->
 
 ---
-class: slide-dark slide-close
+class: slide-light slide-close
 ---
 
-<div class="eyebrow">PAO / 面向 AI AGENT 的硬件开发</div>
-<h1>让硬件开发，<br>拥有<em>软件的迭代速度。</em></h1>
-<div class="closing-equation"><div><b>代码</b><span>让 Agent 能动手</span></div><i>+</i><div><b>评估函数</b><span>让结果可判断</span></div><i>+</i><div><b>芯片仿真</b><span>让闭环可执行</span></div></div>
-<p class="closing-statement">在已支持范围内跑通自动闭环，<br>向更多模块、更完整验收与实物对照推进。</p>
+<div class="eyebrow">FUTURE / 从电子系统走向整机开发</div>
+<h1>把自动开发闭环，<br><em>扩展到整机。</em></h1>
+<p class="outlook-current">今天：电路、固件与芯片仿真，已在支持范围内形成自动闭环。</p>
+<div class="outlook-grid">
+  <div><span>未来 · 机械结构</span><h2>结构也由 Agent 建模</h2><p>生成参数化几何与装配，<br>描述质量、惯量和关节约束。</p></div>
+  <div><span>未来 · 物理评估</span><h2>刚体动力学驱动验收</h2><p>从物理引擎读取仿真结果，<br>检查轨迹误差、碰撞与稳定性。</p></div>
+  <div><span>未来 · 可复用流程</span><h2>全流程封装成 Skill</h2><p>编排设计、构建、仿真与评估，<br>把反馈修复变成可复用能力。</p></div>
+</div>
+<p class="closing-statement">目标：让 Agent 自动设计、仿真验收与迭代，交付可复验的整机方案。</p>
 <div class="team">Zhiqiang Zhang · 硬件、底盘与板级集成<br>jimyag · 构建、模拟器、语音与网页控制</div>
 <div class="repo-address">github.com/pao-1024/pao</div>
 <div class="page-number">10 / 10</div>
 
 <!--
-建议 45 秒。收尾：我们希望硬件开发也具备软件开发的迭代方式。代码让 Agent 能生成和修改，评估函数让它知道是否做对，透明芯片仿真让它在没有实物时也能执行验证。三者合起来，才是全自动开发闭环的基础。
-当前本地工作台已在内置器件与模型范围内实现选型、接线、PCB、固件和软件在环闭环。接下来扩展完整模块定义、驱动、模型与验收，并用实物对照校正模型。人负责目标、验收边界和实物确认；不宣称任意硬件已全自动交付。
+建议 45 秒。收尾：我们构建的是 Agent 时代的硬件开发流程。今天先跑通电路、固件与芯片仿真；未来把机械结构也纳入代码，由 Agent 生成几何、装配和动力学参数，再让固件输出作用于物理引擎中的刚体模型，以轨迹误差、碰撞和稳定性等结果执行验收，失败后自动修改设计或控制程序。把整套工具、构建入口、评估标准和修复流程封装成 Skill，让 Agent 在新项目中复用这条链路。
+机械建模、刚体动力学耦合与全流程 Skill 均为未来方向；当前 PWM 驱动的位姿展示不代表已经实现这些能力。目标是在明确场景和模型范围内自动完成仿真验收，仍需要核对物理参数、校准模型并与实物对照，不把仿真通过等同于实机验收。团队分工见项目 README。
 -->

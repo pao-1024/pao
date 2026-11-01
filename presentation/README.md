@@ -1,6 +1,8 @@
 # PAO 决赛演示稿
 
-这份 [Slidev](https://sli.dev/guide/) 演示稿以 **AI Agent 全自动硬件开发、万物皆代码、评估函数与透明芯片级仿真** 为主线，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十页：代码让 Agent 能动手，评估函数让 Agent 知道是否做对，模拟器让评估可自动执行。正文、排版和讲者备注分别维护在 `slides.md`、`style.css` 和 Markdown 注释里。PAO Studio 展示支持模块范围内由评估结果驱动的自动修复闭环，PAO 实车用于说明固件、外设与实际行为的对应关系。
+这份 [Slidev](https://sli.dev/guide/) 演示稿以 **构建 Agent 时代的硬件开发新流程** 为主题，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十页：代码让 Agent 能动手，评估函数让 Agent 知道是否做对，模拟器让评估可自动执行。PAO Studio 展示支持模块范围内由评估结果驱动的自动修复闭环，PAO 实车用于说明固件、外设与实际行为的对应关系。
+
+结尾展望 Agent 机械结构建模、刚体动力学结果驱动的自动验收，以及封装完整开发流程的 Skill，三项均标为未来规划。当前芯片级仿真与未来整机物理仿真的边界及推进目标见[平台规划](../docs/platform-roadmap.md)。正文、排版和讲者备注分别维护在 `slides.md`、`style.css` 和 Markdown 注释里。
 
 实车照片复用仓库的 `assets` release，模拟器与 Studio 截图复用仓库素材。`prepare-assets.sh` 将下载素材缓存到本 worktree 的 `tmp/presentation-assets/`，再准备本目录的 `public/` 资源，不重复提交媒体文件。
 
