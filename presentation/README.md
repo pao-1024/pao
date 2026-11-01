@@ -1,6 +1,6 @@
 # PAO 决赛演示稿
 
-这份 [Slidev](https://sli.dev/guide/) 演示稿以 **探索 Agent 时代的硬件开发新范式** 为主题，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十四页，统一使用白底。第 2 页总览三类核心设计：电路 · tscircuit、嵌入式软件 · ESP-IDF + esp32sim、机械结构 · Blender，尝试让 Agent 参与全流程，仿真、测试与评估贯穿三者。全代码化，让电路与机械结构也能按软件工程的方式管理，使用版本控制、PR 审查和自动检查。第 3、4 页说明如何将软件工程已有的版本管理与 PR 协作方式延伸到硬件，让硬件工程资产可追溯、可复用、可重建，电路和固件一起审查。随后用评估闭环和各环节的实际工程展开说明，区分已有实现与当前研发状态。
+这份 [Slidev](https://sli.dev/guide/) 演示稿以 **探索 Agent 时代的硬件开发新范式** 为主题，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十五页，统一使用白底。第 2 页总览三类核心设计：电路 · tscircuit、嵌入式软件 · ESP-IDF + esp32sim、机械结构 · Blender，尝试让 Agent 参与全流程，仿真、测试与评估贯穿三者。全代码化，让电路与机械结构也能按软件工程的方式管理，使用版本控制、PR 审查和自动检查。第 3、4 页说明如何将软件工程已有的版本管理与 PR 协作方式延伸到硬件，让硬件工程资产可追溯、可复用、可重建，电路和固件一起审查。随后用评估闭环和各环节的实际工程展开说明，区分已有实现与当前研发状态。
 
 硬件工程资产页列出实际电路、固件、仿真与测试路径，评估示例包括 `hardware/test/connectivity.test.ts` 和 `experimental/platform/runtime.test.mjs`。PR 案例复用 [#36](https://github.com/pao-1024/pao/pull/36)（`9966479`）中 [Controller.tsx](../hardware/sections/Controller.tsx) 新增 GPIO8 / GPIO9 接线的真实差异，结合 Hardware 的连通性与图纸一致性检查。临时生成工程需整理后入库，CI 检查与实际 SIL、Blender 仿真和实机验收分别说明，范围见[大纲](../docs/final-presentation-outline.md)。
 
@@ -10,7 +10,7 @@
 
 代码让 Agent 能动手，评估函数让 Agent 知道是否做对，模拟器让评估可自动执行。演示稿先讲 PAO 验证的工程路径与实机行为，再进入未来展望：PAO Studio 将已有实验机制发展为可复用工作台。Studio 页面展示本地实验原型，表达产品化方向。
 
-在第 13 页 Studio 展望之后，第 14 页以“未来展望：把硬件工作流封装为 Skill。”收尾，按“当前 · PAO 验证 → 下一步 · 工作流打磨 → 未来 · Skill 封装”展开：当前用 PAO 做实验性验证，后续打磨工具接口、评估规则与失败修复，再封装为可复用的 Skill。机械建模与刚体仿真作为当前研发单独讲述，不作为未来规划或实机验收结论。能力状态与推进目标见[平台规划](../docs/platform-roadmap.md)。正文、排版和讲者备注分别维护在 `slides.md`、`style.css` 和 Markdown 注释里。
+第 13 页总览后续规划，第 14 页介绍 PAO Studio，第 15 页以“把硬件工作流封装为 Skill。”收尾，说明 Skill 的流程、产物与停止条件。机械建模与刚体仿真作为当前研发单独讲述，不作为未来规划或实机验收结论。能力状态与推进目标见[平台规划](../docs/platform-roadmap.md)。正文、排版和讲者备注分别维护在 `slides.md`、`style.css` 和 Markdown 注释里。
 
 五段视频来源统一维护在 [docs/making-of.md](../docs/making-of.md)，Studio 截图复用仓库素材。`prepare-assets.sh` 将下载素材缓存到本 worktree 的 `tmp/presentation-assets/`，再准备本目录的 `public/` 资源；视频缓存和生成媒体不提交到 Git。原理图直接复制仓库的 `hardware/schematic.svg`，不重绘或重复提交。该图展示模块接线，不代表 PCB 或实物验收通过。
 

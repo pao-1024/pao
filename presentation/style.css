@@ -30,12 +30,10 @@
 .slidev-layout a:focus-visible { outline: 3px solid #db997b; outline-offset: 5px; }
 .slidev-layout code { padding: 0 !important; font-family: "DejaVu Sans Mono", monospace; background: transparent !important; }
 .hero-copy { position: relative; z-index: 2; width: 680px; margin-top: 74px; }
-.edition { margin-bottom: 20px; color: #8c492e; font-size: 22px; font-weight: 650; letter-spacing: 0.12em; }
 /* 覆盖主题的封面标题与 h1 + p 规则，保留显式段落间距。 */
 .slidev-layout .hero-copy h1 { font-size: 67px; line-height: 1.22; }
 .slidev-layout .hero-copy p { margin: 32px 0 0; color: #475063; font-size: 21px; line-height: 1.8; }
 .hero-art { position: absolute; top: 135px; right: 70px; width: 420px; padding: 22px; border: 1px solid #dce0e9; border-radius: 12px; background: #fff; }
-.artifact-label { margin-bottom: 22px; color: #5146b6; font: 12px "DejaVu Sans Mono", monospace; letter-spacing: 0.03em; }
 .hero-source { display: grid; gap: 10px; margin-bottom: 25px; color: #202838; font: 25px "DejaVu Sans Mono", monospace; }
 .hero-source span:last-child { color: #8c492e; }
 .hero-art img { display: block; width: 100%; height: 180px; border-radius: 4px; object-fit: cover; object-position: top; }
@@ -67,24 +65,21 @@
 .studio-output span { color: var(--muted); font-size: 15px; }
 .studio-output b { color: var(--copper); font-size: 20px; }
 .slide-close h1 { font-size: 57px; }
-.slidev-layout .outlook-current { margin: 24px 0 0; color: #626a7a; font-size: 20px; line-height: 1.6; }
+.slide-close .studio-output { margin-top: 30px; }
 .outlook-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 28px; }
 .outlook-grid > div { padding: 24px 20px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .outlook-grid span { color: #8c492e; font-size: 16px; }
 .outlook-grid h2 { margin-top: 18px; color: #202838; font-size: 25px; line-height: 1.5; }
 .outlook-grid p { margin-top: 18px; color: #475063; font-size: 18px; line-height: 1.8; }
-.slidev-layout .closing-statement { margin: 24px 0 0; color: #5146b6; font-size: 21px; line-height: 1.6; }
 .repo-address { position: absolute; left: 62px; bottom: 34px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
 @media (prefers-reduced-motion: reduce) { .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { animation: none !important; transition: none !important; } }
 
 .detail-label { display: block; margin-bottom: 15px; color: var(--violet); font-size: 17px; font-weight: 700; }
-.runtime-detail-body { display: grid; grid-template-columns: 560px 1fr; gap: 35px; margin-top: 25px; }
-.runtime-model { margin: 0; text-align: center; }
-.runtime-model .demo-video { height: 320px; }
-.runtime-model figcaption { margin-top: 13px; }
-.runtime-model b { color: var(--violet); font-size: 18px; }
-.runtime-model p { margin-top: 8px; color: #475063; font-size: 19px; line-height: 1.5; }
-.runtime-model figcaption span { display: block; margin-top: 9px; color: #626a7a; font-size: 16px; line-height: 1.5; }
+.runtime-detail-body { display: grid; grid-template-columns: 680px 1fr; gap: 32px; margin-top: 25px; }
+.runtime-model { margin: 0; }
+.runtime-model .demo-video { height: 383px; }
+.runtime-model figcaption { margin-top: 16px; }
+.runtime-model b { color: var(--violet); font-size: 20px; }
 .runtime-checks { padding-top: 6px; }
 .runtime-checks > div { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .runtime-checks b { color: #202838; font-size: 22px; font-weight: 650; }
@@ -104,7 +99,6 @@
 .schematic-overview a { display: block; }
 .schematic-overview svg { display: block; width: 100%; height: 435px; }
 .schematic-overview figcaption { display: flex; justify-content: space-between; margin-top: 9px; color: #626a7a; font-size: 14px; }
-.schematic-overview figcaption span { color: var(--violet); }
 .schematic-overview a, .circuit-generated a { border: 0; }
 .schematic-outputs { padding-top: 4px; }
 .schematic-outputs > div { padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -124,7 +118,6 @@
 .circuit-generated a { display: block; margin-top: 30px; }
 .circuit-generated svg { display: block; width: 100%; height: 220px; }
 .circuit-generated figcaption { margin-top: 20px; }
-.circuit-generated b { color: var(--violet); font-size: 23px; }
 .circuit-generated p { margin-top: 12px; color: #475063; font-size: 21px; line-height: 1.6; }
 .circuit-generated figcaption span { display: block; margin-top: 10px; color: var(--muted); font-size: 15px; line-height: 1.6; }
 .slide-circuit-tests h1 { font-size: 50px; }
@@ -168,5 +161,4 @@
 .demo-videos .demo-video { height: 360px; }
 .demo-videos figcaption { margin-top: 18px; }
 .demo-videos h2 { color: var(--violet); font-size: 25px; line-height: 1.5; }
-.demo-videos p { margin-top: 9px; color: #475063; font-size: 19px; line-height: 1.6; }
 .slide-demo-field .demo-videos { grid-template-columns: 300px 1fr; }
