@@ -40,12 +40,12 @@
 .hero-source span:last-child { color: #8c492e; }
 .hero-art img { display: block; width: 100%; height: 180px; border-radius: 4px; object-fit: cover; object-position: top; }
 .artifact-caption { margin-top: 19px; color: #626a7a; font-size: 15px; line-height: 1.8; }
-.source-columns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 34px; }
-.source-card { padding: 25px 19px; border: 1px solid var(--line); border-radius: 10px; background: #f5f6fa; }
+.source-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 34px; }
+.source-card { padding: 25px 24px; border: 1px solid var(--line); border-radius: 10px; background: #f5f6fa; }
 .type-label { color: var(--violet); font-size: 17px; font-weight: 700; }
 .source-card h2 { margin-top: 22px; font: 24px "DejaVu Sans Mono", monospace; letter-spacing: -0.06em; }
 .source-card p { margin-top: 22px; color: #475063; font-size: 18px; line-height: 1.7; }
-.source-card code { display: block; margin-top: 24px; color: #677087; font-size: 12px; line-height: 1.8; }
+.source-card code { display: block; margin-top: 24px; color: #677087; font-size: 14px; line-height: 1.8; }
 .takeaway { margin-top: 31px; font-size: 24px; font-weight: 700; }
 .loop-graphic { display: flex; align-items: center; justify-content: center; height: 279px; margin-top: 12px; }
 .loop-graphic img { width: 100%; max-height: 100%; }
@@ -82,8 +82,7 @@
 .outlook-grid h2 { margin-top: 18px; color: #202838; font-size: 25px; line-height: 1.5; }
 .outlook-grid p { margin-top: 18px; color: #475063; font-size: 18px; line-height: 1.8; }
 .slidev-layout .closing-statement { margin: 24px 0 0; color: #5146b6; font-size: 21px; line-height: 1.6; }
-.team { position: absolute; bottom: 33px; left: 62px; color: #626a7a; font-size: 14px; line-height: 1.7; }
-.repo-address { position: absolute; right: 62px; bottom: 83px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
+.repo-address { position: absolute; left: 62px; bottom: 34px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
 @media (prefers-reduced-motion: reduce) { .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { animation: none !important; transition: none !important; } }
 
 .detail-label { display: block; margin-bottom: 15px; color: var(--violet); font-size: 17px; font-weight: 700; }
