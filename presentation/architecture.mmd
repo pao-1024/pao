@@ -1,7 +1,0 @@
-flowchart TB
-  firmware["正式应用固件<br/>ESP-IDF · 驱动 · 业务"] --> models["芯片与外设模型<br/>ROM · CPU · 寄存器<br/>I²C · I²S · MCPWM · GPIO / RMT"]
-  models --> evidence["运行观测<br/>UART · 显存 · PCM · PWM"]
-  classDef software fill:#edeaf9,stroke:#7263be,color:#34286d
-  classDef output fill:#f8ede7,stroke:#b77a5e,color:#713b26
-  class firmware,models software
-  class evidence output
