@@ -9,6 +9,7 @@ typedef struct {
     int (*distance_cm)(void);
     // action: 0 stop, 1 forward, 2 backward, 3 turn left, 4 turn right.
     void (*move)(int action, int duration_ms);
+    void (*move_sequence)(int action, int duration_ms);
     void (*fire)(void);
     void (*show_distance)(int distance_cm);
     void (*show_state)(int state);
@@ -27,6 +28,7 @@ int pao_guest_command(int type, int arg0, int arg1);
 // Queues a fire-and-forget event for the guest. Returns 0 when queued.
 int pao_guest_post_event(int type, int arg0, int arg1);
 int pao_guest_post_text_event(int type, const char* text);
+int pao_guest_command_text(int type, const char* text);
 
 #ifdef __cplusplus
 }

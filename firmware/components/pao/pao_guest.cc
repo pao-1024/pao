@@ -62,6 +62,13 @@ void HostMove(wasm_exec_env_t env, int32_t action, int32_t duration_ms) {
     }
 }
 
+void HostMoveSequence(wasm_exec_env_t env, int32_t action, int32_t duration_ms) {
+    (void)env;
+    if (g_hooks.move_sequence != nullptr) {
+        g_hooks.move_sequence(action, duration_ms);
+    }
+}
+
 void HostFire(wasm_exec_env_t env) {
     (void)env;
     if (g_hooks.fire != nullptr) {
@@ -90,6 +97,20 @@ void HostEventReply(wasm_exec_env_t env, int32_t id, int32_t result) {
         g_reply_result = result;
         xSemaphoreGive(g_reply_done);
     }
+}
+
+int32_t HostTextLen(wasm_exec_env_t env) {
+    (void)env;
+    return static_cast<int32_t>(std::strlen(g_last_text));
+}
+
+int32_t HostTextByte(wasm_exec_env_t env, int32_t index) {
+    (void)env;
+    const auto length = static_cast<int32_t>(std::strlen(g_last_text));
+    if (index < 0 || index >= length) {
+        return 0;
+    }
+    return static_cast<uint8_t>(g_last_text[index]);
 }
 
 void HostShowReceivedText(wasm_exec_env_t env) {
@@ -135,11 +156,14 @@ NativeSymbol kSymbols[] = {
     {"delay_ms", reinterpret_cast<void*>(HostDelayMs), "(i)", nullptr},
     {"log_int", reinterpret_cast<void*>(HostLogInt), "(i)", nullptr},
     {"move", reinterpret_cast<void*>(HostMove), "(ii)", nullptr},
+    {"move_seq", reinterpret_cast<void*>(HostMoveSequence), "(ii)", nullptr},
     {"fire", reinterpret_cast<void*>(HostFire), "()", nullptr},
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
     {"show_state", reinterpret_cast<void*>(HostShowState), "(i)", nullptr},
     {"show_wake", reinterpret_cast<void*>(HostShowWake), "()", nullptr},
     {"show_received_text", reinterpret_cast<void*>(HostShowReceivedText), "()", nullptr},
+    {"text_len", reinterpret_cast<void*>(HostTextLen), "()i", nullptr},
+    {"text_byte", reinterpret_cast<void*>(HostTextByte), "(i)i", nullptr},
     {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
     {"uptime_ms", reinterpret_cast<void*>(HostUptimeMs), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
@@ -232,6 +256,29 @@ extern "C" void pao_guest_on_device_state(int state) {
 extern "C" void pao_guest_on_wake_word(const char* word) {
     (void)word;
     pao_guest_post_event(20, 0, 0);
+}
+
+extern "C" int pao_guest_command_text(int type, const char* text) {
+    if (g_events == nullptr || g_command_lock == nullptr) {
+        return -1;
+    }
+    if (xSemaphoreTake(g_command_lock, pdMS_TO_TICKS(2000)) != pdTRUE) {
+        return -2;
+    }
+    std::snprintf(g_last_text, sizeof(g_last_text), "%s", text != nullptr ? text : "");
+    const uint32_t id = g_next_id++;
+    g_pending_id = id;
+    g_reply_result = -3;
+    xSemaphoreTake(g_reply_done, 0);
+    GuestEvent event = {id, type, 0, 0};
+    if (xQueueSend(g_events, &event, pdMS_TO_TICKS(100)) != pdTRUE) {
+        xSemaphoreGive(g_command_lock);
+        return -4;
+    }
+    const bool replied = xSemaphoreTake(g_reply_done, pdMS_TO_TICKS(2000)) == pdTRUE;
+    const int result = replied ? g_reply_result : -5;
+    xSemaphoreGive(g_command_lock);
+    return result;
 }
 
 extern "C" int pao_guest_command(int type, int arg0, int arg1) {

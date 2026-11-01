@@ -185,6 +185,21 @@ private:
         guest_board_->RunChassis(motion, duration_ms);
     }
 
+    static void GuestMoveSequence(int action, int duration_ms) {
+        if (guest_board_ == nullptr) {
+            return;
+        }
+        MotionAction motion = MotionAction::Stop;
+        switch (action) {
+            case 1: motion = MotionAction::Forward; break;
+            case 2: motion = MotionAction::Backward; break;
+            case 3: motion = MotionAction::TurnLeft; break;
+            case 4: motion = MotionAction::TurnRight; break;
+            default: motion = MotionAction::Stop; break;
+        }
+        guest_board_->RunChassis(motion, duration_ms, true);
+    }
+
     static void GuestFire() {
         if (guest_board_ != nullptr) {
             guest_board_->FireLauncher();
@@ -242,6 +257,7 @@ private:
         pao_guest_hooks_t hooks = {};
         hooks.distance_cm = &PaoBoard::GuestDistanceCm;
         hooks.move = &PaoBoard::GuestMove;
+        hooks.move_sequence = &PaoBoard::GuestMoveSequence;
         hooks.fire = &PaoBoard::GuestFire;
         hooks.show_distance = &PaoBoard::GuestShowDistance;
         hooks.show_state = &PaoBoard::GuestShowState;
@@ -1084,6 +1100,7 @@ private:
     }
 
     void CancelSequence() {
+        pao_guest_post_event(31, 0, 0);
         bool was_active;
         {
             std::lock_guard<std::mutex> lock(sequence_mutex_);
@@ -1234,8 +1251,12 @@ private:
             [this](const PropertyList& properties) -> ToolResult {
                 ActionSequence sequence;
                 std::string error;
-                if (!ParseActionSequence(properties["steps"].value<std::string>(), sequence, error)) {
+                const auto& steps = properties["steps"].value<std::string>();
+                if (!ParseActionSequence(steps, sequence, error)) {
                     return std::unexpected(error);
+                }
+                if (pao_guest_command_text(30, steps.c_str()) == 0) {
+                    return true;
                 }
                 if (!StartSequence(sequence)) {
                     return std::unexpected("动作序列任务未启动");

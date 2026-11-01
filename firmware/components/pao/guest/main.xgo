@@ -17,9 +17,10 @@ var exploreStartMs int32 = 0
 var exploreStepMs int32 = 0
 var lastTextMs int32 = 0
 
+
 for {
 	var timeout int32 = 500
-	if moving {
+	if moving || seqActive {
 		timeout = 100
 	}
 	event = eventNext(timeout)
@@ -64,6 +65,30 @@ for {
 				moveStatus = 5
 			} else {
 				move(1, 300)
+			}
+		}
+	}
+
+	if seqActive {
+		now := uptimeMs()
+		if !seqStepStarted {
+			act := seqActions[seqIndex]
+			dur := seqDurations[seqIndex]
+			if act == 5 {
+				fire()
+			} else {
+				moveSeq(act, dur)
+			}
+			seqStepEndMs = now + dur
+			seqStepStarted = true
+		} else if now >= seqStepEndMs {
+			if seqActions[seqIndex] != 5 {
+				moveSeq(0, 0)
+			}
+			seqIndex++
+			seqStepStarted = false
+			if seqIndex >= seqCount {
+				seqActive = false
 			}
 		}
 	}
@@ -120,6 +145,7 @@ for {
 	b := eventArg1()
 
 	if event == 1 {
+		seqActive = false
 		moving = false
 		exploring = false
 		explorePhase = 0
@@ -133,6 +159,7 @@ for {
 		}
 		eventReply(id, 0)
 	} else if event == 2 {
+		seqActive = false
 		exploring = false
 		explorePhase = 0
 		exploreReason = 6
@@ -189,6 +216,7 @@ for {
 	} else if event == 6 {
 		eventReply(id, moveTarget)
 	} else if event == 7 {
+		seqActive = false
 		moving = false
 		move(0, 0)
 		exploring = true
@@ -199,6 +227,7 @@ for {
 		exploreStepMs = 0
 		eventReply(id, 0)
 	} else if event == 8 {
+		seqActive = false
 		exploring = false
 		move(0, 0)
 		explorePhase = 0
@@ -216,6 +245,20 @@ for {
 	} else if event == 21 {
 		showState(a)
 		logInt(100 + a)
+	} else if event == 30 {
+		code := parseSequence(readText())
+		if code == 0 {
+			seqActive = true
+			seqIndex = 0
+			seqStepStarted = false
+			seqStepEndMs = 0
+			eventReply(id, 0)
+		} else {
+			eventReply(id, code)
+		}
+	} else if event == 31 {
+		seqActive = false
+		eventReply(id, 0)
 	} else if event == 22 {
 		lastTextMs = uptimeMs()
 		showReceivedText()

@@ -12,6 +12,9 @@ func logInt(value int32)
 //go:wasmimport pao move
 func move(action, durationMs int32)
 
+//go:wasmimport pao move_seq
+func moveSeq(action, durationMs int32)
+
 //go:wasmimport pao fire
 func fire()
 
@@ -26,6 +29,12 @@ func showWake()
 
 //go:wasmimport pao show_received_text
 func showReceivedText()
+
+//go:wasmimport pao text_len
+func textLen() int32
+
+//go:wasmimport pao text_byte
+func textByte(index int32) int32
 
 //go:wasmimport pao device_state
 func deviceState() int32
