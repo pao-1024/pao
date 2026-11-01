@@ -1,0 +1,16 @@
+---
+config:
+  flowchart:
+    minNodeWidth: 180
+    wrappingWidth: 240
+---
+flowchart LR
+  request["需求与验收目标"] --> agent["Agent<br/>选型 · 电路 · 软件"]
+  agent --> tools["工具执行<br/>规则检查 · 编译<br/>芯片仿真"]
+  tools --> evaluation{"评估函数<br/>实际结果符合预期？"}
+  evaluation -- "通过" --> result["工程产物<br/>验收记录"]
+  evaluation -- "失败原因与运行证据" --> agent
+  classDef feedback fill:#edeaf9,stroke:#7263be,color:#34286d
+  classDef output fill:#f8ede7,stroke:#b77a5e,color:#713b26
+  class agent,evaluation feedback
+  class result output

@@ -1,7 +1,6 @@
 /node_modules/
 /dist/
-/.playwright-cli/
-/public/release/
+/public/diagrams/
 /public/reference/
 /public/videos/
 /slides-export.*

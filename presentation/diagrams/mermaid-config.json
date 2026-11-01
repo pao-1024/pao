@@ -1,0 +1,14 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Noto Sans CJK SC, Noto Sans SC, Microsoft YaHei, sans-serif",
+    "fontSize": "20px",
+    "primaryColor": "#f1f3f6",
+    "primaryTextColor": "#202838",
+    "primaryBorderColor": "#8d96a8",
+    "lineColor": "#716b8c",
+    "secondaryColor": "#edeaf9",
+    "tertiaryColor": "#ffffff"
+  },
+  "flowchart": { "curve": "linear", "nodeSpacing": 30, "rankSpacing": 34, "padding": 16 }
+}
