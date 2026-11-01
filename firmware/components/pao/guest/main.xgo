@@ -16,12 +16,18 @@ var exploreReason int32 = 0
 var exploreStartMs int32 = 0
 var exploreStepMs int32 = 0
 var lastTextMs int32 = 0
+var standbyActive bool = false
+var standbyStartMs int32 = 0
+var standbyHeard bool = false
 
 
 for {
 	var timeout int32 = 500
 	if moving || seqActive {
 		timeout = 100
+	}
+	if standbyActive {
+		timeout = 200
 	}
 	event = eventNext(timeout)
 
@@ -66,6 +72,26 @@ for {
 			} else {
 				move(1, 300)
 			}
+		}
+	}
+
+	if standbyActive {
+		now := uptimeMs()
+		state := deviceState()
+		elapsed := now - standbyStartMs
+		if state == 6 {
+			standbyHeard = true
+			if elapsed > 20000 {
+				toggleChat()
+				standbyActive = false
+			}
+		} else if state == 3 {
+			standbyActive = false
+		} else if state == 5 && (standbyHeard || elapsed > 3000) {
+			toggleChat()
+			standbyActive = false
+		} else if elapsed > 30000 {
+			standbyActive = false
 		}
 	}
 
@@ -258,6 +284,13 @@ for {
 		}
 	} else if event == 31 {
 		seqActive = false
+		eventReply(id, 0)
+	} else if event == 40 {
+		exploring = false
+		move(0, 0)
+		standbyActive = true
+		standbyStartMs = uptimeMs()
+		standbyHeard = false
 		eventReply(id, 0)
 	} else if event == 22 {
 		lastTextMs = uptimeMs()

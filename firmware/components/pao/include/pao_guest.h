@@ -16,6 +16,7 @@ typedef struct {
     void (*show_wake)(void);
     void (*show_text)(const char* text);
     int (*device_state)(void);
+    void (*toggle_chat)(void);
 } pao_guest_hooks_t;
 
 void pao_guest_set_hooks(const pao_guest_hooks_t* hooks);

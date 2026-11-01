@@ -39,6 +39,9 @@ func textByte(index int32) int32
 //go:wasmimport pao device_state
 func deviceState() int32
 
+//go:wasmimport pao toggle_chat
+func toggleChat()
+
 //go:wasmimport pao uptime_ms
 func uptimeMs() int32
 

@@ -139,6 +139,13 @@ int32_t HostUptimeMs(wasm_exec_env_t env) {
     return static_cast<int32_t>(esp_timer_get_time() / 1000);
 }
 
+void HostToggleChat(wasm_exec_env_t env) {
+    (void)env;
+    if (g_hooks.toggle_chat != nullptr) {
+        g_hooks.toggle_chat();
+    }
+}
+
 int32_t HostDeviceState(wasm_exec_env_t env) {
     (void)env;
     return g_hooks.device_state != nullptr ? g_hooks.device_state() : -1;
@@ -165,6 +172,7 @@ NativeSymbol kSymbols[] = {
     {"text_len", reinterpret_cast<void*>(HostTextLen), "()i", nullptr},
     {"text_byte", reinterpret_cast<void*>(HostTextByte), "(i)i", nullptr},
     {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
+    {"toggle_chat", reinterpret_cast<void*>(HostToggleChat), "()", nullptr},
     {"uptime_ms", reinterpret_cast<void*>(HostUptimeMs), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
     {"event_id", reinterpret_cast<void*>(HostEventId), "()i", nullptr},

@@ -206,6 +206,10 @@ private:
         }
     }
 
+    static void GuestToggleChat() {
+        Application::GetInstance().ToggleChatState();
+    }
+
     static int GuestDeviceState() {
         return static_cast<int>(Application::GetInstance().GetDeviceState());
     }
@@ -264,6 +268,7 @@ private:
         hooks.show_wake = &PaoBoard::GuestShowWake;
         hooks.show_text = &PaoBoard::GuestShowText;
         hooks.device_state = &PaoBoard::GuestDeviceState;
+        hooks.toggle_chat = &PaoBoard::GuestToggleChat;
         pao_guest_set_hooks(&hooks);
         pao_guest_start();
     }
@@ -1348,6 +1353,9 @@ private:
             "返回：true 表示已安排回到待机。调用后用一句简短的告别回复用户。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                if (pao_guest_command(40, 0, 0) == 0) {
+                    return true;
+                }
                 StopExplore();
                 const auto error = esp_timer_stop(standby_timer_);
                 if (error != ESP_ERR_INVALID_STATE) {
