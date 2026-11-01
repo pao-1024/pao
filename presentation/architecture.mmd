@@ -1,0 +1,8 @@
+flowchart LR
+  voice["用户语音"] --> cloud["灵矽服务 / MCP"]
+  web["局域网遥控页"] --> socket["WebSocket"]
+  cloud --> board["PaoBoard"]
+  socket --> board
+  board --> chassis["底盘"]
+  board --> range["测距"]
+  board --> fire["发射"]

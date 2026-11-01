@@ -1,0 +1,16 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Noto Sans SC, Microsoft YaHei, sans-serif",
+    "primaryColor": "#e8eee9",
+    "primaryTextColor": "#183038",
+    "primaryBorderColor": "#248a7d",
+    "secondaryColor": "#f7ecdf",
+    "tertiaryColor": "#f5f3ed",
+    "lineColor": "#52706f",
+    "textColor": "#183038"
+  },
+  "flowchart": {
+    "curve": "linear"
+  }
+}

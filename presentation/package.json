@@ -1,0 +1,17 @@
+{
+  "name": "@pao/presentation",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "assets": "sh prepare-assets.sh",
+    "dev": "sh prepare-assets.sh && slidev --port 4174",
+    "build": "sh prepare-assets.sh && slidev build",
+    "export": "sh prepare-assets.sh && slidev export"
+  },
+  "devDependencies": {
+    "@slidev/cli": "53.0.0",
+    "@slidev/theme-default": "0.25.0",
+    "markdown-it": "14.3.3"
+  }
+}
