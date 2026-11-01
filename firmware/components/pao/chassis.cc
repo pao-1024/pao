@@ -66,7 +66,8 @@ bool Chassis::setConfig(const ChassisConfig& config) {
     std::lock_guard<std::mutex> lock(mutex_);
     config_ = config;
     if (target_speed_ != 0) {
-        const float output = requested_ == Motion::Rotate ? config_.rotate_output : config_.move_output;
+        const float output = std::min(requested_ == Motion::Rotate ? config_.rotate_output : config_.move_output,
+                                      output_limit_);
         target_speed_ = std::copysign(output, target_speed_);
     }
     if (config_.ramp_time_ms == 0) {
@@ -81,10 +82,12 @@ ChassisConfig Chassis::config() const {
     return config_;
 }
 
-void Chassis::setMotion(Motion motion, int direction) {
+void Chassis::setMotion(Motion motion, int direction, float output_limit) {
     std::lock_guard<std::mutex> lock(mutex_);
     requested_ = motion;
-    const float output = motion == Motion::Rotate ? config_.rotate_output : config_.move_output;
+    output_limit_ = output_limit;
+    const float output = std::min(motion == Motion::Rotate ? config_.rotate_output : config_.move_output,
+                                  output_limit_);
     target_speed_ = direction * output;
     if (config_.ramp_time_ms == 0) {
         advanceLocked(0);
@@ -92,20 +95,20 @@ void Chassis::setMotion(Motion motion, int direction) {
     xTaskNotifyGive(task_);
 }
 
-void Chassis::forward() {
-    setMotion(Motion::Move, 1);
+void Chassis::forward(float output_limit) {
+    setMotion(Motion::Move, 1, output_limit);
 }
 
 void Chassis::backward() {
     setMotion(Motion::Move, -1);
 }
 
-void Chassis::turnLeft() {
-    setMotion(Motion::Rotate, 1);
+void Chassis::turnLeft(float output_limit) {
+    setMotion(Motion::Rotate, 1, output_limit);
 }
 
-void Chassis::turnRight() {
-    setMotion(Motion::Rotate, -1);
+void Chassis::turnRight(float output_limit) {
+    setMotion(Motion::Rotate, -1, output_limit);
 }
 
 void Chassis::stop() {
@@ -116,6 +119,7 @@ void Chassis::emergencyStop() {
     std::lock_guard<std::mutex> lock(mutex_);
     requested_ = Motion::Stopped;
     active_ = Motion::Stopped;
+    output_limit_ = 1.0f;
     target_speed_ = 0;
     current_speed_ = 0;
     writeMotorsLocked();
@@ -172,7 +176,8 @@ void Chassis::advanceLocked(float elapsed_seconds) {
 }
 
 void Chassis::writeMotorsLocked() {
-    const float motion_max = active_ == Motion::Rotate ? config_.rotate_output : config_.move_output;
+    const float motion_max = std::min(active_ == Motion::Rotate ? config_.rotate_output : config_.move_output,
+                                      output_limit_);
     const float left_speed = current_speed_ * (active_ == Motion::Rotate ? -1.0f : 1.0f);
     const float left = applyMinOutput(left_speed, applied_left_scale_, motion_max, config_.min_output);
     const float right = applyMinOutput(current_speed_, applied_right_scale_, motion_max, config_.min_output);

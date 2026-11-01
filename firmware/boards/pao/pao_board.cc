@@ -53,6 +53,15 @@ constexpr int kMinAlarmDistanceCm = 2;
 constexpr int kMaxAlarmDistanceCm = 100;
 constexpr float kAlarmClearMarginCm = 2.0f;
 constexpr int64_t kObstacleAlarmIntervalUs = 1500000;
+constexpr float kExploreStopDistanceCm = 35.0f;
+constexpr float kExploreClearDistanceCm = 45.0f;
+constexpr float kExploreMinTurnDistanceCm = 20.0f;
+constexpr float kExploreOutputLimit = 0.5f;
+constexpr int64_t kExploreForwardUs = 3000000;
+constexpr int64_t kExploreTurnUs = 1000000;
+constexpr int64_t kExploreSettleUs = 200000;
+constexpr int64_t kExploreMaxRunUs = 120000000;
+constexpr int kExploreMaxTurns = 6;
 
 struct StoredMotionConfig {
     uint32_t version;
@@ -67,10 +76,13 @@ extern const char pao_launch_start[] asm("_binary_pao_launch_ogg_start");
 extern const char pao_launch_end[] asm("_binary_pao_launch_ogg_end");
 extern const char pao_alarm_start[] asm("_binary_pao_alarm_ogg_start");
 extern const char pao_alarm_end[] asm("_binary_pao_alarm_ogg_end");
+extern const char pao_explore_start[] asm("_binary_pao_explore_ogg_start");
+extern const char pao_explore_end[] asm("_binary_pao_explore_ogg_end");
 
 class PaoBoard : public WifiBoard {
 private:
     enum class MotionAction { Forward, Backward, TurnLeft, TurnRight, Stop, EmergencyStop };
+    enum class ExplorePhase { Idle, Checking, Forward, Settling, Turning, Fault };
 
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
@@ -86,6 +98,15 @@ private:
     ForwardDistanceMover distance_mover_{ultrasonic_, chassis_};
     TaskHandle_t distance_task_ = nullptr;
     uint32_t chassis_generation_ = 0;
+    ExplorePhase explore_phase_ = ExplorePhase::Idle;
+    const char* explore_reason_ = "idle";
+    int64_t explore_end_us_ = 0;
+    int64_t explore_step_us_ = 0;
+    int explore_clear_samples_ = 0;
+    int explore_turns_ = 0;
+    bool explore_turn_left_ = true;
+    int64_t next_explore_sound_us_ = 0;
+    std::atomic<bool> explore_sound_scheduled_{false};
     std::mutex sequence_mutex_;
     ActionSequence sequence_;
     uint32_t sequence_id_ = 0;
@@ -105,17 +126,35 @@ private:
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
 
-    // 续发指令只取消旧任务和定时器，保持当前电机输出。
-    // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
-    void ResetMotionLocked(const char* status) {
+    bool ExploreActiveLocked() const {
+        return explore_phase_ != ExplorePhase::Idle && explore_phase_ != ExplorePhase::Fault;
+    }
+
+    void StopChassisTimerLocked() {
         chassis_deadline_ = 0;
-        ++chassis_generation_;
-        if (status != nullptr) {
-            distance_mover_.cancel(status);
-        }
         const auto error = esp_timer_stop(chassis_timer_);
         if (error != ESP_ERR_INVALID_STATE) {
             ESP_ERROR_CHECK(error);
+        }
+    }
+
+    void ArmExploreTimerLocked(int64_t duration_us) {
+        StopChassisTimerLocked();
+        chassis_deadline_ = esp_timer_get_time() + duration_us;
+        ESP_ERROR_CHECK(esp_timer_start_once(chassis_timer_, duration_us));
+    }
+
+    // 续发指令只取消旧任务和定时器，保持当前电机输出。
+    // 调用方持有 chassis_mutex_，使旧测距结果和旧定时回调不能恢复已取消的运动。
+    void ResetMotionLocked(const char* status) {
+        StopChassisTimerLocked();
+        ++chassis_generation_;
+        if (ExploreActiveLocked()) {
+            explore_phase_ = ExplorePhase::Idle;
+            explore_reason_ = "cancelled";
+        }
+        if (status != nullptr) {
+            distance_mover_.cancel(status);
         }
     }
 
@@ -157,9 +196,14 @@ private:
             return;
         }
         std::lock_guard<std::mutex> lock(chassis_mutex_);
+        const bool exploring = ExploreActiveLocked();
         ResetMotionLocked(distance_mover_.status().active ? "cancelled" : "idle");
         if (action == MotionAction::Stop) {
-            chassis_.stop();
+            if (exploring) {
+                chassis_.emergencyStop();
+            } else {
+                chassis_.stop();
+            }
             ESP_LOGI(TAG, "Chassis stopped: stop");
             return;
         }
@@ -208,6 +252,7 @@ private:
             return ESP_ERR_INVALID_ARG;
         }
         std::lock_guard<std::mutex> lock(config_mutex_);
+        StopExplore();
         const auto current = chassis_.config();
         if (current.ramp_time_ms == config.ramp_time_ms &&
             current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
@@ -314,6 +359,173 @@ private:
         return std::string("已开始前进到距障碍物目标距离，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
     }
 
+    void PlayExploreSound(uint32_t generation) {
+        if (esp_timer_get_time() < next_explore_sound_us_) {
+            return;
+        }
+        if (explore_sound_scheduled_.exchange(true)) {
+            return;
+        }
+        Application::GetInstance().Schedule([this, generation]() {
+            explore_sound_scheduled_ = false;
+            {
+                std::lock_guard<std::mutex> lock(chassis_mutex_);
+                if (generation != chassis_generation_ || !ExploreActiveLocked()) {
+                    return;
+                }
+            }
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() != kDeviceStateIdle || !app.GetAudioService().IsPlaybackIdle()) {
+                return;
+            }
+            const auto size = reinterpret_cast<std::uintptr_t>(pao_explore_end) -
+                              reinterpret_cast<std::uintptr_t>(pao_explore_start);
+            app.PlaySound(std::string_view(pao_explore_start, size));
+            std::lock_guard<std::mutex> lock(chassis_mutex_);
+            next_explore_sound_us_ = esp_timer_get_time() + 5000000;
+        });
+    }
+
+    ToolResult StartExplore() {
+        std::lock_guard<std::mutex> config_lock(config_mutex_);
+        const auto generation = StopChassis();
+        const auto config = chassis_.config();
+        if (config.min_output >= kExploreOutputLimit ||
+            config.left_scale == 0 || config.right_scale == 0) {
+            return std::unexpected("探索需要左右轮可用，且最小有效输出低于 50%；请先在遥控页校准");
+        }
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        if (generation != chassis_generation_) {
+            return std::unexpected("探索启动已被新的底盘指令取消");
+        }
+        explore_phase_ = ExplorePhase::Checking;
+        explore_reason_ = "";
+        explore_end_us_ = esp_timer_get_time() + kExploreMaxRunUs;
+        explore_step_us_ = 0;
+        explore_clear_samples_ = 0;
+        explore_turns_ = 0;
+        explore_turn_left_ = true;
+        xTaskNotifyGive(distance_task_);
+        PlayExploreSound(generation);
+        ESP_LOGI(TAG, "Explore started");
+        return std::string("已开始自动探索；说“停止探索”可立即退出，单次最多运行两分钟");
+    }
+
+    void StopExplore() {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        if (ExploreActiveLocked()) {
+            StopChassisLocked(distance_mover_.status().active ? "cancelled" : "idle");
+            explore_reason_ = "stopped";
+            ESP_LOGI(TAG, "Explore stopped by user");
+        } else if (explore_phase_ == ExplorePhase::Fault) {
+            explore_phase_ = ExplorePhase::Idle;
+            explore_reason_ = "stopped";
+        }
+    }
+
+    static const char* ExplorePhaseName(ExplorePhase phase) {
+        switch (phase) {
+        case ExplorePhase::Idle: return "idle";
+        case ExplorePhase::Checking: return "checking";
+        case ExplorePhase::Forward: return "forward";
+        case ExplorePhase::Settling: return "settling";
+        case ExplorePhase::Turning: return "turning";
+        case ExplorePhase::Fault: return "fault";
+        }
+        return "fault";
+    }
+
+    cJSON* ReadExploreStatus() {
+        std::lock_guard<std::mutex> lock(chassis_mutex_);
+        auto* result = cJSON_CreateObject();
+        cJSON_AddStringToObject(result, "state", ExplorePhaseName(explore_phase_));
+        cJSON_AddStringToObject(result, "reason", explore_reason_);
+        cJSON_AddBoolToObject(result, "active", ExploreActiveLocked());
+        cJSON_AddNumberToObject(result, "turn_attempts", explore_turns_);
+        return result;
+    }
+
+    void FailExploreLocked(const char* reason) {
+        chassis_.emergencyStop();
+        StopChassisTimerLocked();
+        explore_phase_ = ExplorePhase::Fault;
+        explore_reason_ = reason;
+        ESP_LOGW(TAG, "Explore stopped: %s", reason);
+    }
+
+    void BeginExploreTurnLocked(int64_t now) {
+        if (explore_turns_ >= kExploreMaxTurns) {
+            FailExploreLocked("no_path");
+            return;
+        }
+        ++explore_turns_;
+        explore_phase_ = ExplorePhase::Turning;
+        explore_step_us_ = now + kExploreTurnUs;
+        if (explore_turn_left_) {
+            chassis_.turnLeft(kExploreOutputLimit);
+        } else {
+            chassis_.turnRight(kExploreOutputLimit);
+        }
+        ArmExploreTimerLocked(kExploreTurnUs + 500000);
+        PlayExploreSound(chassis_generation_);
+    }
+
+    void UpdateExploreLocked(esp_err_t error, float distance_cm) {
+        const int64_t now = esp_timer_get_time();
+        if (now >= explore_end_us_) {
+            FailExploreLocked("time_limit");
+            return;
+        }
+        if (error != ESP_OK) {
+            FailExploreLocked("sensor_error");
+            return;
+        }
+        if (distance_cm < kExploreMinTurnDistanceCm) {
+            FailExploreLocked("too_close");
+            return;
+        }
+        switch (explore_phase_) {
+        case ExplorePhase::Checking:
+            if (now < explore_step_us_) { return; }
+            if (distance_cm < kExploreClearDistanceCm) {
+                explore_clear_samples_ = 0;
+                BeginExploreTurnLocked(now);
+            } else if (++explore_clear_samples_ >= 2) {
+                explore_clear_samples_ = 0;
+                explore_turns_ = 0;
+                explore_phase_ = ExplorePhase::Forward;
+                explore_step_us_ = now + kExploreForwardUs;
+                chassis_.forward(kExploreOutputLimit);
+                ArmExploreTimerLocked(kExploreForwardUs + 500000);
+            }
+            break;
+        case ExplorePhase::Forward:
+            if (distance_cm <= kExploreStopDistanceCm || now >= explore_step_us_) {
+                chassis_.emergencyStop();
+                StopChassisTimerLocked();
+                explore_phase_ = ExplorePhase::Settling;
+                explore_step_us_ = now + kExploreSettleUs;
+                explore_turn_left_ = !explore_turn_left_;
+            }
+            break;
+        case ExplorePhase::Settling:
+            if (now >= explore_step_us_) { BeginExploreTurnLocked(now); }
+            break;
+        case ExplorePhase::Turning:
+            if (now >= explore_step_us_) {
+                chassis_.emergencyStop();
+                StopChassisTimerLocked();
+                explore_phase_ = ExplorePhase::Checking;
+                explore_step_us_ = now + kExploreSettleUs;
+                explore_clear_samples_ = 0;
+            }
+            break;
+        case ExplorePhase::Idle:
+        case ExplorePhase::Fault:
+            break;
+        }
+    }
+
     void PlayObstacleAlarm() {
         if (alarm_scheduled_.exchange(true)) {
             return;
@@ -321,8 +533,8 @@ private:
         Application::GetInstance().Schedule([this]() {
             alarm_scheduled_ = false;
             auto& app = Application::GetInstance();
-            // 语音播放期间不排队报警，下一轮检测仍过近时再重试。
-            if (!app.GetAudioService().IsPlaybackIdle()) {
+            // 聆听或语音播放期间不排队报警，下一轮检测仍过近时再重试。
+            if (app.GetDeviceState() != kDeviceStateIdle || !app.GetAudioService().IsPlaybackIdle()) {
                 return;
             }
             const auto size = reinterpret_cast<std::uintptr_t>(pao_alarm_end) -
@@ -359,10 +571,12 @@ private:
         while (true) {
             ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
             uint32_t generation;
-            bool active;
+            bool distance_active;
+            bool explore_active;
             {
                 std::lock_guard<std::mutex> lock(chassis_mutex_);
-                active = distance_mover_.status().active;
+                distance_active = distance_mover_.status().active;
+                explore_active = ExploreActiveLocked();
                 generation = chassis_generation_;
             }
             float current_cm = 0;
@@ -370,20 +584,24 @@ private:
             const auto error = distance_mover_.readDistanceCm(current_cm);
             UpdateObstacleAlarm(error, current_cm);
 
-            if (!active) {
+            if (!distance_active && !explore_active) {
                 continue;
             }
             {
                 std::lock_guard<std::mutex> lock(chassis_mutex_);
-                if (generation != chassis_generation_ || !distance_mover_.status().active) {
+                if (generation != chassis_generation_) {
                     continue;
                 }
-                distance_mover_.update(error, current_cm);
-                const auto state = distance_mover_.status();
-                if (!state.active) {
-                    ResetMotionLocked(nullptr);
-                    ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm",
-                             state.motion_status, state.moved_cm, state.requested_cm);
+                if (distance_active && distance_mover_.status().active) {
+                    distance_mover_.update(error, current_cm);
+                    const auto state = distance_mover_.status();
+                    if (!state.active) {
+                        ResetMotionLocked(nullptr);
+                        ESP_LOGI(TAG, "Distance move stopped: %s moved=%.1fcm requested=%dcm",
+                                 state.motion_status, state.moved_cm, state.requested_cm);
+                    }
+                } else if (explore_active && ExploreActiveLocked()) {
+                    UpdateExploreLocked(error, current_cm);
                 }
             }
         }
@@ -398,8 +616,15 @@ private:
             std::lock_guard<std::mutex> lock(board->chassis_mutex_);
             // 已排队的旧定时回调不能中断刚收到的新运动指令。
             if (board->chassis_deadline_ != 0 && esp_timer_get_time() >= board->chassis_deadline_) {
+                const bool exploring = board->ExploreActiveLocked();
                 board->StopChassisLocked(board->distance_mover_.status().active ? "timeout" : "idle");
-                ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
+                if (exploring) {
+                    board->explore_phase_ = ExplorePhase::Fault;
+                    board->explore_reason_ = "watchdog";
+                    ESP_LOGW(TAG, "Explore stopped: watchdog");
+                } else {
+                    ESP_LOGI(TAG, "Chassis stopped: duration elapsed");
+                }
             }
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
@@ -420,7 +645,7 @@ private:
             "四个方向动作使用设备保存的对应最大输出；duration_ms 可选，100..15000 毫秒，"
             "默认 1000，到时立即停；两个停止动作忽略 duration_ms。"
             "输出不是实测速度，不能保证准确距离或角度。"
-            "新动作取消原有定时、按距离运动和待执行动作序列。前进指定厘米数请用 self.chassis.move_forward，"
+            "新动作取消原有定时、按距离运动、自动探索和待执行动作序列。前进指定厘米数请用 self.chassis.move_forward，"
             "前进到距障碍物指定距离请用 self.chassis.move_to_distance。",
             PropertyList({Property("action", kPropertyTypeString).SetMaxLength(14),
                           Property("duration_ms", kPropertyTypeInteger, 1000, 100, 15000)}),
@@ -471,6 +696,29 @@ private:
             [this](const PropertyList&) -> ReturnValue {
                 return ReadDistance();
             });
+        mcp.AddTool("self.chassis.explore_start",
+            "开始自动探索：小车先确认前方距离，再短时前进、停车、原地旋转并重新测距。"
+            "仅使用前向超声波，不建图；测距失败立即停车，最多运行两分钟。"
+            "用户说“开始探索”“自己四处走走”时调用。参数：无。"
+            "返回已开始，不表示已经找到通路；可用 self.chassis.explore_status 查询状态。",
+            PropertyList(),
+            [this](const PropertyList&) -> ToolResult {
+                return StartExplore();
+            });
+        mcp.AddTool("self.chassis.explore_stop",
+            "立即停车并退出自动探索。用户说“停止探索”“别再自己走了”时调用；"
+            "普通停车或急停指令也会取消探索。参数：无。返回当前探索状态。",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                StopExplore();
+                return ReadExploreStatus();
+            });
+        mcp.AddTool("self.chassis.explore_status",
+            "查询自动探索是否运行、当前阶段、停止原因和连续转向次数。参数：无。",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                return ReadExploreStatus();
+            });
     }
 
     cJSON* ReadDistance() {
@@ -496,6 +744,7 @@ private:
     void FireLauncher(bool sequence_step = false) {
         if (!sequence_step) {
             CancelSequence();
+            StopExplore();
         }
         launcher_.fire();
         // 音频入队可能等待正在播放的语音，在主循环处理，避免阻塞遥控指令续发。
@@ -676,7 +925,7 @@ private:
             "是什么：小车上的电磁炮（电磁发射器），常供电并自动充能，固件只能按下它的发射按钮。\n"
             "能做什么：开炮，立即发射一次。用户说开炮、开火、发射、射击、打一发、biu 一下时调用。"
             "要连续开多炮就调用多次；单独调用会取消待执行动作序列，与其他底盘动作组合时使用 self.sequence.run。"
-            "没有充能或断电工具。\n"
+            "单独发射会退出自动探索。没有充能或断电工具。\n"
             "参数：无。\n"
             "返回：true 表示已发射。",
             PropertyList(),
@@ -746,12 +995,13 @@ private:
         McpServer::GetInstance().AddTool("self.standby",
             "是什么：让小车结束当前对话、回到待机状态。\n"
             "能做什么：等你这句回复播完后关闭对话，设备回到待机，之后需要再说“小炮小炮”或按键才会重新对话。"
-            "不会停止底盘和电磁炮，需要时先调用对应的停止工具。"
+            "会立即退出自动探索；不会停止普通底盘运动和电磁炮，需要时先调用对应的停止工具。"
             "用户说退下吧、休息吧、待机、没事了、再见、先这样、不聊了时调用。\n"
             "参数：无。\n"
             "返回：true 表示已安排回到待机。调用后用一句简短的告别回复用户。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
+                StopExplore();
                 const auto error = esp_timer_stop(standby_timer_);
                 if (error != ESP_ERR_INVALID_STATE) {
                     ESP_ERROR_CHECK(error);
@@ -852,6 +1102,11 @@ private:
             }
             const auto result = MoveToObstacleDistance(distance_cm);
             if (!result) { return result.error(); }
+        } else if (path == "/api/explore/start") {
+            const auto result = StartExplore();
+            if (!result) { return result.error(); }
+        } else if (path == "/api/explore/stop") {
+            StopExplore();
         } else if (path == "/api/launcher/fire") {
             FireLauncher();
         } else {
@@ -915,6 +1170,8 @@ private:
             cJSON_AddItemToObject(response.get(), "data", board->ReadAlarmConfig());
         } else if (std::strcmp(path->valuestring, "/api/distance") == 0) {
             cJSON_AddItemToObject(response.get(), "data", board->ReadDistance());
+        } else if (std::strcmp(path->valuestring, "/api/explore/status") == 0) {
+            cJSON_AddItemToObject(response.get(), "data", board->ReadExploreStatus());
         } else {
             error = board->ControlCommand(path->valuestring, query->valuestring);
             cJSON_AddBoolToObject(response.get(), "data", error.empty());

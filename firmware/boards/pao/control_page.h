@@ -25,6 +25,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline
 .up{grid-area:up}.down{grid-area:down}.left{grid-area:left}.right{grid-area:right}
 .stop{grid-area:stop;color:#ffb9b9;border-color:#805050;background:#342225;font-weight:700}
 .readout{font-size:13px;color:var(--muted)}.readout b{color:var(--text)}
+.explore-controls{display:flex;gap:8px;width:100%}.explore-controls button{flex:1;padding:9px}
 label{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--muted)}
 input[type=range]{flex:1;min-width:70px;accent-color:var(--accent)}output{font-family:ui-monospace,monospace;color:var(--text);min-width:48px;text-align:right}
 .settings{grid-column:1/-1;align-items:stretch}.settings fieldset{border:0;padding:0;margin:0;display:grid;gap:12px}.settings fieldset:disabled{opacity:.5}
@@ -46,6 +47,8 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <button class="direction right" data-dir="right" aria-label="按住顺时针旋转">↷<small>顺时针</small></button>
 <button class="direction down" data-dir="backward" aria-label="按住后退">↓<small>后退</small></button>
 </div>
+<div class="explore-controls"><button id="exploreStart">开始探索</button><button id="exploreStop">退出探索</button></div>
+<div class="readout">自动探索 <b id="exploreState" aria-live="polite">读取中…</b></div>
 </section>
 <section><h2>电磁炮</h2><button class="fire" id="fire">开炮<small>充能请看模块指示灯</small></button></section>
 <section class="settings"><h2>运动设置</h2>
@@ -63,7 +66,7 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>触发距离<input id="alarmDistance" type="range" min="2" max="100" step="1" value="10"><output id="alarmDistanceOut">10 cm</output></label>
 </fieldset><div class="config-line"><span id="alarmStatus" class="status" role="status">读取配置中</span><button id="alarmRetry" hidden>重试保存</button></div>
 </section>
-<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。最小有效输出须低于前进和旋转最大输出；设置在调节结束后保存到设备。测距不大于触发距离时播放警报，恢复到触发距离以上 2 cm 后解除。</p>
+<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出并退出探索；键盘 WASD / 方向键驾驶，空格开炮。探索按前方测距短时前进和转向，最长两分钟，测距失败即停车。最小有效输出须低于前进和旋转最大输出；设置在调节结束后保存到设备。测距不大于触发距离时播放警报，恢复到触发距离以上 2 cm 后解除。</p>
 </main><script>
 const $=id=>document.getElementById(id);
 const statusEl=$("status"),configStatus=$("configStatus");
@@ -77,7 +80,7 @@ function call(path,params){if(!socket||socket.readyState!==WebSocket.OPEN)return
   },3000);pending.set(id,{resolve,reject,timer});
   connection.send(JSON.stringify({id,path,query:new URLSearchParams(params||{}).toString()}))})}
 function connect(){const connection=socket=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}${location.pathname.replace(/[^/]*$/, "")}ws`);
-  connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();loadAlarmConfig();pollDistance(connection)};
+  connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();loadAlarmConfig();pollDistance(connection);pollExplore(connection)};
   connection.onmessage=event=>{let message;try{message=JSON.parse(event.data)}catch(e){connection.close();return}
     const request=pending.get(message.id);if(!request)return;
     pending.delete(message.id);clearTimeout(request.timer);
@@ -85,6 +88,7 @@ function connect(){const connection=socket=new WebSocket(`${location.protocol===
   connection.onclose=async()=>{for(const request of pending.values()){
     clearTimeout(request.timer);request.reject(Error("连接断开"))}pending.clear();clearControls();
     $("distance").textContent="连接断开";$("distance").style.color="var(--bad)";
+    $("exploreState").textContent="连接断开";
     let busy=false;try{const response=await fetch("/_single_device/status",{cache:"no-store",signal:AbortSignal.timeout(3000)});
       if(response.ok){const state=await response.json();busy=state.available===false&&state.owned===false}}catch(e){}
     setStatus(busy?"设备正在被其他浏览器使用，空闲后自动重试":"WS 断开，正在重连","bad");setTimeout(connect,busy?5000:1000)};
@@ -116,6 +120,8 @@ for(const button of document.querySelectorAll(".direction")){
   button.onpointerup=button.onpointercancel=()=>{if(pointerDir===button.dataset.dir){pointerDir=null;syncMotion(true)}};
 }
 $("stop").onclick=emergencyStop;
+$("exploreStart").onclick=async()=>{try{await call("/api/explore/start");setStatus("探索已开始","ok")}catch(e){reportError(e)}};
+$("exploreStop").onclick=async()=>{try{await call("/api/explore/stop");setStatus("探索已停止","ok")}catch(e){reportError(e)}};
 setInterval(()=>syncMotion(),50);
 
 function showConfig(){
@@ -189,6 +195,14 @@ async function pollDistance(connection){if(socket!==connection||connection.ready
     output.style.color=valid?"":"var(--bad)"}
   catch(e){output.textContent="读取失败（连接超时或断开）";output.style.color="var(--bad)"}
   finally{if(socket===connection)setTimeout(()=>pollDistance(connection),1000)}}
+const exploreLabels={idle:"已退出",checking:"测前方",forward:"前进",settling:"停车",turning:"旋转",fault:"故障停车"};
+const exploreReasons={cancelled:"手动接管",stopped:"主动退出",sensor_error:"测距失败",too_close:"距离过近",no_path:"没有找到通路",time_limit:"达到两分钟上限",watchdog:"运动超时"};
+async function pollExplore(connection){if(socket!==connection||connection.readyState!==WebSocket.OPEN)return;
+  const output=$("exploreState");try{const state=await call("/api/explore/status");
+    output.textContent=(exploreLabels[state.state]||state.state)+(exploreReasons[state.reason]?" · "+exploreReasons[state.reason]:"");
+    output.style.color=state.state==="fault"?"var(--bad)":""}
+  catch(e){output.textContent="状态读取失败";output.style.color="var(--bad)"}
+  finally{if(socket===connection)setTimeout(()=>pollExplore(connection),1000)}}
 connect();
 </script></body></html>
 )PAO";

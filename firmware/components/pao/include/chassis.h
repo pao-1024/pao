@@ -27,11 +27,11 @@ public:
     Chassis(const Chassis&) = delete;
     Chassis& operator=(const Chassis&) = delete;
 
-    // 四个方向使用配置中的最大输出；不能在 ISR 中调用。
-    void forward();
+    // 四个方向使用配置中的最大输出；可为自动运动设置更低的输出上限。不能在 ISR 中调用。
+    void forward(float output_limit = 1.0f);
     void backward();
-    void turnLeft();
-    void turnRight();
+    void turnLeft(float output_limit = 1.0f);
+    void turnRight(float output_limit = 1.0f);
     // 按配置的渐变时间减速停车。
     void stop();
     // 立即清零两轮输出和当前运动目标。
@@ -47,7 +47,7 @@ private:
 
     static void taskEntry(void* arg);
     void run();
-    void setMotion(Motion motion, int direction);
+    void setMotion(Motion motion, int direction, float output_limit = 1.0f);
     void advanceLocked(float elapsed_seconds);
     void writeMotorsLocked();
 
@@ -57,6 +57,7 @@ private:
     ChassisConfig config_;
     Motion requested_ = Motion::Stopped;
     Motion active_ = Motion::Stopped;
+    float output_limit_ = 1.0f;
     float target_speed_ = 0;
     float current_speed_ = 0;
     float applied_left_scale_ = 1;
