@@ -142,3 +142,21 @@
 
 .engineering-evidence .circuit-preview { display: block; width: 100%; height: 200px; }
 .engineering-evidence p { margin: 7px 0 0; color: #475063; font-size: 18px; line-height: 1.65; }
+
+.assets-body { display: grid; grid-template-columns: 660px 1fr; gap: 40px; margin-top: 24px; }
+.asset-repository { padding: 20px 24px; border: 1px solid var(--line); border-radius: 8px; background: #f5f6fa; }
+.asset-repository > div { display: grid; grid-template-columns: 116px 1fr; gap: 16px; align-items: center; min-height: 73px; border-top: 1px solid var(--line); }
+.asset-repository b { color: var(--ink); font-size: 19px; }
+.asset-repository code { color: #626a7a; font-size: 14px; line-height: 1.7; }
+.asset-benefits > div { padding: 12px 0 15px; border-bottom: 1px solid var(--line); }
+.asset-benefits h2 { color: var(--violet); font-size: 24px; line-height: 1.4; }
+.asset-benefits p { margin-top: 10px; color: #475063; font-size: 18px; line-height: 1.65; }
+.review-graphic { display: flex; align-items: center; height: 125px; margin-top: 20px; }
+.review-graphic img { display: block; width: 100%; max-height: 100%; }
+.review-evidence { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 22px; }
+.review-evidence > div { padding: 20px; border: 1px solid var(--line); border-radius: 8px; }
+.review-evidence .detail-label { margin-bottom: 10px; }
+.review-evidence a, .review-source { display: block; margin-bottom: 17px; color: #626a7a; font-size: 14px; line-height: 1.5; }
+.review-evidence code { display: block; color: #5146b6; font-size: 15px; line-height: 1.8; }
+.review-diff code { color: #286348; }
+.review-evidence p { margin-top: 16px; color: #475063; font-size: 18px; line-height: 1.65; }

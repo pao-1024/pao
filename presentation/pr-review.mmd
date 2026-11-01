@@ -1,0 +1,6 @@
+flowchart LR
+  change["工程变更<br/>代码与规则"] --> pr["Pull Request<br/>变更与讨论"]
+  pr --> review["工具执行检查<br/>人工审查设计"]
+  review --> history["决定是否合并<br/>保留版本记录"]
+  classDef focus fill:#edeaf9,stroke:#7263be,color:#34286d
+  class pr,review focus
