@@ -17,3 +17,4 @@ cp "$presentation_dir/../simulator/images/simulator-overview.png" "$reference_di
 cp "$presentation_dir/../experimental/platform/agent-hardware-preview.jpg" "$reference_dir/agent-hardware-preview.jpg"
 cp "$presentation_dir/../experimental/platform/agent-pcb-preview.jpg" "$reference_dir/agent-pcb-preview.jpg"
 cp "$presentation_dir/../experimental/platform/manufacturing-preview.jpg" "$reference_dir/manufacturing-preview.jpg"
+python3 "$presentation_dir/prepare-videos.py"

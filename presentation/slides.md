@@ -25,7 +25,7 @@ fonts:
   <div class="artifact-caption">PAO · 语音小车验证产品<br>代码驱动 · 自动开发流程探索</div>
 </div>
 <div class="bottom-note">万物皆代码 / 评估驱动闭环 / 对固件透明的芯片级仿真</div>
-<div class="page-number">01 / 13</div>
+<div class="page-number">01 / 14</div>
 
 <!--
 建议 25 秒。开场：我们正在探索 Agent 时代的硬件开发新范式。用代码定义工程，用评估驱动迭代，让 Agent 贯通设计、编译、仿真与修复。把电路、嵌入式软件与机械结构表达为可操作的工程，把验收标准变成可执行的评估函数，Agent 就能自己生成、运行、检查，再根据失败证据修复。PAO 是验证这套流程的产品，Studio 的平台化方向放在实机展示后介绍。
@@ -43,13 +43,13 @@ class: slide-light slide-source
   <div class="source-card"><span class="type-label">嵌入式软件</span><h2>ESP-IDF + esp32sim</h2><p>Agent 编写与迭代业务代码<br>构建正式固件，在芯片模型中运行</p><code>固件源码 → firmware.bin<br>评估：业务状态 / 外设实际输出</code></div>
   <div class="source-card"><span class="type-label">机械结构设计</span><h2>Blender</h2><p>Agent 驱动建模与仿真<br>外壳、底盘、支架与装配</p><code>当前研发：Blender 工作流<br>评估：几何检查 / 刚体动力学</code></div>
 </div>
-<div class="takeaway">Agent 参与设计，仿真与测试提供反馈，驱动下一轮修复。</div>
+<div class="takeaway">全代码化，让电路与机械结构也能按软件工程的方式管理。</div>
 <div class="bottom-note">连这份演示稿也是代码：presentation/slides.md · Slidev / Markdown</div>
-<div class="page-number">02 / 13</div>
+<div class="page-number">02 / 14</div>
 
 <!--
 建议 35 秒。硬件研发可以围绕三类核心设计展开：电路、嵌入式软件与机械结构。当前以 PAO 为实验载体，探索让 Agent 贯穿这些领域的设计与迭代。仿真、测试和评估是贯穿三者的反馈机制，不是额外的一类设计。
-电路用 tscircuit 表达器件和网络，以连通性和电气规则检查；软件由 ESP-IDF 构建，在 esp32sim 中执行正式固件，以业务状态和外设输出评估；机械结构由 Agent 驱动 Blender 建模，以几何检查与刚体动力学评估。代码使工程能被操作，评估结果帮助 Agent 定位偏差，再进入下一轮修改。
+电路用 tscircuit 表达器件和网络，以连通性和电气规则检查；软件由 ESP-IDF 构建，在 esp32sim 中执行正式固件，以业务状态和外设输出评估；机械结构由 Agent 驱动 Blender 建模，以几何检查与刚体动力学评估。代码使工程能被操作，评估结果帮助 Agent 定位偏差，再进入下一轮修改。全代码化也让电路与机械结构沿用软件工程的版本控制、PR 审查与自动检查，下一页展开这些资产如何管理。
 根目录 hardware/index.tsx 是 PAO 参考接线图；Studio 生成的 hardware.tsx、PCB 和制造资料属于模块载板流程，不把根接线图说成已布线 PCB。PAO 参考固件与 Studio 自由组合工程分别维护。
 来源：hardware/index.tsx；experimental/platform/README.md 的自然语言整机与业务开发；simulator/README.md。
 -->
@@ -75,7 +75,7 @@ class: slide-light slide-assets
   </div>
 </div>
 <div class="bottom-note">源文件入 Git，大型产物关联版本；生成工程需保存后入库，Blender 资产可沿用同一方式。</div>
-<div class="page-number">03 / 13</div>
+<div class="page-number">03 / 14</div>
 
 <!--
 建议 35 秒。把软件工程中成熟的版本管理延伸到硬件工程：电路、图纸、模型和验收规则也能成为可管理的工程资产。电路设计、固件配置、仿真模型与验收规则一起版本化，每次迭代都留下差异和原因；模块与测试也能在后续项目中复用。页面列出当前仓库已跟踪的真实文件，依赖通过 firmware/base.json、Cargo.lock、pnpm-lock.yaml 和 esp32sim gitlink 固定。
@@ -95,7 +95,7 @@ class: slide-light slide-review
   <div class="review-ci"><span class="detail-label">Hardware CI · 已配置的自动检查</span><span class="review-source">hardware/Taskfile.yaml · task test</span><code>node --test test/connectivity.test.ts<br>cmp dist/index/schematic.svg schematic.svg</code><p>检查编译后的连接关系，<br>确认重新生成的图纸与提交版本一致。</p></div>
 </div>
 <div class="bottom-note">PR 按改动范围运行已接入的检查；完整固件构建在 main 执行，仿真与实机结果分别记录。</div>
-<div class="page-number">04 / 13</div>
+<div class="page-number">04 / 14</div>
 
 <!--
 建议 40 秒。Git、PR 和持续集成本来就是成熟的软件工程方法。这里的价值，是把它们延伸到硬件工程：接线、图纸、驱动和验收规则可以在同一个 PR 中审查。Agent 提交可审查的变更，工具执行已有检查，人审设计意图、约束与证据，再决定是否合并。差异、讨论和验证结果可以关联同一提交，发生问题时可回溯工程版本。
@@ -112,7 +112,7 @@ class: slide-light slide-loop
 <div class="loop-graphic"><img src="/agent-loop.svg" alt="Agent 生成候选工程，经工具执行和评估后，成功保留产物，失败携带证据返回修复" /></div>
 <div class="loop-rules"><div><b>知道何时完成</b><span>把需求变成机器能执行的通过条件</span></div><div><b>知道哪里要改</b><span>返回具体偏差，而不只是一个失败标签</span></div><div><b>知道修复是否有效</b><span>保留既定验收步骤，修改后重新执行</span></div></div>
 <div class="bottom-note">代码让 Agent 能动手；评估函数提供反馈，让生成、执行与修复可以连续进行。</div>
-<div class="page-number">05 / 13</div>
+<div class="page-number">05 / 14</div>
 
 <!--
 建议 45 秒。代码生成之后，谁来判断它是否做对？评估函数把需求变成可执行条件，读取工程和运行结果，给出通过结论或具体偏差。Agent 才能知道什么时候停止、哪里需要修改，以及修改是否有效。
@@ -149,7 +149,7 @@ class: slide-light slide-circuit-source
   </figure>
 </div>
 <div class="bottom-note">同一份 TSX 生成原理图与 Circuit JSON；图纸用于审阅，电路网络交给下一页的测试。</div>
-<div class="page-number">06 / 13</div>
+<div class="page-number">06 / 14</div>
 
 <!--
 建议 30 秒。左边是仓库 Display.tsx 中真实的 OLED 模块定义，只省略绘图分区与坐标；右边直接展示 tscircuit 生成的原始 SVG 局部。代码定义器件、引脚和四条网络连接，图纸由这些设计输入生成。
@@ -182,7 +182,7 @@ assertNetwork(["ESP32_S3.GPIO42",
 </div>
 <div class="evaluation-feedback"><b>反馈给 Agent</b><p>预期连接与实际网络差异、具体引脚或规则违规，成为下一轮修复依据。</p></div>
 <div class="bottom-note">PAO 接线图与实验载板分别验收；检查网络和铜几何，不模拟实际短路电流。</div>
-<div class="page-number">07 / 13</div>
+<div class="page-number">07 / 14</div>
 
 <!--
 建议 45 秒。电路设计也能写单元测试。左侧把现有 OLED 测试循环中的两组参数展开：GPIO41 只能与 OLED.SDA 同网，GPIO42 只能与 OLED.SCL 同网。assertNetwork 读取构建后的 Circuit JSON，查找网络全部成员，再与独立记录的接线要求严格比较。少接、多接或短到其他信号都会失败；测试预期不从设计源码导入，避免跟着错误设计一起变化。
@@ -211,7 +211,7 @@ class: slide-light slide-schematic
   </div>
 </div>
 <div class="bottom-note">来源：hardware/index.tsx → schematic.svg；模块接线参考，尚未实物验证。</div>
-<div class="page-number">08 / 13</div>
+<div class="page-number">08 / 14</div>
 
 <!--
 建议 25 秒。从 OLED 局部展开到整机：左侧是 tscircuit 从 hardware/index.tsx 实际生成的完整 schematic.svg，可点击查看所有标注。右侧说明同一份设计的三种形态：TSX 组织模块，SVG 供人审阅，Circuit JSON 供工具检查。
@@ -225,15 +225,15 @@ class: slide-light slide-runtime-detail
 <div class="eyebrow">固件运行 / esp32sim · 透明芯片仿真与软件在环评估</div>
 <h1>固件运行，<em>用芯片仿真验证行为。</em></h1>
 <div class="runtime-detail-body">
-  <figure class="runtime-model"><a class="runtime-screen" href="/reference/simulator-overview.png" target="_blank" rel="noopener noreferrer"><img src="/reference/simulator-overview.png" alt="esp32sim 的 PAO 参考模拟器真实界面，显示 OLED、车辆场景、ESP32-S3 引脚与总线活动" /></a><figcaption><b>esp32sim · PAO 参考模拟器</b><p>ESP-IDF 构建正式固件，交给芯片级仿真。<br>仿真对固件透明，驱动与业务逻辑照常执行。</p><a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b" target="_blank" rel="noopener noreferrer">查看模拟器演示 ↗</a></figcaption></figure>
+  <figure class="runtime-model"><DemoVideo id="video-05" title="模拟器语音交互演示" /><figcaption><b>esp32sim · PAO 参考模拟器</b><p>ESP-IDF 构建正式固件，交给芯片级仿真。<br>仿真对固件透明，驱动与业务逻辑照常执行。</p><span>点击视频播放，可全屏查看。</span></figcaption></figure>
   <div class="runtime-checks"><span class="detail-label">自由组合应用 · 运行评估函数</span><div><b>UART 业务状态</b><p>按场景核对告警、音量、音调、电机与状态标签。</p></div><div><b>I²S / MCPWM 实际输出</b><p>检查 PCM 峰值、提示音频率与桥臂占空比，<br>将实测输出和场景预期比较。</p></div><div><b>显示与暂停行为</b><p>确认 OLED 显存到达；暂停后音频和电机归零。</p></div><div class="runtime-example"><b>失败如何反馈</b><p>“实际 PCM 峰值”与“期望值”一并返回 Agent。</p></div></div>
 </div>
-<div class="page-number">09 / 13</div>
+<div class="page-number">09 / 14</div>
 
 <!--
 建议 70 秒。正式固件由 ESP-IDF 构建后输入模拟器，从 ROM 启动，固件照常访问 CPU、寄存器和外设接口，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路。屏幕和运动不是预置成功效果。
 运行评估按场景输入音频或传感器数据，读取实际输出。实验 verifyApplication 既检查 UART 业务状态，也核对 PCM 峰值、音调频率和电机桥臂占空比；显示目前只确认实际显存到达，最后还检查暂停归零。当前实现容差为 PCM 峰值差不超过 50、提示音频率差不超过 25Hz、桥臂占空比差不超过 1，这些是软件验收容差，不是实物精度。
-无硬件运行使每轮修改都能获得执行反馈；温升、射频、声学与机械性能不由这些数字接口断言证明。左侧截图复用 simulator/images/simulator-overview.png，展示 esp32sim 的 PAO 参考模拟器；右侧验收机制来自自由组合实验应用，两者使用各自匹配板型。来源：simulator/README.md；experimental/platform/agent.ts:217–236。
+无硬件运行使每轮修改都能获得执行反馈；温升、射频、声学与机械性能不由这些数字接口断言证明。左侧直接播放 docs/making-of.md 中的模拟器使用演示，展示 esp32sim 的 PAO 参考模拟器；右侧验收机制来自自由组合实验应用，两者使用各自匹配板型。来源：simulator/README.md；experimental/platform/agent.ts:217–236。
 -->
 
 ---
@@ -244,7 +244,7 @@ class: slide-light slide-mechanical
 <h1>机械结构，<br><em>Agent 建模，刚体仿真评估。</em></h1>
 <div class="mechanical-graphic"><img src="/mechanical-loop.svg" alt="Agent 在 Blender 中生成和调整机械结构，刚体动力学仿真提供结果用于评估与下一轮修改" /></div>
 <div class="mechanical-checks"><div><span>设计对象</span><h2>外壳、底盘、支架与装配</h2><p>用可修改的模型表达尺寸、连接关系与结构参数。</p></div><div><span>几何与装配评估</span><h2>能否正确装在一起？</h2><p>检查尺寸、孔位、间隙与装配干涉。</p></div><div><span>刚体动力学评估</span><h2>运动是否符合目标？</h2><p>以仿真中的运动、碰撞与姿态判断设计。</p></div></div>
-<div class="page-number">10 / 13</div>
+<div class="page-number">10 / 14</div>
 
 <!--
 建议 50 秒。机械结构同样是当前核心工作：由 Agent 驱动 Blender 中的自动化设计与仿真，以刚体动力学结果评估设计。外壳也属于机械结构，包括底盘、支架、孔位和装配关系。
@@ -253,22 +253,40 @@ Blender 链路当前处于开发中，具体验收以对应工程、仿真场景
 -->
 
 ---
-class: slide-light slide-product
+class: slide-light slide-demo
 ---
 
-<div class="product-photo"><img src="/release/photo-12-first-rollout.jpg" alt="PAO 语音小车实物" /></div>
-<div class="eyebrow">PAO / 验证产品</div>
-<h1>把这条路径<br>带到<em>真实世界。</em></h1>
-<p class="product-lead">语音、显示、底盘与执行机构，<br>在同一台设备上协同工作。</p>
-<div class="product-points"><span>语音唤醒与对话</span><span>运动、测距与停车</span><span>OLED 状态反馈</span><span>网页遥控与发射</span></div>
-<a class="product-link" href="https://github.com/pao-1024/pao/blob/main/docs/making-of.md#演示视频" target="_blank" rel="noopener noreferrer">查看实车演示 ↗</a>
-<div class="bottom-note">PAO 验证对应板型与场景；实机结果与仿真结果分别记录。</div>
-<div class="page-number">11 / 13</div>
+<div class="eyebrow">PAO / 实机演示 · 点击视频播放</div>
+<h1>实机演示，<em>语音与遥控驱动小车。</em></h1>
+<div class="demo-videos">
+  <figure><DemoVideo id="video-02" title="语音行驶与转向" /><figcaption><h2>语音行驶与转向</h2><p>通过语音控制小车行驶和转向。</p></figcaption></figure>
+  <figure><DemoVideo id="video-01" title="手机遥控与发射" /><figcaption><h2>手机遥控与发射</h2><p>通过手机遥控页控制底盘和发射。</p></figcaption></figure>
+</div>
+<div class="bottom-note">来源：项目文档中的实车演示 · 可使用播放器控件全屏查看。</div>
+<div class="page-number">11 / 14</div>
 
 <!--
-建议 55 秒。到这里再展示实车，回答代码驱动开发是否能连接真实世界。PAO 将语音、屏幕、底盘和执行机构放在同一台设备上，检验描述、驱动、固件与实物连接的一致性。
-可现场展示查询距离、短程前进与停车，或打开项目已有实车视频。MCP 与局域网 WebSocket 是并列控制入口，共用 PaoBoard 动作逻辑。不能把 PAO 的现有功能说成 Studio 可对任意模块组合一键复现，也不声称整车由现有 Agent 一次性自动生成。
-来源：README.md；docs/making-of.md；firmware/boards/pao/README.md。
+建议 35 秒。用文档中的两段实车视频展示对应设计与场景的行为。左侧通过语音控制小车行驶和转向；右侧通过手机遥控页控制底盘和发射。视频可直接在本页点击播放，并按现场节奏选择内容。
+MCP 与局域网 WebSocket 是并列控制入口，共用 PaoBoard 动作逻辑。实机结果对应 PAO 板型与场景，不把参考机功能说成任意模块组合都能复现。
+来源：docs/making-of.md 的 video-02 与 video-01。
+-->
+
+---
+class: slide-light slide-demo slide-demo-field
+---
+
+<div class="eyebrow">PAO / 实机演示 · 运动与执行机构</div>
+<h1>实机演示，<em>验证运动与执行机构。</em></h1>
+<div class="demo-videos">
+  <figure><DemoVideo id="video-03" title="室内语音行驶" /><figcaption><h2>室内语音行驶</h2><p>通过语音控制小车在室内行驶。</p></figcaption></figure>
+  <figure><DemoVideo id="video-04" title="桌面发射测试" /><figcaption><h2>桌面发射测试</h2><p>在桌面场景触发电磁发射器。</p></figcaption></figure>
+</div>
+<div class="bottom-note">来源：项目文档中的实车演示 · 可使用播放器控件全屏查看。</div>
+<div class="page-number">12 / 14</div>
+
+<!--
+建议 20 秒。按需播放另外两段文档视频：室内语音行驶和桌面发射测试，用实际记录展示运动与执行机构。每段视频独立播放，不要求在答辩中全部播完。
+来源：docs/making-of.md 的 video-03 与 video-04。原始画面分别保留横竖比例，不用裁切掩盖场景。
 -->
 
 ---
@@ -281,7 +299,7 @@ class: slide-light slide-studio
 <div class="studio-gallery"><figure><img src="/reference/agent-hardware-preview.jpg" alt="Studio 的 Agent 选型与模块接线界面" /><figcaption>真实模块与接线约束</figcaption></figure><figure><img src="/reference/agent-pcb-preview.jpg" alt="Studio 生成的模块载板 PCB 界面" /><figcaption>原理图、模块载板与 DRC</figcaption></figure><figure><img src="/reference/manufacturing-preview.jpg" alt="Studio 制造文件预览界面" /><figcaption>可导出的工程与制造资料</figcaption></figure></div>
 <div class="studio-output"><code>hardware.tsx / pcb.json</code><span>同一接线</span><code>wiring.h / board.json</code><span>编译 + 仿真</span><b>执行验收</b></div>
 <div class="bottom-note">已有本地实验原型；后续将工程生成、评估与修复整合为可复用的开发工作台。</div>
-<div class="page-number">12 / 13</div>
+<div class="page-number">13 / 14</div>
 
 <!--
 建议 50 秒。在实机之后介绍平台化方向：把前面验证过的方法整合成 PAO Studio，让需求、设计、构建与评估集中在一个工作台。已有本地实验原型用于探索器件选型、约束接线、模块载板与业务固件生成，画面展示这些原型界面。
@@ -302,7 +320,7 @@ class: slide-light slide-close
 </div>
 <p class="closing-statement">从一个实验项目，走向一套可复用的硬件工程方法。</p>
 <div class="repo-address">github.com/pao-1024/pao</div>
-<div class="page-number">13 / 13</div>
+<div class="page-number">14 / 14</div>
 
 <!--
 建议 50 秒。这是未来展望。当前以 PAO 为实验载体，探索 Agent 驱动硬件工程的可行路径，积累电路、固件运行和机械结构各环节的工具使用与评估经验。

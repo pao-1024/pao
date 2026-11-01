@@ -66,14 +66,6 @@
 .studio-output code { font-size: 17px; color: var(--violet); }
 .studio-output span { color: var(--muted); font-size: 15px; }
 .studio-output b { color: var(--copper); font-size: 20px; }
-.product-photo { position: absolute; top: 138px; right: 62px; width: 510px; height: 455px; overflow: hidden; border-radius: 8px; }
-.product-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 50%; }
-.slide-product h1 { margin-top: 58px; font-size: 61px; }
-.slidev-layout .product-lead { position: relative; z-index: 2; margin: 26px 0 0; color: #475063; font-size: 24px; line-height: 1.6; }
-.product-points { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(2, 240px); gap: 19px; margin-top: 31px; color: #5146b6; font-size: 21px; }
-.product-link { position: relative; display: inline-block; margin-top: 31px; color: #8c492e !important; font-size: 18px; }
-.slide-product .bottom-note { max-width: 540px; }
-
 .slide-close h1 { font-size: 57px; }
 .slidev-layout .outlook-current { margin: 24px 0 0; color: #626a7a; font-size: 20px; line-height: 1.6; }
 .outlook-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 28px; }
@@ -88,12 +80,11 @@
 .detail-label { display: block; margin-bottom: 15px; color: var(--violet); font-size: 17px; font-weight: 700; }
 .runtime-detail-body { display: grid; grid-template-columns: 560px 1fr; gap: 35px; margin-top: 25px; }
 .runtime-model { margin: 0; text-align: center; }
-.runtime-model .runtime-screen { display: block; margin: 0; }
-.runtime-model img { display: block; width: 100%; height: 320px; object-fit: cover; object-position: top; border-radius: 6px; }
+.runtime-model .demo-video { height: 320px; }
 .runtime-model figcaption { margin-top: 13px; }
 .runtime-model b { color: var(--violet); font-size: 18px; }
 .runtime-model p { margin-top: 8px; color: #475063; font-size: 19px; line-height: 1.5; }
-.runtime-model a { display: inline-block; margin-top: 9px; color: #8c492e; font-size: 16px; }
+.runtime-model figcaption span { display: block; margin-top: 9px; color: #626a7a; font-size: 16px; line-height: 1.5; }
 .runtime-checks { padding-top: 6px; }
 .runtime-checks > div { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .runtime-checks b { color: #202838; font-size: 22px; font-weight: 650; }
@@ -114,7 +105,7 @@
 .schematic-overview svg { display: block; width: 100%; height: 435px; }
 .schematic-overview figcaption { display: flex; justify-content: space-between; margin-top: 9px; color: #626a7a; font-size: 14px; }
 .schematic-overview figcaption span { color: var(--violet); }
-.schematic-overview a, .circuit-generated a, .runtime-model .runtime-screen { border: 0; }
+.schematic-overview a, .circuit-generated a { border: 0; }
 .schematic-outputs { padding-top: 4px; }
 .schematic-outputs > div { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .schematic-outputs .detail-label { margin-bottom: 11px; }
@@ -165,3 +156,17 @@
 .review-evidence code { display: block; color: #5146b6; font-size: 15px; line-height: 1.8; }
 .review-diff code { color: #286348; }
 .review-evidence p { margin-top: 16px; color: #475063; font-size: 18px; line-height: 1.65; }
+
+.demo-video { position: relative; width: 100%; overflow: hidden; border-radius: 6px; background: #10141b; }
+.demo-video video { display: block; width: 100%; height: 100%; object-fit: contain; }
+.demo-video-start { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 20px; border: 1px solid #fff; border-radius: 8px; background: #202838e6; color: #fff; font-size: 20px; white-space: nowrap; cursor: pointer; }
+.demo-video-start:focus-visible { outline: 3px solid #a99aff; outline-offset: 4px; }
+.demo-video .demo-video-error { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px; color: #fff; background: #202838; font-size: 18px; line-height: 1.6; }
+.slide-demo h1 { font-size: 51px; }
+.demo-videos { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 32px; }
+.demo-videos figure { margin: 0; }
+.demo-videos .demo-video { height: 360px; }
+.demo-videos figcaption { margin-top: 18px; }
+.demo-videos h2 { color: var(--violet); font-size: 25px; line-height: 1.5; }
+.demo-videos p { margin-top: 9px; color: #475063; font-size: 19px; line-height: 1.6; }
+.slide-demo-field .demo-videos { grid-template-columns: 300px 1fr; }

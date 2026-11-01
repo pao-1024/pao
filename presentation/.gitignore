@@ -3,4 +3,5 @@
 /.playwright-cli/
 /public/release/
 /public/reference/
+/public/videos/
 /slides-export.*

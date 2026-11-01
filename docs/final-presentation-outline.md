@@ -1,6 +1,6 @@
 # PAO 决赛答辩大纲
 
-面向 2026 1024 Hackathon 智能硬件赛道，按 10 分钟、十三页展示设计：讲述约 9 分 15 秒，预留约 45 秒给切换和现场停顿。核心叙事是：**探索 Agent 时代的硬件开发新范式：代码让 Agent 能动手，评估函数让 Agent 知道是否做对，模拟器让评估可自动执行。**
+面向 2026 1024 Hackathon 智能硬件赛道，按 10 分钟、十四页展示设计：讲述约 9 分 15 秒，预留约 45 秒给切换和现场停顿。视频按讲述需要选择片段，时间安排不要求将全部视频完整播放。核心叙事是：**探索 Agent 时代的硬件开发新范式：代码让 Agent 能动手，评估函数让 Agent 知道是否做对，模拟器让评估可自动执行。**
 
 可运行的演示稿见根目录 [presentation/](../presentation/README.md)。
 
@@ -13,18 +13,19 @@
 | 页码与时间 | 页面标题 | 讲述重点 | 画面与素材 |
 | --- | --- | --- | --- |
 | 1 · 0:00–0:25 | 探索 Agent 时代的硬件开发新范式 | 开场给出项目定位：尝试让 Agent 参与电路、嵌入式软件、机械结构三类核心设计，用贯穿全流程的仿真、测试与评估驱动生成、执行和修复，并以 PAO 验证这条路径。 | 主视觉呈现“电路 / 嵌入式软件 / 机械结构”，以仿真、测试与评估串联。 |
-| 2 · 0:25–1:00 | 万物皆代码，驱动全流程 Agent 自动化。 | 总览三类核心设计：电路用 tscircuit / TSX 表达，嵌入式软件用 ESP-IDF 构建并通过 esp32sim 运行，机械结构在 Blender 中研发。仿真、测试与评估贯穿三者，工具执行结果驱动 Agent 后续修复。 | 三张卡片：电路 · tscircuit、嵌入式软件 · ESP-IDF + esp32sim、机械结构 · Blender；机械标注“当前研发”，共同呈现贯穿设计的仿真、测试与评估。 |
+| 2 · 0:25–1:00 | 万物皆代码，驱动全流程 Agent 自动化。 | 总览三类核心设计：电路用 tscircuit / TSX 表达，嵌入式软件用 ESP-IDF 构建并通过 esp32sim 运行，机械结构在 Blender 中研发。仿真、测试与评估贯穿三者，工具执行结果驱动 Agent 后续修复。全代码化，让电路与机械结构也能按软件工程的方式管理，使用版本控制、PR 审查和自动检查。 | 三张卡片：电路 · tscircuit、嵌入式软件 · ESP-IDF + esp32sim、机械结构 · Blender；机械标注“当前研发”，共同呈现贯穿设计的仿真、测试与评估。 |
 | 3 · 1:00–1:35 | 硬件工程资产，可追溯、可复用、可重建。 | 将软件工程的版本管理方式延伸到硬件：电路、固件、外设模型和评估规则一起成为工程资产。Git 历史可追溯接线与设计变更，模块与验收场景可复用，依赖锁定与构建入口支持按版本重建。临时生成工程需整理保存后入库。 | 真实路径：`hardware/index.tsx` 与 `hardware/schematic.svg`、`firmware/boards/pao/` 与 `firmware/base.json`、`simulator/pao-sim/src/` 与 `simulator/pao-sim/Cargo.lock`、`hardware/test/connectivity.test.ts` 与 `experimental/platform/runtime.test.mjs`。 |
 | 4 · 1:35–2:15 | 硬件变更进入 PR，电路与固件一起审查。 | 将软件工程的 PR 协作方式用于硬件变更。以新增 HC-SR04 的 [PR #36](https://github.com/pao-1024/pao/pull/36)（提交 `9966479`）为例，审查 `Controller.tsx` 的 GPIO8 / GPIO9 接线，并合看固件驱动、图纸和测试；设计意图、工具检查与工程版本可以一起回溯。 | Mermaid `pr-review.mmd` 与真实 diff：`GPIO8: nets.ultrasonic.trig.selector,`、`GPIO9: nets.ultrasonic.echo.selector,`。Hardware CI 运行 `task test`，包含 `node --test test/connectivity.test.ts` 和 `cmp dist/index/schematic.svg schematic.svg`。 |
 | 5 · 2:15–3:00 | 评估函数，决定 Agent 能否自己完成闭环 | 以“生成 → 工具执行 → 评估 → 修复”解释明确目标、定位偏差和固定标准复验。工具结果决定是否通过，错误回传 Agent；现有电子工程实验最多运行三轮，首份有效验收步骤固定。 | Mermaid 闭环图配合三项作用，用一条实际错误说明下一步如何确定。 |
 | 6 · 3:00–3:30 | 电路设计，用代码定义每条连接。 | 用真实 `Display.tsx` 中的 `OledModule` 说明模块与网络如何由 TSX 定义：SDA / SCL 连接显示总线，VCC / GND 连接电源网络。代码与 OLED 原理图局部对应，连接关系可以被 Agent 修改并进入版本审查。 | 同页展示 [Display.tsx](../hardware/sections/Display.tsx) 代码摘录与[原始原理图](../hardware/schematic.svg) OLED 局部。摘录显式标注省略布局属性，保留真实模块名与连接表达式。 |
 | 7 · 3:30–4:15 | 电路验收，把接线要求写成单元测试。 | 从现有表驱动测试展开 OLED 的 GPIO41 / SDA、GPIO42 / SCL 断言，说明预期接线独立于电路源码。`assertNetwork` 比较编译后网络的完整成员，漏连或多连时返回实际与预期差异，供修复后复验。 | [连通性测试](../hardware/test/connectivity.test.ts)中 OLED 条目的等价展开及 `assert.deepEqual` 比较逻辑；另列实验代码的电气短接检查与 PCB 制造 DRC，明确与 PAO 参考接线测试的范围区别。 |
 | 8 · 4:15–4:40 | 电路图纸，由 tscircuit 生成。 | 展示 tscircuit 从 TSX 生成的两类产物：SVG 用于人工查看和设计审查，Circuit JSON 保留器件、引脚和网络供工具检查。图纸说明代码对应的工程产物，不作为 PCB 或实物验收证明。 | [原始 SVG](../hardware/schematic.svg)全图与原图链接，右侧说明 TSX → SVG / Circuit JSON 的产物与用途；图注标明“tscircuit · PAO 模块接线原理图（参考）”。 |
-| 9 · 4:40–5:50 | 固件运行，用芯片仿真验证行为。 | 正式固件经 ESP-IDF 构建后输入 esp32sim，从 ROM 启动并在芯片与外设层执行，对固件透明。无实物先运行主要链路；自由组合应用再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧复用[PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，突出 esp32sim 与芯片透明性；右侧对应输出与验收断言，保留[模拟器演示](../simulator/README.md#页面)入口。 |
+| 9 · 4:40–5:50 | 固件运行，用芯片仿真验证行为。 | 正式固件经 ESP-IDF 构建后输入 esp32sim，从 ROM 启动并在芯片与外设层执行，对固件透明。无实物先运行主要链路；自由组合应用再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧页内播放[模拟器演示](making-of.md#模拟器演示)（`video-05`），突出 esp32sim 与芯片透明性；右侧对应输出与验收断言。PPTX 内嵌同一视频，PDF 显示静态封面。 |
 | 10 · 5:50–6:40 | 机械结构，Agent 建模，刚体仿真评估。 | 外壳、底盘、支架及其装配都属于机械结构。介绍 Blender 中当前开展的 Agent 建模与仿真研发：几何与装配检查回答尺寸、接口和干涉问题，刚体动力学评估回答运动、碰撞与姿态稳定性问题；具体场景与阈值按工程定义。 | 以流程示意表达当前开展的 Agent 建模、几何 / 装配检查与 Blender 刚体仿真评估；实际运行结论配对应素材。 |
-| 11 · 6:40–7:35 | PAO，把这条路径带到真实世界 | 用 PAO 的语音、运动、测距与 OLED 展示模块、驱动和实物交互。实车证明对应设计与场景的行为；参考机与自由组合工程分别维护，需要实物环境的结论由实际测量确认。 | [实车照片](making-of.md#成品展示)、[实车演示视频](making-of.md#演示视频)，聚焦短程运动与停车。 |
-| 12 · 7:35–8:25 | PAO Studio：把开发流程变成工作台 | 展望将工程路径平台化。已有本地实验原型可在支持模块范围内执行选型、接线、PCB、业务代码、编译与验收，作为产品化起点，继续整合开发工具与结果。 | [Agent 整机设计](../experimental/platform/agent-hardware-preview.jpg)、[PCB 载板](../experimental/platform/agent-pcb-preview.jpg)、[制造预览](../experimental/platform/manufacturing-preview.jpg)，标注“未来展望 / 实验原型”。 |
-| 13 · 8:25–9:15 | 未来展望：把硬件工作流封装为 Skill。 | 当前用 PAO 对硬件开发流程做实验性验证；下一步打磨工具接口、评估规则与失败修复，让工作流连贯、可复现；未来再将生成、构建、仿真、评估与修复封装为可复用的 Skill。 | 三阶段展望：当前 · PAO 验证 → 下一步 · 工作流打磨 → 未来 · Skill 封装。 |
+| 11 · 6:40–7:15 | 实机演示，语音与遥控驱动小车。 | 以语音行驶与转向、手机遥控与发射两段实机视频，展示模块、驱动和实物交互。实车证明对应设计与场景的行为；参考机与自由组合工程分别维护。现场择需播放片段，围绕动作与反馈讲解。 | 并排播放[语音行驶与转向、手机遥控与发射](making-of.md#演示视频)（`video-02`、`video-01`），各自提供封面与独立播放控件。 |
+| 12 · 7:15–7:35 | 实机演示，验证运动与执行机构。 | 补充室内语音行驶与桌面发射测试，展示不同实机场景中的实际动作。按讲述需要选择片段，完整视频作为现场追问的素材。 | 并排播放[室内语音行驶、桌面发射测试](making-of.md#演示视频)（`video-03`、`video-04`），各自提供封面与独立播放控件。 |
+| 13 · 7:35–8:25 | PAO Studio：把开发流程变成工作台 | 展望将工程路径平台化。已有本地实验原型可在支持模块范围内执行选型、接线、PCB、业务代码、编译与验收，作为产品化起点，继续整合开发工具与结果。 | [Agent 整机设计](../experimental/platform/agent-hardware-preview.jpg)、[PCB 载板](../experimental/platform/agent-pcb-preview.jpg)、[制造预览](../experimental/platform/manufacturing-preview.jpg)，标注“未来展望 / 实验原型”。 |
+| 14 · 8:25–9:15 | 未来展望：把硬件工作流封装为 Skill。 | 当前用 PAO 对硬件开发流程做实验性验证；下一步打磨工具接口、评估规则与失败修复，让工作流连贯、可复现；未来再将生成、构建、仿真、评估与修复封装为可复用的 Skill。 | 三阶段展望：当前 · PAO 验证 → 下一步 · 工作流打磨 → 未来 · Skill 封装。 |
 
 ## 讲述口径
 
@@ -56,9 +57,11 @@ PAO Studio 放在实机演示后的未来展望中，表达将工程路径平台
 
 - 第 3 页准备实际工程路径与版本锁定文件；第 4 页准备 PR #36 / `9966479` 中 [Controller.tsx](../hardware/sections/Controller.tsx) 的接线 diff、[Hardware 工作流](../.github/workflows/hardware.yml)与 [Taskfile](../hardware/Taskfile.yaml)，区分历史验证记录和当前 CI 配置。
 - 第 5 页准备具体的编译或运行失败反馈；第 6 页核对 [Display.tsx](../hardware/sections/Display.tsx) 摘录与 OLED 图纸局部；第 7 页准备 OLED 接线单元测试和失败差异，区分实验短接与制造 DRC 范围；第 8 页确认全图链接及 SVG / Circuit JSON 生成入口。
-- 第 9 页准备正式固件的构建与运行入口、验收断言、固件输出及[模拟器演示](../simulator/README.md#页面)。ESP-IDF 构建只作输入说明，讲述中保留构建成功与业务正确的区别。现场语音需要设备激活和麦克风授权，未具备条件时使用已有素材。
+- 第 9 页准备正式固件的构建与运行入口、验收断言、固件输出及页内[模拟器演示](making-of.md#模拟器演示)。ESP-IDF 构建只作输入说明，讲述中保留构建成功与业务正确的区别；如补充现场语音交互，需预先完成设备激活和麦克风授权。
 - 第 10 页按实际可用材料说明 Blender 当前研发与刚体仿真评估。流程图是机制说明；具体运行结论需要对应工程、场景与结果，不能用示意图代替验收证据。
-- 第 11 页的实车演示选择可立即停车的短程动作，确保观众看到车体与反馈；备用为已有[实车视频](making-of.md#演示视频)。技术参数、完整接线和未展开的功能留到答辩追问。
-- 第 12 页以已有实验原型说明未来 PAO Studio 的产品方向。使用预先核验的同一案例，区分原理图、PCB、DRC、Gerber / CAM、固件编译与软件在环结果。截图用于说明实验界面，结论以对应工程记录为准。
+- 第 11、12 页分别准备两段[实机视频](making-of.md#演示视频)，现场择需播放，围绕车体动作与反馈讲解。技术参数、完整接线和完整视频留到答辩追问。
+- 第 13 页以已有实验原型说明未来 PAO Studio 的产品方向。使用预先核验的同一案例，区分原理图、PCB、DRC、Gerber / CAM、固件编译与软件在环结果。截图用于说明实验界面，结论以对应工程记录为准。
+
+视频来源统一维护在 [docs/making-of.md](making-of.md)，使用 Python 3、ffmpeg / ffprobe 和已登录的 GitHub CLI 准备本地媒体。视频缓存不入 Git；Slidev 页内播放本地文件，PPTX 内嵌 MP4 供 PowerPoint 离线播放，PDF 保留静态封面。演示前在实际设备确认播放与声音。
 
 功能、验证方式及素材入口分别见[项目首页](../README.md)、[制作过程](making-of.md)、[模拟器说明](../simulator/README.md)和[Studio 说明](../experimental/platform/README.md)。
