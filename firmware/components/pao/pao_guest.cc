@@ -36,10 +36,34 @@ void HostLogInt(wasm_exec_env_t env, int32_t value) {
     std::printf("[guest] %ld\n", static_cast<long>(value));
 }
 
+void HostMove(wasm_exec_env_t env, int32_t action, int32_t duration_ms) {
+    (void)env;
+    if (g_hooks.move != nullptr) {
+        g_hooks.move(action, duration_ms);
+    }
+}
+
+void HostFire(wasm_exec_env_t env) {
+    (void)env;
+    if (g_hooks.fire != nullptr) {
+        g_hooks.fire();
+    }
+}
+
+void HostShowDistance(wasm_exec_env_t env, int32_t distance_cm) {
+    (void)env;
+    if (g_hooks.show_distance != nullptr) {
+        g_hooks.show_distance(distance_cm);
+    }
+}
+
 NativeSymbol kSymbols[] = {
     {"distance_cm", reinterpret_cast<void*>(HostDistanceCm), "()i", nullptr},
     {"delay_ms", reinterpret_cast<void*>(HostDelayMs), "(i)", nullptr},
     {"log_int", reinterpret_cast<void*>(HostLogInt), "(i)", nullptr},
+    {"move", reinterpret_cast<void*>(HostMove), "(ii)", nullptr},
+    {"fire", reinterpret_cast<void*>(HostFire), "()", nullptr},
+    {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
 };
 
 void* GuestTask(void*) {

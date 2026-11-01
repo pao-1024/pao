@@ -170,10 +170,42 @@ private:
         return static_cast<int>(lroundf(distance));
     }
 
+    static void GuestMove(int action, int duration_ms) {
+        if (guest_board_ == nullptr) {
+            return;
+        }
+        MotionAction motion = MotionAction::Stop;
+        switch (action) {
+            case 1: motion = MotionAction::Forward; break;
+            case 2: motion = MotionAction::Backward; break;
+            case 3: motion = MotionAction::TurnLeft; break;
+            case 4: motion = MotionAction::TurnRight; break;
+            default: motion = MotionAction::Stop; break;
+        }
+        guest_board_->RunChassis(motion, duration_ms);
+    }
+
+    static void GuestFire() {
+        if (guest_board_ != nullptr) {
+            guest_board_->launcher_.fire();
+        }
+    }
+
+    static void GuestShowDistance(int distance_cm) {
+        if (guest_board_ == nullptr || guest_board_->display_ == nullptr) {
+            return;
+        }
+        const std::string text = distance_cm < 0 ? "dist --" : "dist " + std::to_string(distance_cm);
+        guest_board_->display_->SetChatMessage("guest", text.c_str());
+    }
+
     void StartGuest() {
         guest_board_ = this;
         pao_guest_hooks_t hooks = {};
         hooks.distance_cm = &PaoBoard::GuestDistanceCm;
+        hooks.move = &PaoBoard::GuestMove;
+        hooks.fire = &PaoBoard::GuestFire;
+        hooks.show_distance = &PaoBoard::GuestShowDistance;
         pao_guest_set_hooks(&hooks);
         pao_guest_start();
     }

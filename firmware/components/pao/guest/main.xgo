@@ -1,8 +1,18 @@
-println("pao guest start")
+println("pao guest patrol")
 
-for i := 0; i < 100; i++ {
+for i := 0; i < 30; i++ {
 	d := distanceCm()
+	showDistance(d)
 	logInt(d)
-	delayMs(1000)
+
+	if d > 0 && d < 30 {
+		move(0, 0)
+		move(4, 600)
+		delayMs(700)
+	} else {
+		move(1, 800)
+		delayMs(900)
+	}
 }
+move(0, 0)
 println("pao guest done")
