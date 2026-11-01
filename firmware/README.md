@@ -131,6 +131,7 @@ chassis.emergencyStop();     // 立即清零两轮输出
 `ramp_time_ms`（0～3000，默认 1000）、`left_scale` 和 `right_scale`（均为 `[0, 1]`，
 默认 1），以及 `move_output` 和 `rotate_output`（均为 `[0.2, 1]`，默认 0.8）。
 `min_output` 表示最小有效 PWM 输出，默认 0，须低于前进和旋转最大输出。
+`start_boost_output` 表示每轮从静止起步时约 80ms 的脉冲占空比，默认 0.7，范围 `[0, 1]`，0 关闭；脉冲可短时超过持续输出上限。
 渐变时间表示归一化输出从零到满输出所需时间；零表示关闭渐变。
 `chassis.setConfig(config)` 可在运行时修改配置，当前运动和计时不因此重置。
 两侧比例系数分别乘到目标输出上；修改系数时输出渐变过渡。

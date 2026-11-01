@@ -16,6 +16,7 @@ struct ChassisConfig {
     float move_output = 0.8f;
     float rotate_output = 0.8f;
     float min_output = 0.0f;
+    float start_boost_output = 0.7f;
 };
 
 class Chassis {
@@ -64,6 +65,8 @@ private:
     float applied_right_scale_ = 1;
     float last_left_output_ = 0;
     float last_right_output_ = 0;
+    int64_t left_boost_deadline_us_ = 0;
+    int64_t right_boost_deadline_us_ = 0;
     bool running_ = true;
     TaskHandle_t task_ = nullptr;
     SemaphoreHandle_t task_stopped_ = nullptr;

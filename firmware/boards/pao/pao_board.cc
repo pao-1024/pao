@@ -45,7 +45,7 @@ using pao::SequenceAction;
 
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
-constexpr uint32_t kMotionConfigVersion = 5;
+constexpr uint32_t kMotionConfigVersion = 6;
 constexpr char kAlarmNamespace[] = "pao_alarm";
 constexpr char kAlarmDistanceKey[] = "distance_cm";
 constexpr int kDefaultAlarmDistanceCm = 10;
@@ -60,6 +60,9 @@ constexpr float kExploreOutputLimit = 0.5f;
 constexpr int64_t kExploreForwardUs = 3000000;
 constexpr int64_t kExploreTurnUs = 1000000;
 constexpr int64_t kExploreSettleUs = 200000;
+constexpr int64_t kExploreLastDistanceUs = 200000;
+constexpr int64_t kExploreRecoveryDelayUs = 2000000;
+constexpr int64_t kExploreRecoveryTurnUs = 300000;
 constexpr int64_t kExploreMaxRunUs = 120000000;
 constexpr int kExploreMaxTurns = 6;
 
@@ -67,6 +70,19 @@ struct StoredMotionConfig {
     uint32_t version;
     ChassisConfig config;
 };
+
+struct StoredMotionConfigV5 {
+    uint32_t version;
+    uint32_t ramp_time_ms;
+    float left_scale;
+    float right_scale;
+    float move_output;
+    float rotate_output;
+    float min_output;
+};
+
+static_assert(sizeof(StoredMotionConfigV5) == 28);
+static_assert(sizeof(StoredMotionConfig) == 32);
 
 static_assert(ActionSequence::kFireDurationMs == Launcher::kFirePulseMs,
               "sequence fire duration must match the launcher pulse");
@@ -82,7 +98,7 @@ extern const char pao_explore_end[] asm("_binary_pao_explore_ogg_end");
 class PaoBoard : public WifiBoard {
 private:
     enum class MotionAction { Forward, Backward, TurnLeft, TurnRight, Stop, EmergencyStop };
-    enum class ExplorePhase { Idle, Checking, Forward, Settling, Turning, Fault };
+    enum class ExplorePhase { Idle, Checking, Forward, Settling, Turning, Recovering, Searching, Fault };
 
     Button boot_button_{BOOT_BUTTON_GPIO};
     Motor right_motor_{MOTOR_GPIO_IN1, MOTOR_GPIO_IN2};
@@ -102,6 +118,9 @@ private:
     const char* explore_reason_ = "idle";
     int64_t explore_end_us_ = 0;
     int64_t explore_step_us_ = 0;
+    int64_t explore_last_valid_us_ = 0;
+    int64_t explore_missing_since_us_ = 0;
+    float explore_last_valid_cm_ = 0;
     int explore_clear_samples_ = 0;
     int explore_turns_ = 0;
     bool explore_turn_left_ = true;
@@ -235,13 +254,25 @@ private:
         }
         size_t size = 0;
         const auto error = nvs_get_blob(handle, kMotionKey, nullptr, &size);
+        bool loaded = false;
         if (error == ESP_OK && size == sizeof(StoredMotionConfig)) {
             StoredMotionConfig saved = {};
-            if (nvs_get_blob(handle, kMotionKey, &saved, &size) != ESP_OK ||
-                saved.version != kMotionConfigVersion || !chassis_.setConfig(saved.config)) {
-                ESP_LOGW(TAG, "Invalid motion config; using defaults");
+            loaded = nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK &&
+                     saved.version == kMotionConfigVersion && chassis_.setConfig(saved.config);
+        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV5)) {
+            StoredMotionConfigV5 saved = {};
+            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 5) {
+                ChassisConfig config;
+                config.ramp_time_ms = saved.ramp_time_ms;
+                config.left_scale = saved.left_scale;
+                config.right_scale = saved.right_scale;
+                config.move_output = saved.move_output;
+                config.rotate_output = saved.rotate_output;
+                config.min_output = saved.min_output;
+                loaded = chassis_.setConfig(config);
             }
-        } else if (error != ESP_ERR_NVS_NOT_FOUND) {
+        }
+        if (!loaded && error != ESP_ERR_NVS_NOT_FOUND) {
             ESP_LOGW(TAG, "Invalid motion config; using defaults");
         }
         nvs_close(handle);
@@ -257,7 +288,8 @@ private:
         if (current.ramp_time_ms == config.ramp_time_ms &&
             current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
             current.move_output == config.move_output && current.rotate_output == config.rotate_output &&
-            current.min_output == config.min_output) {
+            current.min_output == config.min_output &&
+            current.start_boost_output == config.start_boost_output) {
             return ESP_OK;
         }
         nvs_handle_t handle;
@@ -402,6 +434,9 @@ private:
         explore_reason_ = "";
         explore_end_us_ = esp_timer_get_time() + kExploreMaxRunUs;
         explore_step_us_ = 0;
+        explore_last_valid_us_ = 0;
+        explore_missing_since_us_ = 0;
+        explore_last_valid_cm_ = 0;
         explore_clear_samples_ = 0;
         explore_turns_ = 0;
         explore_turn_left_ = true;
@@ -430,6 +465,8 @@ private:
         case ExplorePhase::Forward: return "forward";
         case ExplorePhase::Settling: return "settling";
         case ExplorePhase::Turning: return "turning";
+        case ExplorePhase::Recovering: return "recovering";
+        case ExplorePhase::Searching: return "searching";
         case ExplorePhase::Fault: return "fault";
         }
         return "fault";
@@ -477,8 +514,59 @@ private:
             return;
         }
         if (error != ESP_OK) {
-            FailExploreLocked("sensor_error");
+            if (error != ESP_ERR_TIMEOUT && error != ESP_ERR_INVALID_RESPONSE &&
+                error != ESP_ERR_INVALID_STATE) {
+                FailExploreLocked("sensor_error");
+                return;
+            }
+            if (explore_missing_since_us_ == 0) {
+                explore_missing_since_us_ = now;
+            }
+            const float safe_distance = explore_phase_ == ExplorePhase::Forward
+                                            ? kExploreStopDistanceCm : kExploreMinTurnDistanceCm;
+            if (explore_last_valid_us_ != 0 &&
+                now - explore_last_valid_us_ <= kExploreLastDistanceUs &&
+                explore_last_valid_cm_ > safe_distance &&
+                (explore_phase_ == ExplorePhase::Checking || now < explore_step_us_)) {
+                return;
+            }
+            if (explore_phase_ == ExplorePhase::Searching) {
+                if (now >= explore_step_us_) {
+                    chassis_.emergencyStop();
+                    StopChassisTimerLocked();
+                    explore_phase_ = ExplorePhase::Recovering;
+                }
+                return;
+            }
+            if (explore_phase_ != ExplorePhase::Recovering) {
+                chassis_.emergencyStop();
+                StopChassisTimerLocked();
+                explore_phase_ = ExplorePhase::Recovering;
+                explore_reason_ = "sensor_retry";
+                explore_clear_samples_ = 0;
+            }
+            if (now - explore_missing_since_us_ >= kExploreRecoveryDelayUs &&
+                explore_last_valid_us_ != 0 &&
+                explore_last_valid_cm_ >= kExploreMinTurnDistanceCm) {
+                explore_phase_ = ExplorePhase::Searching;
+                explore_step_us_ = now + kExploreRecoveryTurnUs;
+                chassis_.turnLeft(kExploreOutputLimit);
+                ArmExploreTimerLocked(kExploreRecoveryTurnUs + 500000);
+            }
             return;
+        }
+        explore_last_valid_us_ = now;
+        explore_last_valid_cm_ = distance_cm;
+        explore_missing_since_us_ = 0;
+        if (explore_phase_ == ExplorePhase::Recovering || explore_phase_ == ExplorePhase::Searching) {
+            if (explore_phase_ == ExplorePhase::Searching) {
+                chassis_.emergencyStop();
+                StopChassisTimerLocked();
+            }
+            explore_phase_ = ExplorePhase::Checking;
+            explore_reason_ = "";
+            explore_step_us_ = now + kExploreSettleUs;
+            explore_clear_samples_ = 0;
         }
         if (distance_cm < kExploreMinTurnDistanceCm) {
             FailExploreLocked("too_close");
@@ -521,6 +609,8 @@ private:
             }
             break;
         case ExplorePhase::Idle:
+        case ExplorePhase::Recovering:
+        case ExplorePhase::Searching:
         case ExplorePhase::Fault:
             break;
         }
@@ -698,7 +788,7 @@ private:
             });
         mcp.AddTool("self.chassis.explore_start",
             "开始自动探索：小车先确认前方距离，再短时前进、停车、原地旋转并重新测距。"
-            "仅使用前向超声波，不建图；测距失败立即停车，最多运行两分钟。"
+            "仅使用前向超声波，不建图；短暂无回波沿用最近安全距离，持续无回波先停车，再分段原地旋转寻波，最多运行两分钟。"
             "用户说“开始探索”“自己四处走走”时调用。参数：无。"
             "返回已开始，不表示已经找到通路；可用 self.chassis.explore_status 查询状态。",
             PropertyList(),
@@ -1043,7 +1133,7 @@ private:
     }
 
     std::string ControlCommand(const std::string& path, const char* query) {
-        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output;
+        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output, start_boost_output;
         if (path == "/api/chassis") {
             char name[20];
             MotionAction action;
@@ -1066,8 +1156,9 @@ private:
                 !QueryFloat(query, "right_scale", config.right_scale) ||
                 !QueryInt(query, "move_output", std::lround(config.move_output * 100), 20, 100, move_output) ||
                 !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output) ||
-                !QueryInt(query, "min_output", std::lround(config.min_output * 100), 0, 99, min_output)) {
-                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100，min_output=0..99";
+                !QueryInt(query, "min_output", std::lround(config.min_output * 100), 0, 99, min_output) ||
+                !QueryInt(query, "start_boost_output", std::lround(config.start_boost_output * 100), 0, 100, start_boost_output)) {
+                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100，min_output=0..99，start_boost_output=0..100";
             }
             if (min_output >= move_output || min_output >= rotate_output) {
                 return "最小有效输出须低于前进和旋转最大输出";
@@ -1076,6 +1167,7 @@ private:
             config.move_output = move_output / 100.0f;
             config.rotate_output = rotate_output / 100.0f;
             config.min_output = min_output / 100.0f;
+            config.start_boost_output = start_boost_output / 100.0f;
             const auto saved = SaveMotionConfig(config);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
@@ -1125,6 +1217,7 @@ private:
         cJSON_AddNumberToObject(result, "move_output", std::lround(config.move_output * 100));
         cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
         cJSON_AddNumberToObject(result, "min_output", std::lround(config.min_output * 100));
+        cJSON_AddNumberToObject(result, "start_boost_output", std::lround(config.start_boost_output * 100));
         return result;
     }
 
