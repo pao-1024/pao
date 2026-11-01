@@ -57,7 +57,8 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>旋转最大输出<input id="rotatePower" type="range" min="20" max="100" value="80"><output id="rotatePowerOut">80%</output></label>
 <label>输出渐变<input id="ramp" type="range" min="0" max="3000" step="100" value="1000"><output id="rampOut">1.0 s</output></label>
 <label>最小有效输出<input id="minOutput" type="range" min="0" max="99" step="1" value="0"><output id="minOutputOut">0%</output></label>
-<label>起步脉冲（约 80ms，0 关闭）<input id="startBoost" type="range" min="0" max="100" step="1" value="70"><output id="startBoostOut">70%</output></label>
+<label>起步脉冲占空比（0 关闭）<input id="startBoost" type="range" min="0" max="100" step="1" value="70"><output id="startBoostOut">70%</output></label>
+<label>起步脉冲时间（0 关闭）<input id="startBoostMs" type="range" min="0" max="300" step="20" value="80"><output id="startBoostMsOut">80 ms</output></label>
 <label>左轮比例<input id="leftScale" type="range" min="0" max="1" step="0.01" value="1"><output id="leftScaleOut">1.00</output></label>
 <label>右轮比例<input id="rightScale" type="range" min="0" max="1" step="0.01" value="1"><output id="rightScaleOut">1.00</output></label>
 </fieldset><div class="config-line"><span id="configStatus" class="status" role="status">读取配置中</span><button id="retry" hidden>重试保存</button></div>
@@ -129,6 +130,7 @@ function showConfig(){
   $("rampOut").textContent=(Number($("ramp").value)/1000).toFixed(1)+" s";
   $("minOutputOut").textContent=$("minOutput").value+"%";
   $("startBoostOut").textContent=$("startBoost").value+"%";
+  $("startBoostMsOut").textContent=$("startBoostMs").value+" ms";
   $("leftScaleOut").textContent=Number($("leftScale").value).toFixed(2);
   $("rightScaleOut").textContent=Number($("rightScale").value).toFixed(2);
   $("movePowerOut").textContent=$("movePower").value+"%";
@@ -136,11 +138,12 @@ function showConfig(){
 function currentConfig(){return {ramp_time_ms:$("ramp").value,left_scale:$("leftScale").value,
   right_scale:$("rightScale").value,move_output:$("movePower").value,
   rotate_output:$("rotatePower").value,min_output:$("minOutput").value,
-  start_boost_output:$("startBoost").value}}
+  start_boost_output:$("startBoost").value,start_boost_ms:$("startBoostMs").value}}
 async function loadConfig(){try{const config=await call("/api/motion-config");
   if(!configDirty){
     $("ramp").value=config.ramp_time_ms;$("minOutput").value=config.min_output;
     $("startBoost").value=config.start_boost_output;
+    $("startBoostMs").value=config.start_boost_ms;
     $("leftScale").value=config.left_scale;$("rightScale").value=config.right_scale;
     $("movePower").value=config.move_output;$("rotatePower").value=config.rotate_output;
     showConfig();setConfigStatus("已从设备加载","ok");$("retry").hidden=true}
@@ -157,7 +160,7 @@ async function saveConfig(){pendingSave=true;if(saving)return;saving=true;
         configDirty=!same;setConfigStatus(same?"已保存到设备":"未保存",same?"ok":"")}}
     catch(e){setConfigStatus(e.message||"保存失败，请重试","bad");$("retry").hidden=false}}
   saving=false}
-for(const id of ["ramp","minOutput","startBoost","leftScale","rightScale","movePower","rotatePower"]){
+for(const id of ["ramp","minOutput","startBoost","startBoostMs","leftScale","rightScale","movePower","rotatePower"]){
   $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};
   $(id).onchange=saveConfig}
 $("retry").onclick=saveConfig;

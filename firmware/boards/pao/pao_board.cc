@@ -45,7 +45,7 @@ using pao::SequenceAction;
 
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
-constexpr uint32_t kMotionConfigVersion = 6;
+constexpr uint32_t kMotionConfigVersion = 7;
 constexpr char kAlarmNamespace[] = "pao_alarm";
 constexpr char kAlarmDistanceKey[] = "distance_cm";
 constexpr int kDefaultAlarmDistanceCm = 10;
@@ -81,8 +81,20 @@ struct StoredMotionConfigV5 {
     float min_output;
 };
 
+struct StoredMotionConfigV6 {
+    uint32_t version;
+    uint32_t ramp_time_ms;
+    float left_scale;
+    float right_scale;
+    float move_output;
+    float rotate_output;
+    float min_output;
+    float start_boost_output;
+};
+
 static_assert(sizeof(StoredMotionConfigV5) == 28);
-static_assert(sizeof(StoredMotionConfig) == 32);
+static_assert(sizeof(StoredMotionConfigV6) == 32);
+static_assert(sizeof(StoredMotionConfig) == 36);
 
 static_assert(ActionSequence::kFireDurationMs == Launcher::kFirePulseMs,
               "sequence fire duration must match the launcher pulse");
@@ -259,6 +271,19 @@ private:
             StoredMotionConfig saved = {};
             loaded = nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK &&
                      saved.version == kMotionConfigVersion && chassis_.setConfig(saved.config);
+        } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV6)) {
+            StoredMotionConfigV6 saved = {};
+            if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 6) {
+                ChassisConfig config;
+                config.ramp_time_ms = saved.ramp_time_ms;
+                config.left_scale = saved.left_scale;
+                config.right_scale = saved.right_scale;
+                config.move_output = saved.move_output;
+                config.rotate_output = saved.rotate_output;
+                config.min_output = saved.min_output;
+                config.start_boost_output = saved.start_boost_output;
+                loaded = chassis_.setConfig(config);
+            }
         } else if (error == ESP_OK && size == sizeof(StoredMotionConfigV5)) {
             StoredMotionConfigV5 saved = {};
             if (nvs_get_blob(handle, kMotionKey, &saved, &size) == ESP_OK && saved.version == 5) {
@@ -289,7 +314,8 @@ private:
             current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
             current.move_output == config.move_output && current.rotate_output == config.rotate_output &&
             current.min_output == config.min_output &&
-            current.start_boost_output == config.start_boost_output) {
+            current.start_boost_output == config.start_boost_output &&
+            current.start_boost_ms == config.start_boost_ms) {
             return ESP_OK;
         }
         nvs_handle_t handle;
@@ -1133,7 +1159,8 @@ private:
     }
 
     std::string ControlCommand(const std::string& path, const char* query) {
-        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output, start_boost_output;
+        int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output;
+        int start_boost_output, start_boost_ms;
         if (path == "/api/chassis") {
             char name[20];
             MotionAction action;
@@ -1157,8 +1184,9 @@ private:
                 !QueryInt(query, "move_output", std::lround(config.move_output * 100), 20, 100, move_output) ||
                 !QueryInt(query, "rotate_output", std::lround(config.rotate_output * 100), 20, 100, rotate_output) ||
                 !QueryInt(query, "min_output", std::lround(config.min_output * 100), 0, 99, min_output) ||
-                !QueryInt(query, "start_boost_output", std::lround(config.start_boost_output * 100), 0, 100, start_boost_output)) {
-                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100，min_output=0..99，start_boost_output=0..100";
+                !QueryInt(query, "start_boost_output", std::lround(config.start_boost_output * 100), 0, 100, start_boost_output) ||
+                !QueryInt(query, "start_boost_ms", config.start_boost_ms, 0, 300, start_boost_ms)) {
+                return "参数需为 ramp_time_ms=0..3000，left_scale/right_scale=0..1，move_output/rotate_output=20..100，min_output=0..99，start_boost_output=0..100，start_boost_ms=0..300";
             }
             if (min_output >= move_output || min_output >= rotate_output) {
                 return "最小有效输出须低于前进和旋转最大输出";
@@ -1168,6 +1196,7 @@ private:
             config.rotate_output = rotate_output / 100.0f;
             config.min_output = min_output / 100.0f;
             config.start_boost_output = start_boost_output / 100.0f;
+            config.start_boost_ms = start_boost_ms;
             const auto saved = SaveMotionConfig(config);
             if (saved != ESP_OK) {
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
@@ -1218,6 +1247,7 @@ private:
         cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
         cJSON_AddNumberToObject(result, "min_output", std::lround(config.min_output * 100));
         cJSON_AddNumberToObject(result, "start_boost_output", std::lround(config.start_boost_output * 100));
+        cJSON_AddNumberToObject(result, "start_boost_ms", config.start_boost_ms);
         return result;
     }
 
@@ -1251,7 +1281,7 @@ private:
         const auto* query = cJSON_GetObjectItemCaseSensitive(request.get(), "query");
         if (!cJSON_IsNumber(id) || id->valuedouble < 1 || id->valuedouble > 2147483647 ||
             id->valuedouble != id->valueint || !cJSON_IsString(path) || !cJSON_IsString(query) ||
-            std::strlen(path->valuestring) > 64 || std::strlen(query->valuestring) > 127) {
+            std::strlen(path->valuestring) > 64 || std::strlen(query->valuestring) > 255) {
             return ESP_ERR_INVALID_ARG;
         }
         CJsonUniquePtr response(cJSON_CreateObject());
