@@ -1,6 +1,7 @@
 use esp_soc::board::{BoardEdge, BoardModel};
 use crate::ssd1306::{Ssd1306, Ssd1306State};
 use crate::trace::{Trace, TracedI2c};
+use esp_soc::json::Json;
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
@@ -17,6 +18,15 @@ pub struct Pao {
 }
 impl BoardModel for Pao {
     fn name(&self) -> &'static str { "pao" }
+    fn set_input(&mut self, input: &Json) -> Result<(), &'static str> {
+        let distance = match input.get("distance_cm") {
+            Some(Json::Null) => None,
+            Some(Json::Int(value)) if (2..=400).contains(value) => Some(*value as f64),
+            _ => return Err("invalid ultrasonic distance"),
+        };
+        self.trace.lock().unwrap().world.distance_override_cm = distance;
+        Ok(())
+    }
     fn gpio_changes(&mut self, changes: &[(u8, bool)]) {
         self.edges += changes.len() as u64;
         let mut trace = self.trace.lock().unwrap();
@@ -84,6 +94,24 @@ mod tests {
         board.gpio_output_at(end + 1, &[(8, true)], 1 << 8, 1 << 8);
         board.gpio_output_at(end + 2, &[(8, false)], 1 << 8, 0);
         assert_eq!(board.next_deadline(), None, "a short Trig pulse cannot produce an echo");
+    }
+    #[test]
+    fn browser_distance_stimulus_changes_echo_and_can_restore_wall_distance() {
+        let mut board = Pao::default();
+        board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":10}"#).unwrap()).unwrap();
+        assert_eq!(board.trace.lock().unwrap().world.distance_cm(), 10.0);
+        board.gpio_output_at(100, &[(8, true)], 1 << 8, 1 << 8);
+        board.gpio_output_at(2500, &[(8, false)], 1 << 8, 0);
+        let begin = 2500 + 200 * 240;
+        board.advance_to(begin + 10 * 58 * 240);
+        assert_eq!(board.take_edges(), vec![
+            BoardEdge { cycle: begin, pin: 9, level: true },
+            BoardEdge { cycle: begin + 10 * 58 * 240, pin: 9, level: false },
+        ]);
+        assert!(board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":1}"#).unwrap()).is_err());
+        assert_eq!(board.trace.lock().unwrap().world.distance_cm(), 10.0);
+        board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":null}"#).unwrap()).unwrap();
+        assert_eq!(board.trace.lock().unwrap().world.distance_cm(), 189.5);
     }
     #[test]
     fn oled_writes_reach_the_glass_and_gpio48_drives_the_status_led() {

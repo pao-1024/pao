@@ -9,7 +9,7 @@ import { controlSocketUrl } from "./endpoints.ts";
 import { MAX_SPEED, motion } from "./protocol.ts";
 import type { Pose, World } from "./protocol.ts";
 
-type Props = { left: number; right: number; charging: boolean; firing: boolean; energy: number; shots: number; world: World | null };
+type Props = { left: number; right: number; charging: boolean; firing: boolean; energy: number; shots: number; world: World | null; connected: boolean; onDistanceChange: (distance: number | null) => void };
 type DistanceReading = { distance_cm: number | null; error: string | null; motion_status: string; moved_cm: number };
 
 const WHEEL_RADIUS = 0.36, TRAIL = 900, SHOT_SPEED = 9, SHOT_LIFE = 1.6;
@@ -58,7 +58,11 @@ export function Car3D(props: Props) {
   const [distance, setDistance] = useState("20");
   const requestedDistance = Number(distance);
   const [reading, setReading] = useState("");
+  const [echoDistance, setEchoDistance] = useState<number | null>(null);
+  const selectedEchoDistance = echoDistance ?? Math.min(400, Math.max(2, Math.round(props.world?.distance_override_cm ?? props.world?.distance_cm ?? 190)));
+  const manualEcho = echoDistance !== null || props.world?.distance_override_cm != null;
   const control = useRef<ControlClient | null>(null);
+  useEffect(() => { if (!props.connected) setEchoDistance(null); }, [props.connected]);
   useEffect(() => {
     const client = control.current = new ControlClient(controlSocketUrl);
     return () => { control.current = null; client.close(); };
@@ -370,7 +374,9 @@ export function Car3D(props: Props) {
       <b>{Math.round(energy * 100)}%</b>
     </div>
     <div className="car3d-ranging">
-      <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"}</span>
+      <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"} · {manualEcho ? "手动回波" : "场地边界"}</span>
+      <label className="car3d-distance-slider">模拟回波 <input aria-label="模拟回波距离" type="range" min="2" max="400" step="1" value={selectedEchoDistance} disabled={!props.connected || !props.world} onChange={event => { const value = Number(event.target.value); setEchoDistance(value); props.onDistanceChange(value); }} /><b>{selectedEchoDistance} cm</b></label>
+      <button className="small" disabled={!props.connected || !manualEcho} onClick={() => { setEchoDistance(null); props.onDistanceChange(null); }}>跟随场地</button>
       <label>前进 <input aria-label="前进厘米数" type="number" min="1" max="390" value={distance} onChange={event => setDistance(event.target.value)} /> cm</label>
       <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request("/api/move_forward", { distance_cm: requestedDistance })}>前进</button>
       <button onClick={() => void request("/api/chassis", { action: "emergency_stop" })}>停止</button>

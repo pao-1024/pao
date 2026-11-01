@@ -49,10 +49,11 @@ impl Trace {
     }
     fn message(&mut self, seconds: f64) -> String {
         let pwm: Vec<String> = self.pwm.iter().map(|(pin, duty)| format!("[{pin},{duty}]")).collect();
+        let distance_override = self.world.distance_override_cm.map_or("null".to_owned(), |distance| format!("{distance:.0}"));
         let message = format!(
-            "{{\"t\":\"pao\",\"time\":{seconds:.3},\"levels\":\"{:x}\",\"known\":\"{:x}\",\"pwm\":[{}],\"i2c\":[{},{}],\"dropped\":{},\"events\":[{}],\"world\":{{\"x\":{:.4},\"z\":{:.4},\"heading\":{:.6},\"distance_cm\":{:.2},\"width_cm\":{},\"depth_cm\":{}}}}}",
+            "{{\"t\":\"pao\",\"time\":{seconds:.3},\"levels\":\"{:x}\",\"known\":\"{:x}\",\"pwm\":[{}],\"i2c\":[{},{}],\"dropped\":{},\"events\":[{}],\"world\":{{\"x\":{:.4},\"z\":{:.4},\"heading\":{:.6},\"distance_cm\":{:.2},\"distance_override_cm\":{},\"width_cm\":{},\"depth_cm\":{}}}}}",
             self.levels, self.known, pwm.join(","), self.i2c.0, self.i2c.1, self.dropped, self.events.join(","),
-            self.world.x, self.world.z, self.world.heading, self.world.distance_cm(), crate::world::WIDTH_CM, crate::world::DEPTH_CM);
+            self.world.x, self.world.z, self.world.heading, self.world.distance_cm(), distance_override, crate::world::WIDTH_CM, crate::world::DEPTH_CM);
         self.events.clear(); self.dropped = 0;
         message
     }

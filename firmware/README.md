@@ -206,7 +206,7 @@ if (error == ESP_OK) {
 析构释放资源。板型通过 `self.ultrasonic.get_distance` 向灵矽提供测距和运动状态，
 通过 `self.chassis.move_forward` 按前方同一静止反射物的距离变化控制前进，
 通过 `self.chassis.move_to_distance` 停在距障碍物的目标距离。后台任务持续测距，
-前方不大于 10cm 时自动播放报警音；参数、停止条件和使用限制见[板型说明](boards/pao/README.md)。
+前方不大于可配置的警报触发距离时自动播放报警音，默认阈值为 10cm；参数、停止条件和使用限制见[板型说明](boards/pao/README.md)。
 方向遥控本身不自动避障。
 实际量程、测距精度及行驶误差仍需实机验证。
 时序依据 [HC-SR04-33 数据手册](https://cdn.sparkfun.com/assets/a/8/9/c/a/HC-SR04-33_Datasheet.pdf)，

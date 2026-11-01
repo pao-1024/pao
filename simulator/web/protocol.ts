@@ -102,7 +102,7 @@ export function motion(left: number, right: number) {
 /** Heading 0 faces +Z and grows turning left. */
 export type Pose = { x: number; z: number; heading: number };
 /** Native world coordinates and geometry are in centimetres, heading in radians. */
-export type World = Pose & { distance_cm: number; width_cm: number; depth_cm: number };
+export type World = Pose & { distance_cm: number; distance_override_cm: number | null; width_cm: number; depth_cm: number };
 // Decorative wheel spin only; the native world owns car position and distance.
 export const MAX_SPEED = 3;
 

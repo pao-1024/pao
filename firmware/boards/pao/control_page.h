@@ -58,7 +58,12 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>右轮比例<input id="rightScale" type="range" min="0" max="1" step="0.01" value="1"><output id="rightScaleOut">1.00</output></label>
 </fieldset><div class="config-line"><span id="configStatus" class="status" role="status">读取配置中</span><button id="retry" hidden>重试保存</button></div>
 </section>
-<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。最小有效输出须低于前进和旋转最大输出；运动设置在调节结束后保存到设备，并影响语音动作。</p>
+<section class="settings"><h2>测距警报</h2>
+<fieldset id="alarmFields" disabled>
+<label>触发距离<input id="alarmDistance" type="range" min="2" max="100" step="1" value="10"><output id="alarmDistanceOut">10 cm</output></label>
+</fieldset><div class="config-line"><span id="alarmStatus" class="status" role="status">读取配置中</span><button id="alarmRetry" hidden>重试保存</button></div>
+</section>
+<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出；键盘 WASD / 方向键驾驶，空格开炮。最小有效输出须低于前进和旋转最大输出；设置在调节结束后保存到设备。测距不大于触发距离时播放警报，恢复到触发距离以上 2 cm 后解除。</p>
 </main><script>
 const $=id=>document.getElementById(id);
 const statusEl=$("status"),configStatus=$("configStatus");
@@ -72,7 +77,7 @@ function call(path,params){if(!socket||socket.readyState!==WebSocket.OPEN)return
   },3000);pending.set(id,{resolve,reject,timer});
   connection.send(JSON.stringify({id,path,query:new URLSearchParams(params||{}).toString()}))})}
 function connect(){const connection=socket=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}${location.pathname.replace(/[^/]*$/, "")}ws`);
-  connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();pollDistance(connection)};
+  connection.onopen=()=>{setStatus("WS 已连接","ok");loadConfig();loadAlarmConfig();pollDistance(connection)};
   connection.onmessage=event=>{let message;try{message=JSON.parse(event.data)}catch(e){connection.close();return}
     const request=pending.get(message.id);if(!request)return;
     pending.delete(message.id);clearTimeout(request.timer);
@@ -146,6 +151,26 @@ for(const id of ["ramp","minOutput","leftScale","rightScale","movePower","rotate
   $(id).oninput=()=>{configDirty=true;showConfig();setConfigStatus("未保存")};
   $(id).onchange=saveConfig}
 $("retry").onclick=saveConfig;
+
+let alarmDirty=false,pendingAlarmSave=false,savingAlarm=false;
+function showAlarmConfig(){$("alarmDistanceOut").textContent=$("alarmDistance").value+" cm"}
+function setAlarmStatus(message,kind){const output=$("alarmStatus");output.textContent=message;output.className="status "+(kind||"")}
+async function loadAlarmConfig(){try{const config=await call("/api/alarm-config");
+  if(!alarmDirty){$("alarmDistance").value=config.distance_cm;showAlarmConfig();setAlarmStatus("已从设备加载","ok");$("alarmRetry").hidden=true}
+  $("alarmFields").disabled=false}
+  catch(e){setAlarmStatus("读取配置失败，请刷新页面","bad")}}
+async function saveAlarmConfig(){pendingAlarmSave=true;if(savingAlarm)return;savingAlarm=true;
+  while(pendingAlarmSave){pendingAlarmSave=false;
+    const distance_cm=$("alarmDistance").value;
+    setAlarmStatus("保存中");$("alarmRetry").hidden=true;
+    try{await call("/api/alarm-config",{distance_cm});
+      if(!pendingAlarmSave){const same=$("alarmDistance").value===distance_cm;
+        alarmDirty=!same;setAlarmStatus(same?"已保存到设备":"未保存",same?"ok":"")}}
+    catch(e){setAlarmStatus(e.message||"保存失败，请重试","bad");$("alarmRetry").hidden=false}}
+  savingAlarm=false}
+$("alarmDistance").oninput=()=>{alarmDirty=true;showAlarmConfig();setAlarmStatus("未保存")};
+$("alarmDistance").onchange=saveAlarmConfig;
+$("alarmRetry").onclick=saveAlarmConfig;
 
 const fire=$("fire");fire.onclick=async()=>{try{await call("/api/launcher/fire");
   fire.classList.remove("flash");void fire.offsetWidth;fire.classList.add("flash")}catch(e){reportError(e)}};
