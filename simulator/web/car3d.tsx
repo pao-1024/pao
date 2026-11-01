@@ -13,6 +13,7 @@ type Props = { left: number; right: number; charging: boolean; firing: boolean; 
 type DistanceReading = { distance_cm: number | null; error: string | null; motion_status: string; moved_cm: number };
 
 const WHEEL_RADIUS = 0.36, TRAIL = 900, SHOT_SPEED = 9, SHOT_LIFE = 1.6;
+const NO_ECHO_CM = 401;
 const BACKGROUND = 0x080b10, ACCENT = new THREE.Color(0x4cc2ff), CHARGE = new THREE.Color(0xffa63d);
 
 const standard = (color: number, roughness = 0.5, metalness = 0, extra: THREE.MeshStandardMaterialParameters = {}) =>
@@ -59,8 +60,12 @@ export function Car3D(props: Props) {
   const requestedDistance = Number(distance);
   const [reading, setReading] = useState("");
   const [echoDistance, setEchoDistance] = useState<number | null>(null);
-  const selectedEchoDistance = echoDistance ?? Math.min(400, Math.max(2, Math.round(props.world?.distance_override_cm ?? props.world?.distance_cm ?? 190)));
+  const noEcho = echoDistance === NO_ECHO_CM || props.world?.distance_override_cm === NO_ECHO_CM;
+  const selectedEchoDistance = noEcho ? 400 : (echoDistance ?? Math.min(400, Math.max(2, Math.round(props.world?.distance_override_cm ?? props.world?.distance_cm ?? 190))));
   const manualEcho = echoDistance !== null || props.world?.distance_override_cm != null;
+  let frontDistance = props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—";
+  let echoSource = manualEcho ? "手动回波" : "场地边界";
+  if (noEcho && props.world) { frontDistance = "无回波"; echoSource = "模拟无回波"; }
   const control = useRef<ControlClient | null>(null);
   useEffect(() => { if (!props.connected) setEchoDistance(null); }, [props.connected]);
   useEffect(() => {
@@ -374,8 +379,9 @@ export function Car3D(props: Props) {
       <b>{Math.round(energy * 100)}%</b>
     </div>
     <div className="car3d-ranging">
-      <span>场地 6×4 m · 网格 10 cm · 前方 {props.world ? `${props.world.distance_cm.toFixed(1)} cm` : "—"} · {manualEcho ? "手动回波" : "场地边界"}</span>
-      <label className="car3d-distance-slider">模拟回波 <input aria-label="模拟回波距离" type="range" min="2" max="400" step="1" value={selectedEchoDistance} disabled={!props.connected || !props.world} onChange={event => { const value = Number(event.target.value); setEchoDistance(value); props.onDistanceChange(value); }} /><b>{selectedEchoDistance} cm</b></label>
+      <span>场地 6×4 m · 网格 10 cm · 前方 {frontDistance} · {echoSource}</span>
+      <label className="car3d-distance-slider">模拟回波 <input aria-label="模拟回波距离" type="range" min="2" max="400" step="1" value={selectedEchoDistance} disabled={!props.connected || !props.world} onChange={event => { const value = Number(event.target.value); setEchoDistance(value); props.onDistanceChange(value); }} /><b>{noEcho ? "无回波" : `${selectedEchoDistance} cm`}</b></label>
+      <button className="small" disabled={!props.connected || noEcho} onClick={() => { setEchoDistance(NO_ECHO_CM); props.onDistanceChange(NO_ECHO_CM); }}>无回波</button>
       <button className="small" disabled={!props.connected || !manualEcho} onClick={() => { setEchoDistance(null); props.onDistanceChange(null); }}>跟随场地</button>
       <label>前进 <input aria-label="前进厘米数" type="number" min="1" max="390" value={distance} onChange={event => setDistance(event.target.value)} /> cm</label>
       <button disabled={!props.world || !Number.isInteger(requestedDistance) || requestedDistance < 1 || requestedDistance > 390} onClick={() => void request("/api/move_forward", { distance_cm: requestedDistance })}>前进</button>

@@ -5,6 +5,8 @@ use esp_soc::json::Json;
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 
+const NO_ECHO_CM: i64 = 401;
+
 /// PAO voice board: SSD1306 on I2C0 SDA41/SCL42, status LED on GPIO48.
 #[derive(Default)]
 pub struct Pao {
@@ -21,7 +23,8 @@ impl BoardModel for Pao {
     fn set_input(&mut self, input: &Json) -> Result<(), &'static str> {
         let distance = match input.get("distance_cm") {
             Some(Json::Null) => None,
-            Some(Json::Int(value)) if (2..=400).contains(value) => Some(*value as f64),
+            // 401cm 超出量程，Trig 仍会发生但不生成 Echo，用于检查无回波恢复。
+            Some(Json::Int(value)) if (2..=NO_ECHO_CM).contains(value) => Some(*value as f64),
             _ => return Err("invalid ultrasonic distance"),
         };
         self.trace.lock().unwrap().world.distance_override_cm = distance;
@@ -110,6 +113,10 @@ mod tests {
         ]);
         assert!(board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":1}"#).unwrap()).is_err());
         assert_eq!(board.trace.lock().unwrap().world.distance_cm(), 10.0);
+        board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":401}"#).unwrap()).unwrap();
+        board.gpio_output_at(100000, &[(8, true)], 1 << 8, 1 << 8);
+        board.gpio_output_at(102500, &[(8, false)], 1 << 8, 0);
+        assert_eq!(board.next_deadline(), None, "no echo stimulus must not generate an Echo edge");
         board.set_input(&esp_soc::json::parse_json(r#"{"distance_cm":null}"#).unwrap()).unwrap();
         assert_eq!(board.trace.lock().unwrap().world.distance_cm(), 189.5);
     }
