@@ -13,6 +13,7 @@
 #include "mcp_server.h"
 #include "motor.h"
 #include "pao.h"
+#include "pao_guest.h"
 #include "websocket_access.h"
 #include "sequence_parser.h"
 
@@ -156,6 +157,26 @@ private:
     esp_lcd_panel_io_handle_t display_panel_io_ = nullptr;
     esp_lcd_panel_handle_t display_panel_ = nullptr;
     Display* display_ = nullptr;
+    static PaoBoard* guest_board_;
+
+    static int GuestDistanceCm() {
+        if (guest_board_ == nullptr) {
+            return -1;
+        }
+        float distance = 0;
+        if (guest_board_->ultrasonic_.readDistanceCm(distance) != ESP_OK) {
+            return -1;
+        }
+        return static_cast<int>(lroundf(distance));
+    }
+
+    void StartGuest() {
+        guest_board_ = this;
+        pao_guest_hooks_t hooks = {};
+        hooks.distance_cm = &PaoBoard::GuestDistanceCm;
+        pao_guest_set_hooks(&hooks);
+        pao_guest_start();
+    }
 
     bool ExploreActiveLocked() const {
         return explore_phase_ != ExplorePhase::Idle && explore_phase_ != ExplorePhase::Fault;
@@ -1478,6 +1499,7 @@ public:
             app.ToggleChatState();
         });
         pao_initialize();
+        StartGuest();
     }
 
     void SetNetworkEventCallback(NetworkEventCallback callback) override {
@@ -1511,5 +1533,7 @@ public:
         return &led;
     }
 };
+
+PaoBoard* PaoBoard::guest_board_ = nullptr;
 
 DECLARE_BOARD(PaoBoard);

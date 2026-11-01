@@ -1,0 +1,8 @@
+println("pao guest start")
+
+for i := 0; i < 100; i++ {
+	d := distanceCm()
+	logInt(d)
+	delayMs(1000)
+}
+println("pao guest done")

@@ -2,3 +2,7 @@
 	path = simulator/esp32sim
 	url = https://github.com/pao-1024/esp32sim.git
 	branch = pao
+[submodule "firmware/components/wasm-micro-runtime"]
+	path = firmware/components/wasm-micro-runtime
+	url = https://github.com/pao-1024/wasm-micro-runtime.git
+	branch = pao/idf6
