@@ -1,0 +1,9 @@
+flowchart LR
+  agent["Agent<br/>生成 / 调整设计"] --> model["Blender<br/>结构模型与装配"]
+  model --> simulation["刚体动力学<br/>执行仿真"]
+  simulation --> evaluation["评估设计<br/>读取仿真结果"]
+  evaluation -- "反馈下一轮调整" --> agent
+  classDef code fill:#edeaf9,stroke:#7263be,color:#34286d
+  classDef result fill:#f8ede7,stroke:#b77a5e,color:#713b26
+  class agent,model code
+  class evaluation result

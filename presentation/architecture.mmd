@@ -1,13 +1,7 @@
-flowchart LR
-  firmware["同一份 PAO 正式固件<br/>ESP-IDF · 驱动 · 业务"]
-  firmware --> chip["ESP32-S3<br/>真实芯片"]
-  chip --> hardware["实物外设<br/>显示 · 电机 · 音频"]
-  firmware --> core["esp32sim<br/>ROM · CPU · 寄存器"]
-  core --> models["虚拟外设模型<br/>总线 · GPIO"]
-  models --> evidence["可观察 / 可验收<br/>显存 · 音频 · 日志"]
+flowchart TB
+  firmware["正式应用固件<br/>ESP-IDF · 驱动 · 业务"] --> models["芯片与外设模型<br/>ROM · CPU · 寄存器<br/>I²C · I²S · MCPWM · GPIO / RMT"]
+  models --> evidence["运行观测<br/>UART · 显存 · PCM · PWM"]
   classDef software fill:#edeaf9,stroke:#7263be,color:#34286d
-  classDef physical fill:#f1f3f6,stroke:#8d96a8,color:#384052
   classDef output fill:#f8ede7,stroke:#b77a5e,color:#713b26
-  class firmware,core,models software
-  class chip,hardware physical
+  class firmware,models software
   class evidence output
