@@ -100,11 +100,14 @@
 .detail-checks > div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; min-height: 85px; border-bottom: 1px solid var(--line); }
 .detail-checks b { color: #202838; font-size: 21px; font-weight: 650; }
 .detail-checks p { color: #475063; font-size: 18px; line-height: 1.6; }
-.runtime-detail-body { display: grid; grid-template-columns: 470px 1fr; gap: 45px; margin-top: 25px; }
-.runtime-model { text-align: center; }
-.runtime-model img { width: 100%; height: 305px; object-fit: contain; }
-.runtime-model p { margin-top: 15px; color: #475063; font-size: 21px; line-height: 1.6; }
-.runtime-model a { display: inline-block; margin-top: 12px; color: #8c492e; font-size: 17px; }
+.runtime-detail-body { display: grid; grid-template-columns: 560px 1fr; gap: 35px; margin-top: 25px; }
+.runtime-model { margin: 0; text-align: center; }
+.runtime-model .runtime-screen { display: block; margin: 0; }
+.runtime-model img { display: block; width: 100%; height: 330px; object-fit: cover; object-position: top; border-radius: 6px; }
+.runtime-model figcaption { margin-top: 13px; }
+.runtime-model b { color: var(--violet); font-size: 18px; }
+.runtime-model p { margin-top: 8px; color: #475063; font-size: 19px; line-height: 1.5; }
+.runtime-model a { display: inline-block; margin-top: 9px; color: #8c492e; font-size: 16px; }
 .runtime-checks { padding-top: 6px; }
 .runtime-checks > div { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .runtime-checks b { color: #202838; font-size: 22px; font-weight: 650; }
@@ -118,3 +121,25 @@
 .mechanical-checks span { color: var(--violet); font-size: 16px; font-weight: 650; }
 .mechanical-checks h2 { margin-top: 13px; font-size: 23px; line-height: 1.4; }
 .mechanical-checks p { margin-top: 12px; color: #475063; font-size: 18px; line-height: 1.65; }
+
+.schematic-body { display: grid; grid-template-columns: 670px 1fr; gap: 35px; margin-top: 20px; }
+.schematic-overview { margin: 0; }
+.schematic-overview a { display: block; }
+.schematic-overview svg { display: block; width: 100%; height: 435px; }
+.schematic-overview figcaption { display: flex; justify-content: space-between; margin-top: 9px; color: #626a7a; font-size: 14px; }
+.schematic-overview figcaption span { color: var(--violet); }
+.schematic-evidence { padding-top: 4px; }
+.schematic-zoom { display: block; width: 100%; height: 135px; margin-bottom: 19px; }
+.schematic-evidence h2 { font-size: 25px; line-height: 1.4; }
+.schematic-evidence p { margin-top: 12px; color: #475063; font-size: 18px; line-height: 1.6; }
+.schematic-assert { margin-top: 17px; padding: 15px 18px; border-radius: 8px; background: #f5f6fa; }
+.schematic-assert span { display: block; margin-bottom: 8px; color: #626a7a; font-size: 13px; }
+.schematic-assert code { color: #8c492e; font-size: 17px; line-height: 1.55; }
+.firmware-evidence { margin: 0; }
+.firmware-evidence a { display: block; }
+.firmware-evidence img { display: block; width: 100%; height: 225px; object-fit: cover; object-position: top; border: 1px solid var(--line); border-radius: 6px; }
+.firmware-evidence figcaption { display: grid; gap: 7px; margin-top: 10px; }
+.firmware-evidence b { color: var(--violet); font-size: 20px; }
+.firmware-evidence span { color: #626a7a; font-size: 14px; }
+.firmware-evidence code { color: #626a7a; font-size: 14px; }
+.schematic-overview a, .firmware-evidence a, .runtime-model .runtime-screen { border: 0; }
