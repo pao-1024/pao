@@ -10,3 +10,8 @@ tasks:
     desc: 使用已配置的 ESP-IDF 或 EIM，准备小智并构建 PAO 固件（REF=分支/Tag/commit）
     cmds:
       - bash scripts/build.sh
+
+  guest:
+    desc: 用 XGo 和 TinyGo 重新构建 PAO wasm guest
+    cmds:
+      - bash scripts/build_guest.sh
