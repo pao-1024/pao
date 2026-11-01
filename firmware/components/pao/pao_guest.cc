@@ -36,6 +36,7 @@ volatile int32_t g_reply_result;
 volatile uint32_t g_pending_id;
 uint32_t g_next_id = 1;
 GuestEvent g_current;
+char g_last_text[512];
 
 int32_t HostDistanceCm(wasm_exec_env_t env) {
     (void)env;
@@ -91,6 +92,13 @@ void HostEventReply(wasm_exec_env_t env, int32_t id, int32_t result) {
     }
 }
 
+void HostShowReceivedText(wasm_exec_env_t env) {
+    (void)env;
+    if (g_hooks.show_text != nullptr) {
+        g_hooks.show_text(g_last_text);
+    }
+}
+
 void HostShowWake(wasm_exec_env_t env) {
     (void)env;
     if (g_hooks.show_wake != nullptr) {
@@ -131,6 +139,7 @@ NativeSymbol kSymbols[] = {
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
     {"show_state", reinterpret_cast<void*>(HostShowState), "(i)", nullptr},
     {"show_wake", reinterpret_cast<void*>(HostShowWake), "()", nullptr},
+    {"show_received_text", reinterpret_cast<void*>(HostShowReceivedText), "()", nullptr},
     {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
     {"uptime_ms", reinterpret_cast<void*>(HostUptimeMs), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
@@ -202,6 +211,18 @@ extern "C" int pao_guest_post_event(int type, int arg0, int arg1) {
     }
     GuestEvent event = {0, type, arg0, arg1};
     return xQueueSend(g_events, &event, pdMS_TO_TICKS(100)) == pdTRUE ? 0 : -2;
+}
+
+extern "C" int pao_guest_post_text_event(int type, const char* text) {
+    if (text == nullptr) {
+        text = "";
+    }
+    std::snprintf(g_last_text, sizeof(g_last_text), "%s", text);
+    return pao_guest_post_event(type, 0, 0);
+}
+
+extern "C" void pao_guest_on_stt_text(const char* text) {
+    pao_guest_post_text_event(22, text);
 }
 
 extern "C" void pao_guest_on_device_state(int state) {

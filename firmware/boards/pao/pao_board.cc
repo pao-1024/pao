@@ -201,6 +201,12 @@ private:
         }
     }
 
+    static void GuestShowText(const char* text) {
+        if (guest_board_ != nullptr && guest_board_->display_ != nullptr) {
+            guest_board_->display_->SetChatMessage("user", text);
+        }
+    }
+
     static void GuestShowState(int state) {
         if (guest_board_ == nullptr || guest_board_->display_ == nullptr) {
             return;
@@ -240,6 +246,7 @@ private:
         hooks.show_distance = &PaoBoard::GuestShowDistance;
         hooks.show_state = &PaoBoard::GuestShowState;
         hooks.show_wake = &PaoBoard::GuestShowWake;
+        hooks.show_text = &PaoBoard::GuestShowText;
         hooks.device_state = &PaoBoard::GuestDeviceState;
         pao_guest_set_hooks(&hooks);
         pao_guest_start();

@@ -24,6 +24,9 @@ func showState(state int32)
 //go:wasmimport pao show_wake
 func showWake()
 
+//go:wasmimport pao show_received_text
+func showReceivedText()
+
 //go:wasmimport pao device_state
 func deviceState() int32
 

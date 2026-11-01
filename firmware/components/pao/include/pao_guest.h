@@ -13,6 +13,7 @@ typedef struct {
     void (*show_distance)(int distance_cm);
     void (*show_state)(int state);
     void (*show_wake)(void);
+    void (*show_text)(const char* text);
     int (*device_state)(void);
 } pao_guest_hooks_t;
 
@@ -25,6 +26,7 @@ int pao_guest_command(int type, int arg0, int arg1);
 
 // Queues a fire-and-forget event for the guest. Returns 0 when queued.
 int pao_guest_post_event(int type, int arg0, int arg1);
+int pao_guest_post_text_event(int type, const char* text);
 
 #ifdef __cplusplus
 }
