@@ -195,7 +195,8 @@ void* GuestTask(void*) {
     }
     wasm_runtime_register_natives("pao", kSymbols, sizeof(kSymbols) / sizeof(kSymbols[0]));
 
-    const auto size = static_cast<uint32_t>(guest_wasm_end - guest_wasm_start);
+    const auto size = static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(guest_wasm_end) - reinterpret_cast<uintptr_t>(guest_wasm_start));
     auto* wasm = static_cast<uint8_t*>(
         heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (wasm == nullptr) {
