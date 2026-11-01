@@ -1132,6 +1132,13 @@ private:
         return end != value && *end == '\0' && std::isfinite(out) && out >= 0 && out <= 1;
     }
 
+    static void WakeForWebMotion() {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateIdle) {
+            app.ToggleChatState();
+        }
+    }
+
     std::string ControlCommand(const std::string& path, const char* query) {
         int duration_ms, distance_cm, ramp_time_ms, move_output, rotate_output, min_output, start_boost_output;
         if (path == "/api/chassis") {
@@ -1148,6 +1155,7 @@ private:
                     return "duration_ms 取 100..15000";
                 }
                 RunChassis(action, duration_ms);
+                WakeForWebMotion();
             }
         } else if (path == "/api/motion-config") {
             ChassisConfig config = chassis_.config();
@@ -1188,15 +1196,18 @@ private:
             }
             const auto result = MoveForward(distance_cm);
             if (!result) { return result.error(); }
+            WakeForWebMotion();
         } else if (path == "/api/move_to_distance") {
             if (!QueryInt(query, "distance_cm", 20, 10, 390, distance_cm)) {
                 return "distance_cm 取 10..390";
             }
             const auto result = MoveToObstacleDistance(distance_cm);
             if (!result) { return result.error(); }
+            WakeForWebMotion();
         } else if (path == "/api/explore/start") {
             const auto result = StartExplore();
             if (!result) { return result.error(); }
+            WakeForWebMotion();
         } else if (path == "/api/explore/stop") {
             StopExplore();
         } else if (path == "/api/launcher/fire") {

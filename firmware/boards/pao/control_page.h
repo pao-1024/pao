@@ -67,7 +67,7 @@ p.hint{margin:0;font-size:12px;color:var(--muted)}
 <label>触发距离<input id="alarmDistance" type="range" min="2" max="100" step="1" value="10"><output id="alarmDistanceOut">10 cm</output></label>
 </fieldset><div class="config-line"><span id="alarmStatus" class="status" role="status">读取配置中</span><button id="alarmRetry" hidden>重试保存</button></div>
 </section>
-<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出并退出探索；键盘 WASD / 方向键驾驶，空格开炮。探索按前方测距短时前进和转向，最长两分钟，持续无回波会停车寻回波。起步脉冲可短时超过运动最大输出；最小有效输出须低于前进和旋转最大输出。设置在调节结束后保存到设备。测距不大于触发距离时播放警报，恢复到触发距离以上 2 cm 后解除。</p>
+<p class="hint">按住方向键驾驶，松开平滑停车。中央“停”立即清零输出并退出探索；键盘 WASD / 方向键驾驶，空格开炮。网页开始运动会从待机进入语音聆听；聆听时测距报警音延后。探索按前方测距短时前进和转向，最长两分钟，持续无回波会停车寻回波。起步脉冲可短时超过运动最大输出；最小有效输出须低于前进和旋转最大输出。设置在调节结束后保存到设备。测距不大于触发距离时播放警报，恢复到触发距离以上 2 cm 后解除。</p>
 </main><script>
 const $=id=>document.getElementById(id);
 const statusEl=$("status"),configStatus=$("configStatus");
