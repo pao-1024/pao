@@ -9,6 +9,12 @@ var moveStatus int32 = 0
 var moveStartMs int32 = 0
 var lastState int32 = -1
 var event int32 = 0
+var exploring bool = false
+var explorePhase int32 = 0
+var exploreTurns int32 = 0
+var exploreReason int32 = 0
+var exploreStartMs int32 = 0
+var exploreStepMs int32 = 0
 
 for {
 	var timeout int32 = 500
@@ -61,6 +67,40 @@ for {
 		}
 	}
 
+	if exploring {
+		now := uptimeMs()
+		if now-exploreStartMs > 120000 {
+			move(0, 0)
+			exploring = false
+			explorePhase = 0
+			exploreReason = 4
+		} else if now-exploreStepMs >= 700 {
+			exploreStepMs = now
+			d := distanceCm()
+			if d < 0 {
+				move(0, 0)
+				exploring = false
+				explorePhase = 7
+				exploreReason = 3
+			} else if d < 35 {
+				explorePhase = 4
+				exploreReason = 2
+				exploreTurns++
+				move(0, 0)
+				move(4, 600)
+				if exploreTurns >= 6 {
+					exploring = false
+					explorePhase = 0
+					exploreReason = 5
+				}
+			} else {
+				explorePhase = 2
+				exploreReason = 1
+				move(1, 800)
+			}
+		}
+	}
+
 	if event == 0 {
 		d := distanceCm()
 		showDistance(d)
@@ -78,6 +118,9 @@ for {
 
 	if event == 1 {
 		moving = false
+		exploring = false
+		explorePhase = 0
+		exploreReason = 6
 		if a >= 1 && a <= 4 {
 			moveStatus = 0
 			move(a, b)
@@ -87,6 +130,9 @@ for {
 		}
 		eventReply(id, 0)
 	} else if event == 2 {
+		exploring = false
+		explorePhase = 0
+		exploreReason = 6
 		if moving {
 			move(0, 0)
 			moving = false
@@ -139,6 +185,28 @@ for {
 		eventReply(id, moveMoved)
 	} else if event == 6 {
 		eventReply(id, moveTarget)
+	} else if event == 7 {
+		moving = false
+		move(0, 0)
+		exploring = true
+		explorePhase = 1
+		exploreTurns = 0
+		exploreReason = 1
+		exploreStartMs = uptimeMs()
+		exploreStepMs = 0
+		eventReply(id, 0)
+	} else if event == 8 {
+		exploring = false
+		move(0, 0)
+		explorePhase = 0
+		exploreReason = 6
+		eventReply(id, 0)
+	} else if event == 9 {
+		eventReply(id, explorePhase)
+	} else if event == 10 {
+		eventReply(id, exploreTurns)
+	} else if event == 11 {
+		eventReply(id, exploreReason)
 	} else {
 		eventReply(id, -1)
 	}

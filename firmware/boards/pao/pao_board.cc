@@ -628,9 +628,54 @@ private:
         return "fault";
     }
 
+    static const char* GuestExplorePhaseName(int phase) {
+        switch (phase) {
+        case 1: return "checking";
+        case 2: return "forward";
+        case 4: return "turning";
+        case 7: return "fault";
+        default: return "idle";
+        }
+    }
+
+    static const char* GuestExploreReasonName(int reason) {
+        switch (reason) {
+        case 1: return "forward";
+        case 2: return "obstacle";
+        case 3: return "no_echo";
+        case 4: return "time_limit";
+        case 5: return "no_path";
+        case 6: return "cancelled";
+        default: return "idle";
+        }
+    }
+
+    ToolResult StartExploreGuest() {
+        const int result = pao_guest_command(7, 0, 0);
+        if (result == 0) {
+            return std::string("已开始自动探索；说“停止探索”可立即退出，单次最多运行两分钟");
+        }
+        return StartExplore();
+    }
+
+    void StopExploreGuest() {
+        pao_guest_command(8, 0, 0);
+        StopExplore();
+    }
+
     cJSON* ReadExploreStatus() {
+        const int guest_phase = pao_guest_command(9, 0, 0);
+        const int guest_turns = pao_guest_command(10, 0, 0);
+        const int guest_reason = pao_guest_command(11, 0, 0);
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         auto* result = cJSON_CreateObject();
+        if (guest_phase > 0) {
+            cJSON_AddStringToObject(result, "state", GuestExplorePhaseName(guest_phase));
+            cJSON_AddStringToObject(result, "reason", GuestExploreReasonName(guest_reason));
+            cJSON_AddBoolToObject(result, "active", true);
+            cJSON_AddNumberToObject(result, "turn_attempts", guest_turns);
+            return result;
+        }
         cJSON_AddStringToObject(result, "state", ExplorePhaseName(explore_phase_));
         cJSON_AddStringToObject(result, "reason", explore_reason_);
         cJSON_AddBoolToObject(result, "active", ExploreActiveLocked());
@@ -959,14 +1004,14 @@ private:
             "返回已开始，不表示已经找到通路；可用 self.chassis.explore_status 查询状态。",
             PropertyList(),
             [this](const PropertyList&) -> ToolResult {
-                return StartExplore();
+                return StartExploreGuest();
             });
         mcp.AddTool("self.chassis.explore_stop",
             "立即停车并退出自动探索。用户说“停止探索”“别再自己走了”时调用；"
             "普通停车或急停指令也会取消探索。参数：无。返回当前探索状态。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
-                StopExplore();
+                StopExploreGuest();
                 return ReadExploreStatus();
             });
         mcp.AddTool("self.chassis.explore_status",
