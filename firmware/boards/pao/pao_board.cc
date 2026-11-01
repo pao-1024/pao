@@ -195,6 +195,12 @@ private:
         return static_cast<int>(Application::GetInstance().GetDeviceState());
     }
 
+    static void GuestShowWake() {
+        if (guest_board_ != nullptr && guest_board_->display_ != nullptr) {
+            guest_board_->display_->SetChatMessage("guest", "wake");
+        }
+    }
+
     static void GuestShowState(int state) {
         if (guest_board_ == nullptr || guest_board_->display_ == nullptr) {
             return;
@@ -233,6 +239,7 @@ private:
         hooks.fire = &PaoBoard::GuestFire;
         hooks.show_distance = &PaoBoard::GuestShowDistance;
         hooks.show_state = &PaoBoard::GuestShowState;
+        hooks.show_wake = &PaoBoard::GuestShowWake;
         hooks.device_state = &PaoBoard::GuestDeviceState;
         pao_guest_set_hooks(&hooks);
         pao_guest_start();

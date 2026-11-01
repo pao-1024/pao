@@ -207,6 +207,12 @@ for {
 		eventReply(id, exploreTurns)
 	} else if event == 11 {
 		eventReply(id, exploreReason)
+	} else if event == 20 {
+		showWake()
+		logInt(20)
+	} else if event == 21 {
+		showState(a)
+		logInt(100 + a)
 	} else {
 		eventReply(id, -1)
 	}

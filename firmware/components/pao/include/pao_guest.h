@@ -12,6 +12,7 @@ typedef struct {
     void (*fire)(void);
     void (*show_distance)(int distance_cm);
     void (*show_state)(int state);
+    void (*show_wake)(void);
     int (*device_state)(void);
 } pao_guest_hooks_t;
 
@@ -21,6 +22,9 @@ void pao_guest_start(void);
 // Sends one command to the guest and waits for its reply. Returns the guest
 // result, or a negative value when the guest is unavailable or times out.
 int pao_guest_command(int type, int arg0, int arg1);
+
+// Queues a fire-and-forget event for the guest. Returns 0 when queued.
+int pao_guest_post_event(int type, int arg0, int arg1);
 
 #ifdef __cplusplus
 }

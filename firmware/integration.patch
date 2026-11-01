@@ -106,3 +106,41 @@ index 9284cc4..446c256 100644
      size_t GetFeedSize();
      void EncodeWakeWordData();
      bool GetWakeWordOpus(std::vector<uint8_t>& opus);
+diff --git a/main/application.cc b/main/application.cc
+index 9dd16e1..d82cdae 100644
+--- a/main/application.cc
++++ b/main/application.cc
+@@ -22,6 +22,9 @@
+ 
+ #define TAG "Application"
+ 
++extern "C" void pao_guest_on_device_state(int state) __attribute__((weak));
++extern "C" void pao_guest_on_wake_word(const char* word) __attribute__((weak));
++
+ Application::Application() : notify_player_(audio_service_) {
+     event_group_ = xEventGroupCreate();
+ 
+@@ -61,7 +64,12 @@ Application::~Application() {
+     vEventGroupDelete(event_group_);
+ }
+ 
+-bool Application::SetDeviceState(DeviceState state) { return state_machine_.TransitionTo(state); }
++bool Application::SetDeviceState(DeviceState state) {
++    if (pao_guest_on_device_state != nullptr) {
++        pao_guest_on_device_state(static_cast<int>(state));
++    }
++    return state_machine_.TransitionTo(state);
++}
+ 
+ void Application::Initialize() {
+     auto& board = Board::GetInstance();
+@@ -915,6 +923,9 @@ void Application::HandleWakeWordDetectedEvent() {
+     auto state = GetDeviceState();
+     auto wake_word = audio_service_.GetLastWakeWord();
+     ESP_LOGI(TAG, "Wake word detected: %s (state: %d)", wake_word.c_str(), (int)state);
++    if (pao_guest_on_wake_word != nullptr) {
++        pao_guest_on_wake_word(wake_word.c_str());
++    }
+ 
+     if (state == kDeviceStateIdle) {
+         BeginWakeWordInvoke(wake_word);

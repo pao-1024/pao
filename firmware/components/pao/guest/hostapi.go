@@ -21,6 +21,9 @@ func showDistance(distanceCm int32)
 //go:wasmimport pao show_state
 func showState(state int32)
 
+//go:wasmimport pao show_wake
+func showWake()
+
 //go:wasmimport pao device_state
 func deviceState() int32
 

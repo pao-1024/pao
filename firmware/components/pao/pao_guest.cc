@@ -91,6 +91,13 @@ void HostEventReply(wasm_exec_env_t env, int32_t id, int32_t result) {
     }
 }
 
+void HostShowWake(wasm_exec_env_t env) {
+    (void)env;
+    if (g_hooks.show_wake != nullptr) {
+        g_hooks.show_wake();
+    }
+}
+
 void HostShowState(wasm_exec_env_t env, int32_t state) {
     (void)env;
     if (g_hooks.show_state != nullptr) {
@@ -123,6 +130,7 @@ NativeSymbol kSymbols[] = {
     {"fire", reinterpret_cast<void*>(HostFire), "()", nullptr},
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
     {"show_state", reinterpret_cast<void*>(HostShowState), "(i)", nullptr},
+    {"show_wake", reinterpret_cast<void*>(HostShowWake), "()", nullptr},
     {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
     {"uptime_ms", reinterpret_cast<void*>(HostUptimeMs), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
@@ -186,6 +194,23 @@ extern "C" void pao_guest_set_hooks(const pao_guest_hooks_t* hooks) {
     if (hooks != nullptr) {
         g_hooks = *hooks;
     }
+}
+
+extern "C" int pao_guest_post_event(int type, int arg0, int arg1) {
+    if (g_events == nullptr) {
+        return -1;
+    }
+    GuestEvent event = {0, type, arg0, arg1};
+    return xQueueSend(g_events, &event, pdMS_TO_TICKS(100)) == pdTRUE ? 0 : -2;
+}
+
+extern "C" void pao_guest_on_device_state(int state) {
+    pao_guest_post_event(21, state, 0);
+}
+
+extern "C" void pao_guest_on_wake_word(const char* word) {
+    (void)word;
+    pao_guest_post_event(20, 0, 0);
 }
 
 extern "C" int pao_guest_command(int type, int arg0, int arg1) {
