@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  setup:
+    desc: 按锁文件安装演示稿依赖
+    cmds:
+      - pnpm install --frozen-lockfile
+
+  dev:
+    desc: 准备素材并启动演示稿，在浏览器中打开
+    deps: [setup]
+    cmds:
+      - pnpm dev --open
+
+  build:
+    desc: 准备素材并生成静态站点到 dist/
+    deps: [setup]
+    cmds:
+      - pnpm build

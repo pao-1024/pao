@@ -16,6 +16,9 @@ includes:
   simulator:
     taskfile: ./simulator/Taskfile.yaml
     dir: ./simulator
+  presentation:
+    taskfile: ./presentation/Taskfile.yaml
+    dir: ./presentation
 
 tasks:
   skills:install:

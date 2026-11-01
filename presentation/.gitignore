@@ -1,0 +1,6 @@
+/node_modules/
+/dist/
+/public/diagrams/
+/public/reference/
+/public/videos/
+/slides-export.*

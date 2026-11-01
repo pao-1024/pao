@@ -1,0 +1,6 @@
+flowchart LR
+  change["硬件变更<br/>接线与驱动"] --> pr["Pull Request<br/>变更与讨论"]
+  pr --> review["CI Check<br/>人工 Review"]
+  review --> history["决定是否合并<br/>保留版本记录"]
+  classDef focus fill:#edeaf9,stroke:#7263be,color:#34286d
+  class pr,review focus
