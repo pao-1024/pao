@@ -17,6 +17,7 @@ struct ChassisConfig {
     float rotate_output = 0.8f;
     float min_output = 0.0f;
     float start_boost_output = 0.7f;
+    uint32_t start_boost_ms = 80;
 };
 
 class Chassis {

@@ -9,7 +9,6 @@
 
 namespace {
 constexpr TickType_t kUpdateTicks = pdMS_TO_TICKS(20);
-constexpr int64_t kStartBoostUs = 80000;
 
 float approach(float current, float target, float step) {
     return current + std::clamp(target - current, -step, step);
@@ -27,14 +26,15 @@ float applyMinOutput(float speed, float scale, float motion_max, float min_outpu
 }
 
 // 起步脉冲允许短暂高于持续输出上限，以克服轮子的静摩擦。
-float applyStartBoost(float output, float previous_output, float boost_output, int64_t now_us,
+float applyStartBoost(float output, float previous_output, float boost_output, uint32_t boost_ms, int64_t now_us,
                       int64_t& deadline_us, bool moving_toward_target) {
-    if (output == 0 || boost_output == 0 || !moving_toward_target || output * previous_output < 0) {
+    if (output == 0 || boost_output == 0 || boost_ms == 0 || !moving_toward_target ||
+        output * previous_output < 0) {
         deadline_us = 0;
         return output;
     }
     if (previous_output == 0) {
-        deadline_us = now_us + kStartBoostUs;
+        deadline_us = now_us + static_cast<int64_t>(boost_ms) * 1000;
     }
     if (now_us < deadline_us) {
         return std::copysign(std::max(std::abs(output), boost_output), output);
@@ -76,7 +76,7 @@ bool Chassis::validConfig(const ChassisConfig& config) {
            std::isfinite(config.min_output) && config.min_output >= 0 &&
            config.min_output < config.move_output && config.min_output < config.rotate_output &&
            std::isfinite(config.start_boost_output) && config.start_boost_output >= 0 &&
-           config.start_boost_output <= 1;
+           config.start_boost_output <= 1 && config.start_boost_ms <= 300;
 }
 
 bool Chassis::setConfig(const ChassisConfig& config) {
@@ -216,9 +216,11 @@ void Chassis::writeMotorsLocked() {
     const int64_t now_us = esp_timer_get_time();
     const float left_normal = applyMinOutput(left_speed, applied_left_scale_, motion_max, config_.min_output);
     const float right_normal = applyMinOutput(current_speed_, applied_right_scale_, motion_max, config_.min_output);
-    const float left = applyStartBoost(left_normal, last_left_output_, config_.start_boost_output, now_us,
+    const float left = applyStartBoost(left_normal, last_left_output_, config_.start_boost_output,
+                                       config_.start_boost_ms, now_us,
                                        left_boost_deadline_us_, moving_toward_target);
-    const float right = applyStartBoost(right_normal, last_right_output_, config_.start_boost_output, now_us,
+    const float right = applyStartBoost(right_normal, last_right_output_, config_.start_boost_output,
+                                        config_.start_boost_ms, now_us,
                                         right_boost_deadline_us_, moving_toward_target);
     if (left != last_left_output_) {
         left_.setSpeed(left);
