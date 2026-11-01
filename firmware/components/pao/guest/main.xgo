@@ -1,18 +1,25 @@
-println("pao guest patrol")
+println("pao guest event loop")
 
-for i := 0; i < 30; i++ {
-	d := distanceCm()
-	showDistance(d)
-	logInt(d)
+for {
+	event := eventNext(500)
+	if event == 0 {
+		d := distanceCm()
+		showDistance(d)
+		continue
+	}
 
-	if d > 0 && d < 30 {
-		move(0, 0)
-		move(4, 600)
-		delayMs(700)
+	id := eventId()
+	a := eventArg0()
+	b := eventArg1()
+
+	if event == 1 {
+		if a >= 1 && a <= 4 {
+			move(a, b)
+		} else if a == 5 {
+			move(0, 0)
+		}
+		eventReply(id, 0)
 	} else {
-		move(1, 800)
-		delayMs(900)
+		eventReply(id, -1)
 	}
 }
-move(0, 0)
-println("pao guest done")

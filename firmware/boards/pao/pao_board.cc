@@ -825,6 +825,16 @@ private:
                 if (!ParseMotionAction(action, parsed)) {
                     return std::unexpected("action 只支持 forward/backward/turn_left/turn_right/stop/emergency_stop");
                 }
+                int guest_action = 0;
+                if (parsed == MotionAction::Forward) guest_action = 1;
+                else if (parsed == MotionAction::Backward) guest_action = 2;
+                else if (parsed == MotionAction::TurnLeft) guest_action = 3;
+                else if (parsed == MotionAction::TurnRight) guest_action = 4;
+                else if (parsed == MotionAction::Stop) guest_action = 5;
+                if (guest_action != 0 &&
+                    pao_guest_command(1, guest_action, duration_ms) >= 0) {
+                    return true;
+                }
                 RunChassis(parsed, duration_ms);
                 return true;
             });

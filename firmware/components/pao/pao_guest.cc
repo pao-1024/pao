@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 #include <pthread.h>
 #include <cstdio>
@@ -18,6 +20,21 @@ extern const uint8_t guest_wasm_start[] asm("_binary_guest_wasm_start");
 extern const uint8_t guest_wasm_end[] asm("_binary_guest_wasm_end");
 
 pao_guest_hooks_t g_hooks;
+
+struct GuestEvent {
+    uint32_t id;
+    int32_t type;
+    int32_t arg0;
+    int32_t arg1;
+};
+
+QueueHandle_t g_events;
+SemaphoreHandle_t g_command_lock;
+SemaphoreHandle_t g_reply_done;
+volatile int32_t g_reply_result;
+volatile uint32_t g_pending_id;
+uint32_t g_next_id = 1;
+GuestEvent g_current;
 
 int32_t HostDistanceCm(wasm_exec_env_t env) {
     (void)env;
@@ -50,6 +67,29 @@ void HostFire(wasm_exec_env_t env) {
     }
 }
 
+int32_t HostEventNext(wasm_exec_env_t env, int32_t timeout_ms) {
+    (void)env;
+    GuestEvent event;
+    const TickType_t ticks = timeout_ms < 0 ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
+    if (g_events == nullptr || xQueueReceive(g_events, &event, ticks) != pdTRUE) {
+        return 0;
+    }
+    g_current = event;
+    return event.type;
+}
+
+int32_t HostEventId(wasm_exec_env_t env) { (void)env; return static_cast<int32_t>(g_current.id); }
+int32_t HostEventArg0(wasm_exec_env_t env) { (void)env; return g_current.arg0; }
+int32_t HostEventArg1(wasm_exec_env_t env) { (void)env; return g_current.arg1; }
+
+void HostEventReply(wasm_exec_env_t env, int32_t id, int32_t result) {
+    (void)env;
+    if (g_reply_done != nullptr && static_cast<uint32_t>(id) == g_pending_id) {
+        g_reply_result = result;
+        xSemaphoreGive(g_reply_done);
+    }
+}
+
 void HostShowDistance(wasm_exec_env_t env, int32_t distance_cm) {
     (void)env;
     if (g_hooks.show_distance != nullptr) {
@@ -64,6 +104,11 @@ NativeSymbol kSymbols[] = {
     {"move", reinterpret_cast<void*>(HostMove), "(ii)", nullptr},
     {"fire", reinterpret_cast<void*>(HostFire), "()", nullptr},
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
+    {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
+    {"event_id", reinterpret_cast<void*>(HostEventId), "()i", nullptr},
+    {"event_arg0", reinterpret_cast<void*>(HostEventArg0), "()i", nullptr},
+    {"event_arg1", reinterpret_cast<void*>(HostEventArg1), "()i", nullptr},
+    {"event_reply", reinterpret_cast<void*>(HostEventReply), "(ii)", nullptr},
 };
 
 void* GuestTask(void*) {
@@ -122,7 +167,34 @@ extern "C" void pao_guest_set_hooks(const pao_guest_hooks_t* hooks) {
     }
 }
 
+extern "C" int pao_guest_command(int type, int arg0, int arg1) {
+    if (g_events == nullptr || g_command_lock == nullptr) {
+        return -1;
+    }
+    if (xSemaphoreTake(g_command_lock, pdMS_TO_TICKS(2000)) != pdTRUE) {
+        return -2;
+    }
+    const uint32_t id = g_next_id++;
+    g_pending_id = id;
+    g_reply_result = -3;
+    xSemaphoreTake(g_reply_done, 0);
+    GuestEvent event = {id, type, arg0, arg1};
+    if (xQueueSend(g_events, &event, pdMS_TO_TICKS(100)) != pdTRUE) {
+        xSemaphoreGive(g_command_lock);
+        return -4;
+    }
+    const bool replied = xSemaphoreTake(g_reply_done, pdMS_TO_TICKS(2000)) == pdTRUE;
+    const int result = replied ? g_reply_result : -5;
+    xSemaphoreGive(g_command_lock);
+    return result;
+}
+
 extern "C" void pao_guest_start(void) {
+    if (g_events == nullptr) {
+        g_events = xQueueCreate(8, sizeof(GuestEvent));
+        g_command_lock = xSemaphoreCreateMutex();
+        g_reply_done = xSemaphoreCreateBinary();
+    }
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, 64 * 1024);

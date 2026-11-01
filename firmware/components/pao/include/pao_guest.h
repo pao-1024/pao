@@ -16,6 +16,10 @@ typedef struct {
 void pao_guest_set_hooks(const pao_guest_hooks_t* hooks);
 void pao_guest_start(void);
 
+// Sends one command to the guest and waits for its reply. Returns the guest
+// result, or a negative value when the guest is unavailable or times out.
+int pao_guest_command(int type, int arg0, int arg1);
+
 #ifdef __cplusplus
 }
 #endif
