@@ -75,6 +75,7 @@
 .outlook-grid span { color: #8c492e; font-size: 16px; }
 .outlook-grid h2 { margin-top: 24px; color: #202838; font-size: 25px; line-height: 1.5; }
 .outlook-grid p { margin-top: 22px; color: #475063; font-size: 18px; line-height: 1.8; }
+.closing-thanks { position: absolute; left: 62px; bottom: 62px; color: var(--violet); font-size: 34px; font-weight: 750; }
 .repo-address { position: absolute; left: 62px; bottom: 34px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
 @media (prefers-reduced-motion: reduce) { .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { animation: none !important; transition: none !important; } }
 
