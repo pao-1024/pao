@@ -1,6 +1,6 @@
 ---
 theme: default
-title: PAO · Agent 时代的硬件开发新流程
+title: PAO · 探索 Agent 时代的硬件开发新范式
 info: 2026 1024 Hackathon · 万物皆代码，评估驱动硬件开发闭环
 class: slide-light slide-cover
 aspectRatio: 16/9
@@ -15,8 +15,8 @@ fonts:
 <div class="eyebrow">PAO / 2026 1024 HACKATHON</div>
 <div class="hero-copy">
   <div class="edition">AI AGENT 时代</div>
-  <h1>构建 Agent 时代的<br><em>硬件开发新流程</em></h1>
-  <p>电路、固件、运行与机械结构皆代码。<br>让 Agent 自动生成、执行、评估，再根据结果修复。</p>
+  <h1>探索 Agent 时代的<br><em>硬件开发新范式</em></h1>
+  <p>用代码定义工程，用评估驱动迭代。<br>让 Agent 贯通设计、编译、仿真与修复。</p>
 </div>
 <div class="hero-art">
   <div class="artifact-label">CODE → EXECUTION → EVALUATION</div>
@@ -28,7 +28,7 @@ fonts:
 <div class="page-number">01 / 11</div>
 
 <!--
-建议 30 秒。开场：我们在构建 Agent 时代的一套新硬件开发流程。把电路、固件、运行环境和机械结构变成代码，把验收标准变成可执行的评估函数，Agent 就能自己生成、运行、检查，再根据失败证据修复。PAO 是验证这套流程的产品，Studio 的平台化方向放在实机展示后介绍。
+建议 30 秒。开场：我们正在探索 Agent 时代的硬件开发新范式。用代码定义工程，用评估驱动迭代，让 Agent 贯通设计、编译、仿真与修复。把电路、固件、运行环境和机械结构变成代码，把验收标准变成可执行的评估函数，Agent 就能自己生成、运行、检查，再根据失败证据修复。PAO 是验证这套流程的产品，Studio 的平台化方向放在实机展示后介绍。
 电子工程与 Blender 机械结构工作分别说明当前范围；PAO 实机验证对应板型与场景。实验源码用于解释已有机制，不将实验工作台表述为成熟交付平台。
 -->
 

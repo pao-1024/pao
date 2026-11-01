@@ -1,6 +1,6 @@
 # PAO 决赛演示稿
 
-这份 [Slidev](https://sli.dev/guide/) 演示稿以 **构建 Agent 时代的硬件开发新流程** 为主题，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十一页，统一使用白底。先总览电路设计、固件编写、固件运行和机械结构，再用 Agent 闭环解释评估函数的作用，随后逐项展开执行方式与评估依据。第 5 页展示由 TSX / tscircuit 生成的 [PAO 模块接线原理图（参考）](../hardware/schematic.svg)，提供全图、局部放大及原图链接，并关联[连通性测试](../hardware/test/connectivity.test.ts)。固件运行页说明透明芯片级仿真；机械结构页涵盖外壳、底盘、支架与装配，说明当前 Blender 研发中的 Agent 建模、几何 / 装配检查和刚体动力学评估。
+这份 [Slidev](https://sli.dev/guide/) 演示稿以 **探索 Agent 时代的硬件开发新范式** 为主题，按[10 分钟答辩大纲](../docs/final-presentation-outline.md)编排为十一页，统一使用白底。先总览电路设计、固件编写、固件运行和机械结构，再用 Agent 闭环解释评估函数的作用，随后逐项展开执行方式与评估依据。第 5 页展示由 TSX / tscircuit 生成的 [PAO 模块接线原理图（参考）](../hardware/schematic.svg)，提供全图、局部放大及原图链接，并关联[连通性测试](../hardware/test/connectivity.test.ts)。固件运行页说明透明芯片级仿真；机械结构页涵盖外壳、底盘、支架与装配，说明当前 Blender 研发中的 Agent 建模、几何 / 装配检查和刚体动力学评估。
 
 电路、固件编写与运行章节分别突出 **tscircuit、ESP-IDF、esp32sim**。第 6 页复用[业务生成与自动构建实际界面](../experimental/platform/agent-preview.jpg)，标注已有实验原型；第 7 页复用 [PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，结合芯片透明性说明和行为验收标准展示运行路径。
 
