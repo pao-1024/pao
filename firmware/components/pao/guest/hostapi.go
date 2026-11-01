@@ -24,6 +24,9 @@ func showState(state int32)
 //go:wasmimport pao device_state
 func deviceState() int32
 
+//go:wasmimport pao uptime_ms
+func uptimeMs() int32
+
 //go:wasmimport pao event_next
 func eventNext(timeoutMs int32) int32
 

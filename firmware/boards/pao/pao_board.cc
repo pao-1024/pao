@@ -450,7 +450,7 @@ private:
         return error;
     }
 
-    ToolResult MoveForward(int distance_cm) {
+    ToolResult MoveForwardLocal(int distance_cm) {
         const auto generation = StopChassis();
         float initial_cm = 0;
         const auto error = distance_mover_.readDistanceCm(initial_cm);
@@ -472,7 +472,7 @@ private:
         return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
     }
 
-    ToolResult MoveToObstacleDistance(int distance_cm) {
+    ToolResult MoveToObstacleDistanceLocal(int distance_cm) {
         const auto generation = StopChassis();
         float initial_cm = 0;
         const auto error = distance_mover_.readDistanceCm(initial_cm);
@@ -496,6 +496,55 @@ private:
         xTaskNotifyGive(distance_task_);
         ESP_LOGI(TAG, "Target distance move started: target=%dcm initial=%.1fcm", distance_cm, initial_cm);
         return std::string("已开始前进到距障碍物目标距离，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+    }
+
+    ToolResult MoveForward(int distance_cm) {
+        const int result = pao_guest_command(2, 0, distance_cm);
+        if (result == 0) {
+            return std::string("已开始按超声波距离反馈前进，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+        }
+        if (result == -1) {
+            return std::unexpected("起始测距失败，未启动电机");
+        }
+        if (result == -2) {
+            return std::unexpected("前方空间不足：目标位置须保留至少 10cm 距离，未启动电机");
+        }
+        if (result < 0) {
+            return MoveForwardLocal(distance_cm);
+        }
+        return std::unexpected("距离运动请求失败");
+    }
+
+    ToolResult MoveToObstacleDistance(int distance_cm) {
+        const int result = pao_guest_command(2, 1, distance_cm);
+        if (result == 0) {
+            return std::string("已开始前进到距障碍物目标距离，尚未完成；可调用 self.ultrasonic.get_distance 查询进度和停止原因");
+        }
+        if (result == -1) {
+            return std::unexpected("起始测距失败，未启动电机");
+        }
+        if (result == -3) {
+            return std::unexpected("前方距离已不大于目标距离，未启动电机");
+        }
+        if (result == -4) {
+            return std::unexpected("目标距离须保留至少 10cm，未启动电机");
+        }
+        if (result < 0) {
+            return MoveToObstacleDistanceLocal(distance_cm);
+        }
+        return std::unexpected("距离运动请求失败");
+    }
+
+    static const char* GuestMotionStatus(int status) {
+        switch (status) {
+            case 1: return "moving";
+            case 2: return "reached";
+            case 3: return "obstacle";
+            case 4: return "sensor_error";
+            case 5: return "timeout";
+            case 6: return "cancelled";
+            default: return "idle";
+        }
     }
 
     void PlayExploreSound(uint32_t generation) {
@@ -939,11 +988,20 @@ private:
             cJSON_AddNullToObject(result, "distance_cm");
             cJSON_AddStringToObject(result, "error", esp_err_to_name(error));
         }
+        const int guest_status = pao_guest_command(4, 0, 0);
+        const int guest_moved = pao_guest_command(5, 0, 0);
+        const int guest_target = pao_guest_command(6, 0, 0);
         std::lock_guard<std::mutex> lock(chassis_mutex_);
         const auto state = distance_mover_.status();
-        cJSON_AddStringToObject(result, "motion_status", state.motion_status);
-        cJSON_AddNumberToObject(result, "requested_cm", state.requested_cm);
-        cJSON_AddNumberToObject(result, "moved_cm", state.moved_cm);
+        if (guest_status > 0) {
+            cJSON_AddStringToObject(result, "motion_status", GuestMotionStatus(guest_status));
+            cJSON_AddNumberToObject(result, "requested_cm", guest_target);
+            cJSON_AddNumberToObject(result, "moved_cm", guest_moved);
+        } else {
+            cJSON_AddStringToObject(result, "motion_status", state.motion_status);
+            cJSON_AddNumberToObject(result, "requested_cm", state.requested_cm);
+            cJSON_AddNumberToObject(result, "moved_cm", state.moved_cm);
+        }
         return result;
     }
 

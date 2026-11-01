@@ -4,6 +4,7 @@
 
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -97,6 +98,11 @@ void HostShowState(wasm_exec_env_t env, int32_t state) {
     }
 }
 
+int32_t HostUptimeMs(wasm_exec_env_t env) {
+    (void)env;
+    return static_cast<int32_t>(esp_timer_get_time() / 1000);
+}
+
 int32_t HostDeviceState(wasm_exec_env_t env) {
     (void)env;
     return g_hooks.device_state != nullptr ? g_hooks.device_state() : -1;
@@ -118,6 +124,7 @@ NativeSymbol kSymbols[] = {
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
     {"show_state", reinterpret_cast<void*>(HostShowState), "(i)", nullptr},
     {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
+    {"uptime_ms", reinterpret_cast<void*>(HostUptimeMs), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
     {"event_id", reinterpret_cast<void*>(HostEventId), "()i", nullptr},
     {"event_arg0", reinterpret_cast<void*>(HostEventArg0), "()i", nullptr},

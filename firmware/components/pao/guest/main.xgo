@@ -1,8 +1,66 @@
 println("pao guest event loop")
 
+var moving bool = false
+var moveMode int32 = 0
+var moveTarget int32 = 0
+var moveStart int32 = 0
+var moveMoved int32 = 0
+var moveStatus int32 = 0
+var moveStartMs int32 = 0
 var lastState int32 = -1
+var event int32 = 0
+
 for {
-	event := eventNext(500)
+	var timeout int32 = 500
+	if moving {
+		timeout = 100
+	}
+	event = eventNext(timeout)
+
+	if moving {
+		now := uptimeMs()
+		d := distanceCm()
+		if d < 0 {
+			move(0, 0)
+			moving = false
+			moveStatus = 4
+		} else if moveMode == 0 {
+			moveMoved = moveStart - d
+			if moveMoved >= moveTarget {
+				move(0, 0)
+				moving = false
+				moveStatus = 2
+			} else if d <= 10 {
+				move(0, 0)
+				moving = false
+				moveStatus = 3
+			} else if now-moveStartMs > 15000 {
+				move(0, 0)
+				moving = false
+				moveStatus = 5
+			} else {
+				move(1, 300)
+			}
+		} else {
+			moveMoved = moveTarget - d
+			if d <= moveTarget {
+				move(0, 0)
+				moving = false
+				moveStatus = 2
+			} else if d <= 10 {
+				move(0, 0)
+				moving = false
+				moveStatus = 3
+			} else if now-moveStartMs > 15000 {
+				move(0, 0)
+				moving = false
+				moveStatus = 5
+			} else {
+				move(1, 300)
+			}
+		}
+	}
+
 	if event == 0 {
 		d := distanceCm()
 		showDistance(d)
@@ -19,15 +77,68 @@ for {
 	b := eventArg1()
 
 	if event == 1 {
+		moving = false
 		if a >= 1 && a <= 4 {
+			moveStatus = 0
 			move(a, b)
 		} else if a == 5 {
+			moveStatus = 0
 			move(0, 0)
 		}
 		eventReply(id, 0)
 	} else if event == 2 {
-		fire()
+		if moving {
+			move(0, 0)
+			moving = false
+		}
+		d := distanceCm()
+		if d < 0 {
+			moveStatus = 4
+			eventReply(id, -1)
+		} else if a == 0 {
+			if d-b < 10 {
+				moveStatus = 0
+				eventReply(id, -2)
+			} else {
+				moveMode = 0
+				moveStart = d
+				moveTarget = b
+				moveMoved = 0
+				moveStartMs = uptimeMs()
+				moveStatus = 1
+				moving = true
+				move(1, 300)
+				eventReply(id, 0)
+			}
+		} else {
+			if b < 10 {
+				moveStatus = 0
+				eventReply(id, -4)
+			} else if d <= b {
+				moveStatus = 0
+				eventReply(id, -3)
+			} else {
+				moveMode = 1
+				moveTarget = b
+				moveMoved = b - d
+				moveStartMs = uptimeMs()
+				moveStatus = 1
+				moving = true
+				move(1, 300)
+				eventReply(id, 0)
+			}
+		}
+	} else if event == 3 {
+		moving = false
+		move(0, 0)
+		moveStatus = 6
 		eventReply(id, 0)
+	} else if event == 4 {
+		eventReply(id, moveStatus)
+	} else if event == 5 {
+		eventReply(id, moveMoved)
+	} else if event == 6 {
+		eventReply(id, moveTarget)
 	} else {
 		eventReply(id, -1)
 	}
