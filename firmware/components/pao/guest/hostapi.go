@@ -18,6 +18,12 @@ func fire()
 //go:wasmimport pao show_distance
 func showDistance(distanceCm int32)
 
+//go:wasmimport pao show_state
+func showState(state int32)
+
+//go:wasmimport pao device_state
+func deviceState() int32
+
 //go:wasmimport pao event_next
 func eventNext(timeoutMs int32) int32
 

@@ -1,10 +1,16 @@
 println("pao guest event loop")
 
+var lastState int32 = -1
 for {
 	event := eventNext(500)
 	if event == 0 {
 		d := distanceCm()
 		showDistance(d)
+		state := deviceState()
+		if state != lastState {
+			showState(state)
+			lastState = state
+		}
 		continue
 	}
 
@@ -18,6 +24,9 @@ for {
 		} else if a == 5 {
 			move(0, 0)
 		}
+		eventReply(id, 0)
+	} else if event == 2 {
+		fire()
 		eventReply(id, 0)
 	} else {
 		eventReply(id, -1)

@@ -187,8 +187,34 @@ private:
 
     static void GuestFire() {
         if (guest_board_ != nullptr) {
-            guest_board_->launcher_.fire();
+            guest_board_->FireLauncher();
         }
+    }
+
+    static int GuestDeviceState() {
+        return static_cast<int>(Application::GetInstance().GetDeviceState());
+    }
+
+    static void GuestShowState(int state) {
+        if (guest_board_ == nullptr || guest_board_->display_ == nullptr) {
+            return;
+        }
+        const char* name = "state";
+        switch (static_cast<DeviceState>(state)) {
+            case kDeviceStateUnknown: name = "unknown"; break;
+            case kDeviceStateStarting: name = "starting"; break;
+            case kDeviceStateWifiConfiguring: name = "wifi config"; break;
+            case kDeviceStateIdle: name = "idle"; break;
+            case kDeviceStateConnecting: name = "connecting"; break;
+            case kDeviceStateListening: name = "listening"; break;
+            case kDeviceStateSpeaking: name = "speaking"; break;
+            case kDeviceStateNotifying: name = "notifying"; break;
+            case kDeviceStateUpgrading: name = "upgrading"; break;
+            case kDeviceStateActivating: name = "activating"; break;
+            case kDeviceStateAudioTesting: name = "audio test"; break;
+            case kDeviceStateFatalError: name = "fatal"; break;
+        }
+        guest_board_->display_->SetChatMessage("guest", name);
     }
 
     static void GuestShowDistance(int distance_cm) {
@@ -206,6 +232,8 @@ private:
         hooks.move = &PaoBoard::GuestMove;
         hooks.fire = &PaoBoard::GuestFire;
         hooks.show_distance = &PaoBoard::GuestShowDistance;
+        hooks.show_state = &PaoBoard::GuestShowState;
+        hooks.device_state = &PaoBoard::GuestDeviceState;
         pao_guest_set_hooks(&hooks);
         pao_guest_start();
     }
@@ -1109,7 +1137,9 @@ private:
             "返回：true 表示已发射。",
             PropertyList(),
             [this](const PropertyList&) -> ReturnValue {
-                FireLauncher();
+                if (pao_guest_command(2, 0, 0) < 0) {
+                    FireLauncher();
+                }
                 return true;
             });
     }

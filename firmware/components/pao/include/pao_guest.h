@@ -11,6 +11,8 @@ typedef struct {
     void (*move)(int action, int duration_ms);
     void (*fire)(void);
     void (*show_distance)(int distance_cm);
+    void (*show_state)(int state);
+    int (*device_state)(void);
 } pao_guest_hooks_t;
 
 void pao_guest_set_hooks(const pao_guest_hooks_t* hooks);

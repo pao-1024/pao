@@ -90,6 +90,18 @@ void HostEventReply(wasm_exec_env_t env, int32_t id, int32_t result) {
     }
 }
 
+void HostShowState(wasm_exec_env_t env, int32_t state) {
+    (void)env;
+    if (g_hooks.show_state != nullptr) {
+        g_hooks.show_state(state);
+    }
+}
+
+int32_t HostDeviceState(wasm_exec_env_t env) {
+    (void)env;
+    return g_hooks.device_state != nullptr ? g_hooks.device_state() : -1;
+}
+
 void HostShowDistance(wasm_exec_env_t env, int32_t distance_cm) {
     (void)env;
     if (g_hooks.show_distance != nullptr) {
@@ -104,6 +116,8 @@ NativeSymbol kSymbols[] = {
     {"move", reinterpret_cast<void*>(HostMove), "(ii)", nullptr},
     {"fire", reinterpret_cast<void*>(HostFire), "()", nullptr},
     {"show_distance", reinterpret_cast<void*>(HostShowDistance), "(i)", nullptr},
+    {"show_state", reinterpret_cast<void*>(HostShowState), "(i)", nullptr},
+    {"device_state", reinterpret_cast<void*>(HostDeviceState), "()i", nullptr},
     {"event_next", reinterpret_cast<void*>(HostEventNext), "(i)i", nullptr},
     {"event_id", reinterpret_cast<void*>(HostEventId), "()i", nullptr},
     {"event_arg0", reinterpret_cast<void*>(HostEventArg0), "()i", nullptr},
