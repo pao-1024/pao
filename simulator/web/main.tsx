@@ -197,12 +197,15 @@ function App() {
         } else if (message.t === "microphone-error") {
           // The simulator bounds its own backlog; this reports a full queue or a missing I2S port.
           setHint(`麦克风数据未送达设备：${message.message}`);
+        } else if (message.t === "board-input-error") {
+          setHint(`模拟回波距离设置失败：${message.message}`);
         }
       };
       connection.onclose = async () => {
         if (disposed) return;
         // The microphone and speaker stay open; audio resumes on the next connection.
         setConnected(false);
+        setWorld(null);
         const busy = await deviceBusy();
         if (disposed) return;
         if (busy) {
@@ -289,6 +292,13 @@ function App() {
     }, 100);
   }
 
+  function setEchoDistance(distance: number | null) {
+    const connection = socket.current;
+    if (connection?.readyState === WebSocket.OPEN) {
+      connection.send(JSON.stringify({ t: "board-input", distance_cm: distance }));
+    }
+  }
+
   const high = (pin: number) => bit(pins.levels, pin);
   const known = (pin: number) => bit(pins.known, pin);
   const { left, right } = wheels(pins.pwm, high);
@@ -345,7 +355,7 @@ function App() {
             <span className="led-row"><span className={`led ${led === "rgb(0,0,0)" ? "" : "lit"}`} style={{ "--led": led } as CSSProperties} aria-label={led === "rgb(0,0,0)" ? "状态灯 灭" : "状态灯 亮"} /> GPIO48</span>
           </div>
         </div>
-        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} world={world} />
+        <Car3D left={left} right={right} charging={charging} firing={firing} energy={launcher.energy} shots={launcher.shots} world={world} connected={connected} onDistanceChange={setEchoDistance} />
         <dl className="facts">
           <dt>底盘</dt><dd>{motion(left, right)} · 左 {percent(left)} · 右 {percent(right)}</dd>
           <dt>固件指令</dt><dd>{command ? `${command.action} · ${command.duration} ms` : "无进行中的运动"}</dd>

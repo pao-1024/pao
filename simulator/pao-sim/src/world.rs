@@ -9,6 +9,7 @@ const TRACK_CM: f64 = 15.6;
 #[derive(Default)]
 pub struct World {
     pub x: f64, pub z: f64, pub heading: f64,
+    pub distance_override_cm: Option<f64>,
     seconds: f64,
 }
 impl World {
@@ -28,6 +29,7 @@ impl World {
         }
     }
     pub fn distance_cm(&self) -> f64 {
+        if let Some(distance) = self.distance_override_cm { return distance; }
         let (dx, dz) = (self.heading.sin(), self.heading.cos());
         let (x, z) = (self.x + dx * SENSOR_FRONT_CM, self.z + dz * SENSOR_FRONT_CM);
         let hit = |origin: f64, direction: f64, half: f64| {

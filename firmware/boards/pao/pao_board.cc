@@ -46,8 +46,12 @@ using pao::SequenceAction;
 constexpr char kMotionNamespace[] = "pao_motion";
 constexpr char kMotionKey[] = "config";
 constexpr uint32_t kMotionConfigVersion = 5;
-constexpr float kObstacleAlarmDistanceCm = 10.0f;
-constexpr float kObstacleAlarmClearDistanceCm = 12.0f;
+constexpr char kAlarmNamespace[] = "pao_alarm";
+constexpr char kAlarmDistanceKey[] = "distance_cm";
+constexpr int kDefaultAlarmDistanceCm = 10;
+constexpr int kMinAlarmDistanceCm = 2;
+constexpr int kMaxAlarmDistanceCm = 100;
+constexpr float kAlarmClearMarginCm = 2.0f;
 constexpr int64_t kObstacleAlarmIntervalUs = 1500000;
 
 struct StoredMotionConfig {
@@ -75,7 +79,7 @@ private:
     Chassis chassis_{left_motor_, right_motor_};
     esp_timer_handle_t chassis_timer_ = nullptr;
     std::mutex chassis_mutex_;
-    std::mutex motion_config_mutex_;
+    std::mutex config_mutex_;
     int64_t chassis_deadline_ = 0;
     Launcher launcher_{LAUNCHER_GPIO_FIRE};
     HcSr04 ultrasonic_{ULTRASONIC_GPIO_TRIG, ULTRASONIC_GPIO_ECHO};
@@ -88,6 +92,7 @@ private:
     bool sequence_active_ = false;
     TaskHandle_t sequence_task_ = nullptr;
     std::atomic<bool> alarm_scheduled_{false};
+    std::atomic<int> alarm_distance_cm_{kDefaultAlarmDistanceCm};
     bool obstacle_alarm_active_ = false;
     int64_t next_obstacle_alarm_us_ = 0;
     esp_timer_handle_t standby_timer_ = nullptr;
@@ -202,7 +207,7 @@ private:
         if (!Chassis::validConfig(config)) {
             return ESP_ERR_INVALID_ARG;
         }
-        std::lock_guard<std::mutex> lock(motion_config_mutex_);
+        std::lock_guard<std::mutex> lock(config_mutex_);
         const auto current = chassis_.config();
         if (current.ramp_time_ms == config.ramp_time_ms &&
             current.left_scale == config.left_scale && current.right_scale == config.right_scale &&
@@ -224,6 +229,40 @@ private:
         if (error == ESP_OK) {
             chassis_.setConfig(config);
         }
+        return error;
+    }
+
+    void LoadAlarmConfig() {
+        nvs_handle_t handle;
+        const auto opened = nvs_open(kAlarmNamespace, NVS_READONLY, &handle);
+        if (opened == ESP_ERR_NVS_NOT_FOUND) { return; }
+        if (opened != ESP_OK) {
+            ESP_LOGW(TAG, "Cannot open alarm config: %s", esp_err_to_name(opened));
+            return;
+        }
+        uint16_t distance_cm = 0;
+        const auto error = nvs_get_u16(handle, kAlarmDistanceKey, &distance_cm);
+        if (error == ESP_OK && distance_cm >= kMinAlarmDistanceCm && distance_cm <= kMaxAlarmDistanceCm) {
+            alarm_distance_cm_ = distance_cm;
+        } else if (error != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGW(TAG, "Invalid alarm distance; using default");
+        }
+        nvs_close(handle);
+    }
+
+    esp_err_t SaveAlarmConfig(int distance_cm) {
+        if (distance_cm < kMinAlarmDistanceCm || distance_cm > kMaxAlarmDistanceCm) {
+            return ESP_ERR_INVALID_ARG;
+        }
+        std::lock_guard<std::mutex> lock(config_mutex_);
+        if (alarm_distance_cm_.load() == distance_cm) { return ESP_OK; }
+        nvs_handle_t handle;
+        auto error = nvs_open(kAlarmNamespace, NVS_READWRITE, &handle);
+        if (error != ESP_OK) { return error; }
+        error = nvs_set_u16(handle, kAlarmDistanceKey, static_cast<uint16_t>(distance_cm));
+        if (error == ESP_OK) { error = nvs_commit(handle); }
+        nvs_close(handle);
+        if (error == ESP_OK) { alarm_distance_cm_ = distance_cm; }
         return error;
     }
 
@@ -293,14 +332,15 @@ private:
     }
 
     void UpdateObstacleAlarm(esp_err_t error, float distance_cm) {
-        if (error != ESP_OK || (obstacle_alarm_active_ && distance_cm > kObstacleAlarmClearDistanceCm)) {
+        const float alarm_distance_cm = static_cast<float>(alarm_distance_cm_.load());
+        if (error != ESP_OK || (obstacle_alarm_active_ && distance_cm > alarm_distance_cm + kAlarmClearMarginCm)) {
             if (obstacle_alarm_active_) {
                 ESP_LOGI(TAG, "Obstacle alarm cleared");
             }
             obstacle_alarm_active_ = false;
             return;
         }
-        if (!obstacle_alarm_active_ && distance_cm > kObstacleAlarmDistanceCm) {
+        if (!obstacle_alarm_active_ && distance_cm > alarm_distance_cm) {
             return;
         }
         const int64_t now = esp_timer_get_time();
@@ -364,6 +404,7 @@ private:
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer, &chassis_timer_));
         LoadMotionConfig();
+        LoadAlarmConfig();
         if (xTaskCreate([](void* arg) {
                 static_cast<PaoBoard*>(arg)->RunDistanceControl();
             }, "distance_mon", 4096, this, 5, &distance_task_) != pdPASS) {
@@ -790,6 +831,15 @@ private:
                 ESP_LOGE(TAG, "Motion config save failed: %s", esp_err_to_name(saved));
                 return "运动配置保存失败，请重试";
             }
+        } else if (path == "/api/alarm-config") {
+            if (!QueryInt(query, "distance_cm", -1, kMinAlarmDistanceCm, kMaxAlarmDistanceCm, distance_cm)) {
+                return "distance_cm 取 2..100";
+            }
+            const auto saved = SaveAlarmConfig(distance_cm);
+            if (saved != ESP_OK) {
+                ESP_LOGE(TAG, "Alarm config save failed: %s", esp_err_to_name(saved));
+                return "警报距离保存失败，请重试";
+            }
         } else if (path == "/api/move_forward") {
             if (!QueryInt(query, "distance_cm", 20, 1, 390, distance_cm)) {
                 return "distance_cm 取 1..390";
@@ -811,7 +861,7 @@ private:
     }
 
     cJSON* ReadMotionConfig() {
-        std::lock_guard<std::mutex> lock(motion_config_mutex_);
+        std::lock_guard<std::mutex> lock(config_mutex_);
         const auto config = chassis_.config();
         auto* result = cJSON_CreateObject();
         cJSON_AddNumberToObject(result, "ramp_time_ms", config.ramp_time_ms);
@@ -820,6 +870,12 @@ private:
         cJSON_AddNumberToObject(result, "move_output", std::lround(config.move_output * 100));
         cJSON_AddNumberToObject(result, "rotate_output", std::lround(config.rotate_output * 100));
         cJSON_AddNumberToObject(result, "min_output", std::lround(config.min_output * 100));
+        return result;
+    }
+
+    cJSON* ReadAlarmConfig() {
+        auto* result = cJSON_CreateObject();
+        cJSON_AddNumberToObject(result, "distance_cm", alarm_distance_cm_.load());
         return result;
     }
 
@@ -855,6 +911,8 @@ private:
         std::string error;
         if (std::strcmp(path->valuestring, "/api/motion-config") == 0 && query->valuestring[0] == '\0') {
             cJSON_AddItemToObject(response.get(), "data", board->ReadMotionConfig());
+        } else if (std::strcmp(path->valuestring, "/api/alarm-config") == 0 && query->valuestring[0] == '\0') {
+            cJSON_AddItemToObject(response.get(), "data", board->ReadAlarmConfig());
         } else if (std::strcmp(path->valuestring, "/api/distance") == 0) {
             cJSON_AddItemToObject(response.get(), "data", board->ReadDistance());
         } else {
