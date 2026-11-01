@@ -29,10 +29,11 @@
 .slidev-layout a:hover { text-decoration: underline; }
 .slidev-layout a:focus-visible { outline: 3px solid #db997b; outline-offset: 5px; }
 .slidev-layout code { padding: 0 !important; font-family: "DejaVu Sans Mono", monospace; background: transparent !important; }
-.hero-copy { position: relative; z-index: 2; margin-top: 74px; }
+.hero-copy { position: relative; z-index: 2; width: 680px; margin-top: 74px; }
 .edition { margin-bottom: 20px; color: #8c492e; font-size: 22px; font-weight: 650; letter-spacing: 0.12em; }
-.hero-copy h1 { font-size: 67px; line-height: 1.22; }
-.hero-copy p { margin-top: 35px; color: #475063; font-size: 21px; line-height: 1.8; }
+/* 覆盖主题的封面标题与 h1 + p 规则，保留显式段落间距。 */
+.slidev-layout .hero-copy h1 { font-size: 67px; line-height: 1.22; }
+.slidev-layout .hero-copy p { margin: 32px 0 0; color: #475063; font-size: 21px; line-height: 1.8; }
 .hero-art { position: absolute; top: 135px; right: 70px; width: 420px; padding: 22px; border: 1px solid #dce0e9; border-radius: 12px; background: #fff; }
 .artifact-label { margin-bottom: 22px; color: #5146b6; font: 12px "DejaVu Sans Mono", monospace; letter-spacing: 0.03em; }
 .hero-source { display: grid; gap: 10px; margin-bottom: 25px; color: #202838; font: 25px "DejaVu Sans Mono", monospace; }
@@ -60,7 +61,7 @@
 .slide-studio h1 { font-size: 49px; }
 .requirement { display: flex; align-items: center; gap: 20px; margin-top: 26px; padding: 18px 22px; border-radius: 8px; background: #f5f6fa; }
 .requirement span { flex-shrink: 0; color: var(--violet); font-size: 16px; font-weight: 700; }
-.requirement p { font-size: 24px; }
+.requirement p { font-size: 24px; line-height: 1.5; }
 .studio-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 19px; margin-top: 28px; }
 .studio-gallery figure { margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; }
 .studio-gallery img { display: block; width: 100%; height: 203px; object-fit: cover; object-position: top left; }
@@ -72,30 +73,25 @@
 .product-photo { position: absolute; top: 138px; right: 62px; width: 510px; height: 455px; overflow: hidden; border-radius: 8px; }
 .product-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 50%; }
 .slide-product h1 { margin-top: 58px; font-size: 61px; }
-.product-lead { position: relative; z-index: 2; margin-top: 26px !important; color: #475063; font-size: 24px; line-height: 1.7; }
+.slidev-layout .product-lead { position: relative; z-index: 2; margin: 26px 0 0; color: #475063; font-size: 24px; line-height: 1.6; }
 .product-points { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(2, 240px); gap: 19px; margin-top: 31px; color: #5146b6; font-size: 21px; }
 .product-link { position: relative; display: inline-block; margin-top: 31px; color: #8c492e !important; font-size: 18px; }
 .slide-product .bottom-note { max-width: 540px; }
 
 .slide-close h1 { font-size: 57px; }
-.outlook-current { margin-top: 22px !important; color: #626a7a; font-size: 20px; }
+.slidev-layout .outlook-current { margin: 24px 0 0; color: #626a7a; font-size: 20px; line-height: 1.6; }
 .outlook-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 28px; }
 .outlook-grid > div { padding: 24px 20px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .outlook-grid span { color: #8c492e; font-size: 16px; }
 .outlook-grid h2 { margin-top: 18px; color: #202838; font-size: 25px; line-height: 1.5; }
 .outlook-grid p { margin-top: 18px; color: #475063; font-size: 18px; line-height: 1.8; }
-.closing-statement { margin-top: 27px !important; color: #5146b6; font-size: 21px; line-height: 1.7; }
+.slidev-layout .closing-statement { margin: 24px 0 0; color: #5146b6; font-size: 21px; line-height: 1.6; }
 .team { position: absolute; bottom: 33px; left: 62px; color: #626a7a; font-size: 14px; line-height: 1.7; }
 .repo-address { position: absolute; right: 62px; bottom: 83px; color: #5146b6; font: 16px "DejaVu Sans Mono", monospace; }
 @media (prefers-reduced-motion: reduce) { .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { animation: none !important; transition: none !important; } }
 
 .detail-body { display: grid; grid-template-columns: 0.95fr 1.15fr; gap: 34px; align-items: stretch; margin-top: 28px; }
 .detail-label { display: block; margin-bottom: 15px; color: var(--violet); font-size: 17px; font-weight: 700; }
-.detail-creation { padding: 23px; border: 1px solid var(--line); border-radius: 8px; background: #f5f6fa; }
-.detail-creation h2 { font-size: 25px; line-height: 1.4; }
-.detail-creation p { margin-top: 17px; color: #475063; font-size: 19px; line-height: 1.65; }
-.detail-files { display: grid; gap: 8px; margin-top: 20px; }
-.detail-files code { color: #626a7a; font-size: 16px; line-height: 1.5; }
 .detail-checks { padding-top: 5px; }
 .detail-checks > div { display: grid; grid-template-columns: 150px 1fr; gap: 16px; align-items: center; min-height: 85px; border-bottom: 1px solid var(--line); }
 .detail-checks b { color: #202838; font-size: 21px; font-weight: 650; }
@@ -103,16 +99,16 @@
 .runtime-detail-body { display: grid; grid-template-columns: 560px 1fr; gap: 35px; margin-top: 25px; }
 .runtime-model { margin: 0; text-align: center; }
 .runtime-model .runtime-screen { display: block; margin: 0; }
-.runtime-model img { display: block; width: 100%; height: 330px; object-fit: cover; object-position: top; border-radius: 6px; }
+.runtime-model img { display: block; width: 100%; height: 320px; object-fit: cover; object-position: top; border-radius: 6px; }
 .runtime-model figcaption { margin-top: 13px; }
 .runtime-model b { color: var(--violet); font-size: 18px; }
 .runtime-model p { margin-top: 8px; color: #475063; font-size: 19px; line-height: 1.5; }
 .runtime-model a { display: inline-block; margin-top: 9px; color: #8c492e; font-size: 16px; }
 .runtime-checks { padding-top: 6px; }
-.runtime-checks > div { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.runtime-checks > div { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .runtime-checks b { color: #202838; font-size: 22px; font-weight: 650; }
 .runtime-checks p { margin-top: 8px; color: #475063; font-size: 18px; line-height: 1.6; }
-.runtime-checks .runtime-example { margin-top: 16px; padding: 17px 20px; border: 0; border-radius: 8px; background: #f5f6fa; }
+.runtime-checks .runtime-example { margin-top: 15px; padding: 16px 20px; border: 0; border-radius: 8px; background: #f5f6fa; }
 .runtime-example b { color: #8c492e; font-size: 18px; }
 .mechanical-graphic { display: flex; align-items: center; height: 210px; margin-top: 10px; }
 .mechanical-graphic img { width: 100%; max-height: 100%; }
@@ -135,11 +131,14 @@
 .schematic-assert { margin-top: 17px; padding: 15px 18px; border-radius: 8px; background: #f5f6fa; }
 .schematic-assert span { display: block; margin-bottom: 8px; color: #626a7a; font-size: 13px; }
 .schematic-assert code { color: #8c492e; font-size: 17px; line-height: 1.55; }
-.firmware-evidence { margin: 0; }
-.firmware-evidence a { display: block; }
-.firmware-evidence img { display: block; width: 100%; height: 225px; object-fit: cover; object-position: top; border: 1px solid var(--line); border-radius: 6px; }
-.firmware-evidence figcaption { display: grid; gap: 7px; margin-top: 10px; }
-.firmware-evidence b { color: var(--violet); font-size: 20px; }
-.firmware-evidence span { color: #626a7a; font-size: 14px; }
-.firmware-evidence code { color: #626a7a; font-size: 14px; }
-.schematic-overview a, .firmware-evidence a, .runtime-model .runtime-screen { border: 0; }
+.engineering-evidence { margin: 0; }
+.engineering-evidence a { display: block; }
+.engineering-evidence img { display: block; width: 100%; height: 215px; object-fit: cover; object-position: top; border: 1px solid var(--line); border-radius: 6px; }
+.engineering-evidence figcaption { display: grid; gap: 7px; margin-top: 10px; }
+.engineering-evidence b { color: var(--violet); font-size: 20px; }
+.engineering-evidence span { color: #626a7a; font-size: 14px; }
+.engineering-evidence code { color: #626a7a; font-size: 14px; }
+.schematic-overview a, .engineering-evidence a, .runtime-model .runtime-screen { border: 0; }
+
+.engineering-evidence .circuit-preview { display: block; width: 100%; height: 200px; }
+.engineering-evidence p { margin: 7px 0 0; color: #475063; font-size: 18px; line-height: 1.65; }

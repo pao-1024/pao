@@ -6,20 +6,20 @@
 
 观众应记住三件事：电路设计、固件编写、固件运行与机械结构都进入 Agent 驱动的开发流程；每个环节都要有对应评估，才能确定下一步修改；代码、工具执行和反馈共同缩短开发迭代。电子工程部分展示现有代码与透明芯片级仿真，机械部分展示当前在 Blender 中开展的 Agent 建模与刚体动力学评估研发。PAO 实机演示之后，再展望 PAO Studio 平台化与全流程 Skill。
 
-讲述顺序是先总览“万物皆代码”的四个部分，再解释评估函数为什么决定自动闭环能否成立，随后分别展开电路设计、固件编写、固件运行和机械结构。各页都回答同一组问题：Agent 操作什么、执行后得到什么、如何评估；明确已有实验实现与当前研发的状态。
+讲述顺序是先用“万物皆代码，驱动全流程 Agent 自动化”总览四个部分：各环节可由 Agent 操作、由工具执行，并用评估反馈驱动修复。再解释评估函数的作用，分别展开电路设计、固件编写、固件运行和机械结构，明确已有实验实现与当前研发状态，不把全流程方向表述成完整整机已全自动验收。
 
 ## 逐页安排
 
 | 页码与时间 | 页面标题 | 讲述重点 | 画面与素材 |
 | --- | --- | --- | --- |
 | 1 · 0:00–0:30 | 探索 Agent 时代的硬件开发新范式 | 开场给出项目定位：把电路、固件、运行环境和机械结构纳入 Agent 可操作的工程，以评估驱动生成、执行与修复，用 PAO 验证这条路径。 | 主视觉呈现“电路设计 / 固件编写 / 固件运行 / 机械结构”。 |
-| 2 · 0:30–1:05 | 万物皆代码，开发才可自动化 | 总览四部分：tscircuit / TSX 电路、ESP-IDF / C++ 固件、esp32sim 芯片仿真，以及正在 Blender 中研发的 Agent 机械建模与刚体仿真。每部分都有执行工具与对应评估。 | 四部分总览，突出 tscircuit、ESP-IDF 与 esp32sim；机械明确标注“当前研发”。 |
+| 2 · 0:30–1:05 | 万物皆代码，驱动全流程 Agent 自动化。 | 总览各环节如何被 Agent 操作：tscircuit / TSX 电路、ESP-IDF / C++ 固件、esp32sim 芯片仿真，以及当前 Blender 机械研发。工具负责执行，评估结果驱动后续修复。 | 四部分总览，突出各环节的 Agent 操作、执行工具与评估；机械标注“当前研发”。 |
 | 3 · 1:05–2:00 | 评估函数，决定 Agent 能否自己完成闭环 | 以“生成 → 工具执行 → 评估 → 修复”解释明确目标、定位偏差和固定标准复验。工具结果决定是否通过，错误回传 Agent；现有电子工程实验最多运行三轮，首份有效验收步骤固定。 | Mermaid 闭环图配合三项作用，用一条实际错误说明下一步如何确定。 |
-| 4 · 2:00–2:35 | 电路设计：接得对，也要测得出 | tscircuit 从 TSX 描述生成原理图与电路网络，模块载板由本地实验工具生成。PAO 参考电路用 `assertNetwork` 比对完整网络成员；实验代码检查跨网短接、电气约束与制造 DRC，缺线、错误连接或铜几何不合规都应给出错误。 | 突出 tscircuit，展示代码与评估。证据：`hardware/test/connectivity.test.ts`、`experimental/platform/src/electrical.ts`、`experimental/platform/src/manufacturing.ts`。 |
-| 5 · 2:35–3:05 | 从代码，生成真实图纸。 | 展示仓库由 tscircuit 实际生成的 PAO 模块接线原理图，将器件、引脚与网络对应到前页的 TSX 代码和连通性测试。图纸用于说明工程产物，不作为 PCB 或实物验收证明。 | [原始 SVG](../hardware/schematic.svg)全图与局部放大，原图可点击；图注标明“tscircuit · PAO 模块接线原理图（参考）”，关联[连通性测试](../hardware/test/connectivity.test.ts)。 |
-| 6 · 3:05–4:05 | 固件编写：让生成代码成为可构建的工程 | 按接线生成 `main/wiring.h` 与 `board.json`，将 Agent 业务写入 `main/agent-app.h`，配合已有 `main/main.cpp` 与驱动组成 ESP-IDF 工程。`validateAgent` 检查代码和验收结构，`validateAgentHardware` 核对已接外设，再用 ESP-IDF 编译、链接验证工程。 | 左侧复用[业务生成与自动构建实际界面](../experimental/platform/agent-preview.jpg)，标注“已有实验原型”；右侧对应结构校验、硬件匹配与编译链接。证据：`experimental/platform/src/agent-spec.ts`、`experimental/platform/runtime.ts`。 |
-| 7 · 4:05–5:20 | 固件运行：把真实输出变成验收证据 | esp32sim 从 ROM 启动正式固件，在芯片与外设层执行 CPU 指令、寄存器和总线行为，对固件透明。无实物先运行主要链路，再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧复用[PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，突出 esp32sim 与芯片透明性；右侧对应输出与验收断言，保留[模拟器演示](../simulator/README.md#页面)入口。 |
-| 8 · 5:20–6:20 | 机械结构：Agent 驱动建模，以刚体仿真评估 | 外壳、底盘、支架及其装配都属于机械结构。介绍 Blender 中当前开展的 Agent 建模与仿真研发：几何与装配检查回答尺寸、接口和干涉问题，刚体动力学评估回答运动、碰撞与姿态稳定性问题；具体场景与阈值按工程定义。 | 以流程示意表达 Agent 建模、几何 / 装配检查与 Blender 刚体仿真评估，标注“当前研发”；实际运行结论配对应素材。 |
+| 4 · 2:00–2:35 | 电路设计，每条连接都可验证。 | tscircuit 从 TSX 描述生成原理图与电路网络，模块载板由本地实验工具生成。PAO 参考电路用 `assertNetwork` 比对完整网络成员；实验代码检查跨网短接、电气约束与制造 DRC，缺线、错误连接或铜几何不合规都应给出错误。 | 左侧放大[原始原理图](../hardware/schematic.svg)的 OLED 区域并说明代码生成，右侧对应连接评估。证据：`hardware/test/connectivity.test.ts`、`experimental/platform/src/electrical.ts`、`experimental/platform/src/manufacturing.ts`。 |
+| 5 · 2:35–3:05 | 电路图纸，由 tscircuit 生成。 | 展示仓库由 tscircuit 实际生成的 PAO 模块接线原理图，将器件、引脚与网络对应到 TSX 代码和真实连通性断言。图纸用于说明工程产物，不作为 PCB 或实物验收证明。 | [原始 SVG](../hardware/schematic.svg)全图、OLED 局部放大与[连通性测试](../hardware/test/connectivity.test.ts)中的真实断言，原图可点击；图注标明“tscircuit · PAO 模块接线原理图（参考）”。 |
+| 6 · 3:05–4:05 | 固件编写，把业务需求变成固件。 | 按接线生成 `main/wiring.h` 与 `board.json`，将 Agent 业务写入 `main/agent-app.h`，配合已有 `main/main.cpp` 与驱动组成 ESP-IDF 工程。`validateAgent` 检查代码和验收结构，`validateAgentHardware` 核对已接外设，再用 ESP-IDF 编译、链接验证工程。 | 左侧复用[业务生成与自动构建实际界面](../experimental/platform/agent-preview.jpg)，标注“已有实验原型”；右侧对应结构校验、硬件匹配与编译链接。证据：`experimental/platform/src/agent-spec.ts`、`experimental/platform/runtime.ts`。 |
+| 7 · 4:05–5:20 | 固件运行，用芯片仿真验证行为。 | esp32sim 从 ROM 启动正式固件，在芯片与外设层执行 CPU 指令、寄存器和总线行为，对固件透明。无实物先运行主要链路，再用 `verifyApplication` 比对 UART、实际 PCM 与 MCPWM，检查 OLED 显存到达和暂停归零。当前容差为 PCM 峰值 ±50、音调 ±25 Hz、占空比 ±1 个百分点。 | 左侧复用[PAO 参考模拟器实际界面](../simulator/images/simulator-overview.png)，突出 esp32sim 与芯片透明性；右侧对应输出与验收断言，保留[模拟器演示](../simulator/README.md#页面)入口。 |
+| 8 · 5:20–6:20 | 机械结构，Agent 建模，刚体仿真评估。 | 外壳、底盘、支架及其装配都属于机械结构。介绍 Blender 中当前开展的 Agent 建模与仿真研发：几何与装配检查回答尺寸、接口和干涉问题，刚体动力学评估回答运动、碰撞与姿态稳定性问题；具体场景与阈值按工程定义。 | 以流程示意表达 Agent 建模、几何 / 装配检查与 Blender 刚体仿真评估，标注“当前研发”；实际运行结论配对应素材。 |
 | 9 · 6:20–7:20 | PAO，把这条路径带到真实世界 | 用 PAO 的语音、运动、测距与 OLED 展示模块、驱动和实物交互。实车证明对应设计与场景的行为；参考机与自由组合工程分别维护，需要实物环境的结论由实际测量确认。 | [实车照片](making-of.md#成品展示)、[实车演示视频](making-of.md#演示视频)，聚焦短程运动与停车。 |
 | 10 · 7:20–8:20 | PAO Studio：把开发流程变成工作台 | 展望将工程路径平台化。已有本地实验原型可在支持模块范围内执行选型、接线、PCB、业务代码、编译与验收，作为产品化起点，继续整合开发工具与结果。 | [Agent 整机设计](../experimental/platform/agent-hardware-preview.jpg)、[PCB 载板](../experimental/platform/agent-pcb-preview.jpg)、[制造预览](../experimental/platform/manufacturing-preview.jpg)，标注“未来展望 / 实验原型”。 |
 | 11 · 8:20–9:15 | 把这套开发流程，封装为可复用的 Skill | 展望将电路、固件、运行与机械结构的工具操作、工程产物、评估条件和失败反馈固化为 Skill，编排生成、构建、仿真、评估与修复；保留人工定义的目标和验收边界。 | 全流程 Skill 示意，明确标注“未来规划”；分工依据[团队与分工](../README.md#团队与分工)。 |

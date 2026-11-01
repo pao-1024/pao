@@ -37,7 +37,7 @@ class: slide-light slide-source
 ---
 
 <div class="eyebrow">FOUNDATION / 可执行的工程表达</div>
-<h1>万物皆代码，<br><em>开发才可自动化。</em></h1>
+<h1>万物皆代码，<br><em>驱动全流程 Agent 自动化。</em></h1>
 <div class="source-columns">
   <div class="source-card"><span class="type-label">电路设计</span><h2>tscircuit</h2><p>TSX 描述器件与连接<br>生成原理图与电路网络</p><code>hardware/index.tsx<br>生成产物 → schematic.svg</code></div>
   <div class="source-card"><span class="type-label">固件编写</span><h2>firmware.bin</h2><p>按接线生成配置与 C++<br>ESP-IDF 编译真实固件</p><code>firmware/boards/pao/<br>生成产物 → wiring.h</code></div>
@@ -49,7 +49,7 @@ class: slide-light slide-source
 <div class="page-number">02 / 11</div>
 
 <!--
-建议 35 秒。万物皆代码的价值，是把各阶段变成 Agent 可以操作、工具可以检查的工程对象。接线改变后，生成匹配的引脚配置与虚拟板型，让设计和运行使用同一份输入。机械结构工作由 Agent 驱动 Blender 建模与仿真，刚体动力学提供评估依据。
+建议 35 秒。万物皆代码的价值，是让 Agent 自动化贯穿设计、构建、运行和评估。各阶段都变成 Agent 可以操作、工具可以执行和检查的工程对象，再由评估反馈推动修复。接线改变后，生成匹配的引脚配置与虚拟板型，让设计和运行使用同一份输入。机械结构工作由 Agent 驱动 Blender 建模与仿真，刚体动力学提供评估依据；各环节分别说明当前能力，不将全流程自动化方向说成完整整机已自动验收。
 根目录 hardware/index.tsx 是 PAO 参考接线图；Studio 生成的 hardware.tsx、PCB 和制造资料属于模块载板流程，不把根接线图说成已布线 PCB。PAO 参考固件与 Studio 自由组合工程分别维护。
 来源：hardware/index.tsx；experimental/platform/README.md 的自然语言整机与业务开发；simulator/README.md。
 -->
@@ -76,9 +76,9 @@ class: slide-light slide-detail
 ---
 
 <div class="eyebrow">电路设计 / tscircuit · 从 TSX 生成原理图与电路网络</div>
-<h1>接得对，<em>也要测得出。</em></h1>
+<h1>电路设计，<em>每条连接都可验证。</em></h1>
 <div class="detail-body">
-  <div class="detail-creation"><span class="detail-label">代码表达什么</span><h2>器件、引脚、网络与约束</h2><p>生成原理图与电路网络，<br>模块载板还包含布局、铜线与制造规则。</p><div class="detail-files"><code>hardware.tsx · circuit.json</code><code>schematic.svg · pcb.json</code></div></div>
+  <figure class="engineering-evidence"><a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer"><svg class="circuit-preview" viewBox="267 358 130 52" role="img" aria-label="tscircuit 实际生成的 OLED 接线原理图局部，包含电源、地和 SDA、SCL 网络"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg></a><figcaption><b>tscircuit · 真实原理图局部</b><p>代码定义器件、引脚与连接，<br>生成图纸，也生成可测试的电路网络。</p></figcaption></figure>
   <div class="detail-checks"><span class="detail-label">电路阶段的评估函数</span><div><b>连通性</b><p>比较编译后网络的完整成员，发现漏连和多连。</p></div><div><b>短接与电气约束</b><p>检查电源域、引脚、总线、复位和匹配负载。</p></div><div><b>PCB 制造 DRC</b><p>检查铜连接、净距、线宽与钻孔；违规阻止导出。</p></div></div>
 </div>
 <div class="test-example"><div><span>仓库中的短接断言</span><code>assert.match(connectionError(nodes, wires,<br>&nbsp;&nbsp;"2:VIN", "1:J1-22"), /短接/);</code></div><p>VIN 已接 3.3V，<br>再次接入 GND 必须被拒绝。</p></div>
@@ -96,7 +96,7 @@ class: slide-light slide-schematic
 ---
 
 <div class="eyebrow">电路设计 / tscircuit · TSX 生成的真实工程产物</div>
-<h1>从代码，<em>生成真实图纸。</em></h1>
+<h1>电路图纸，<em>由 tscircuit 生成。</em></h1>
 <div class="schematic-body">
   <figure class="schematic-overview">
     <a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer" aria-label="打开 PAO 模块接线原理图原始 SVG">
@@ -109,7 +109,7 @@ class: slide-light slide-schematic
     <svg class="schematic-zoom" viewBox="267 358 130 52" role="img" aria-label="同一原理图中的 OLED 屏幕局部，显示电源、地和 SDA、SCL 网络"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg>
     <h2>图纸供人审阅，网络交给测试。</h2>
     <p>同一份 TSX 同时生成原理图与电路网络，测试核对实际连接。</p>
-    <div class="schematic-assert"><span>连通性断言示例 · 展开 OLED 测试参数</span><code>assertNetwork([<br>&nbsp;&nbsp;"ESP32_S3.GPIO41",<br>&nbsp;&nbsp;"OLED.SDA",<br>]);</code></div>
+    <div class="schematic-assert"><span>连通性断言示例 · 展开 OLED 测试参数</span><code>assertNetwork(["ESP32_S3.GPIO41",<br>&nbsp;&nbsp;"OLED.SDA"]);</code></div>
   </div>
 </div>
 <div class="bottom-note">来源：hardware/index.tsx → schematic.svg；模块接线参考，尚未实物验证。</div>
@@ -126,9 +126,9 @@ class: slide-light slide-detail
 ---
 
 <div class="eyebrow">固件编写 / ESP-IDF · 从业务代码到可构建的工程</div>
-<h1>让生成代码，<em>成为真实固件。</em></h1>
+<h1>固件编写，<em>把业务需求变成固件。</em></h1>
 <div class="detail-body">
-  <figure class="firmware-evidence"><a href="/reference/agent-preview.jpg" target="_blank" rel="noopener noreferrer"><img src="/reference/agent-preview.jpg" alt="本地实验原型中输入业务需求、生成固件并自动构建与验证的真实界面" /></a><figcaption><b>Agent 写业务，ESP-IDF 构建固件</b><span>业务生成与自动构建界面 · 已有实验原型</span><code>agent-app.h + wiring.h → firmware.bin</code></figcaption></figure>
+  <figure class="engineering-evidence"><a href="/reference/agent-preview.jpg" target="_blank" rel="noopener noreferrer"><img src="/reference/agent-preview.jpg" alt="本地实验原型中输入业务需求、生成固件并自动构建与验证的真实界面" /></a><figcaption><b>Agent 写业务，ESP-IDF 构建固件</b><span>业务生成与自动构建界面 · 已有实验原型</span><code>agent-app.h + wiring.h → firmware.bin</code></figcaption></figure>
   <div class="detail-checks"><span class="detail-label">固件阶段的评估函数</span><div><b>生成结果预检</b><p>检查源码片段规则、验收步骤与参数范围。</p></div><div><b>硬件能力匹配</b><p>验收场景使用的设备与物理量必须存在。</p></div><div><b>真实构建</b><p>由 C++ 编译器检查接口、类型和符号，再完成链接。</p></div></div>
 </div>
 <div class="test-example"><div><span>实际构建失败反馈 · runtime.ts</span><code>if (!await run("build", target))<br>&nbsp;&nbsp;throw Error(`编译失败：${log}`);</code></div><p>实际错误进入下一轮修复，<br>沿用原验收场景重新构建。</p></div>
@@ -146,7 +146,7 @@ class: slide-light slide-runtime-detail
 ---
 
 <div class="eyebrow">固件运行 / esp32sim · 透明芯片仿真与软件在环评估</div>
-<h1>把真实输出，<em>变成验收证据。</em></h1>
+<h1>固件运行，<em>用芯片仿真验证行为。</em></h1>
 <div class="runtime-detail-body">
   <figure class="runtime-model"><a class="runtime-screen" href="/reference/simulator-overview.png" target="_blank" rel="noopener noreferrer"><img src="/reference/simulator-overview.png" alt="esp32sim 的 PAO 参考模拟器真实界面，显示 OLED、车辆场景、ESP32-S3 引脚与总线活动" /></a><figcaption><b>esp32sim · PAO 参考模拟器</b><p>仿真发生在芯片与外设层，<br>正式驱动和业务逻辑照常执行。</p><a href="https://github.com/user-attachments/assets/b82adcdc-420b-4e07-abb6-0e4ae3ad228b" target="_blank" rel="noopener noreferrer">查看模拟器演示 ↗</a></figcaption></figure>
   <div class="runtime-checks"><span class="detail-label">自由组合应用 · 运行评估函数</span><div><b>UART 业务状态</b><p>按场景核对告警、音量、音调、电机与状态标签。</p></div><div><b>I²S / MCPWM 实际输出</b><p>检查 PCM 峰值、提示音频率与桥臂占空比，<br>将实测输出和场景预期比较。</p></div><div><b>显示与暂停行为</b><p>确认 OLED 显存到达；暂停后音频和电机归零。</p></div><div class="runtime-example"><b>失败如何反馈</b><p>“实际 PCM 峰值”与“期望值”一并返回 Agent。</p></div></div>
@@ -165,7 +165,7 @@ class: slide-light slide-mechanical
 ---
 
 <div class="eyebrow">机械结构 / Agent 驱动的 Blender 开发</div>
-<h1>Agent 驱动建模，<br><em>以刚体仿真评估。</em></h1>
+<h1>机械结构，<br><em>Agent 建模，刚体仿真评估。</em></h1>
 <div class="mechanical-graphic"><img src="/mechanical-loop.svg" alt="Agent 在 Blender 中生成和调整机械结构，刚体动力学仿真提供结果用于评估与下一轮修改" /></div>
 <div class="mechanical-checks"><div><span>设计对象</span><h2>外壳、底盘、支架与装配</h2><p>用可修改的模型表达尺寸、连接关系与结构参数。</p></div><div><span>几何与装配评估</span><h2>能否正确装在一起？</h2><p>检查尺寸、孔位、间隙与装配干涉。</p></div><div><span>刚体动力学评估</span><h2>运动是否符合目标？</h2><p>以仿真中的运动、碰撞与姿态判断设计。</p></div></div>
 <div class="bottom-note">当前正在 Blender 推进 Agent 驱动的设计与仿真；刚体评估不等同于外壳强度、形变或散热分析。</div>
