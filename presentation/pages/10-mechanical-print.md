@@ -12,7 +12,6 @@ class: slide-light slide-mechanical-print
       <p>待打印完成后补充</p>
       <span class="mechanical-photo-hint">整机装配 · 转盘供弹与弹性件安装细节</span>
     </div>
-    <figcaption>预留照片位；实物装配与三球连发待验收。</figcaption>
   </figure>
   <div class="mechanical-delivery">
     <span class="detail-label">8 类 STL + 分件 STEP / 整机 STEP</span>
@@ -25,7 +24,7 @@ class: slide-light slide-mechanical-print
 <div class="page-number">12 / 18</div>
 
 <!--
-建议 30 秒。打印文件不作为源码提交，使用 task mechanical:print 在本地导出八类 STL、分件 STEP 与检查报告，整机 STEP 由 model 入口生成。小球打印三个，其余类型默认各一个；轴孔试片用于核对 TT 电机实际 D 形轴尺寸。推荐先试配，再打印整套。完整打印说明以 mechanical/cadquery-launcher/README.md 为准。
-左侧专门预留打印实物照片，当前没有实物照片，也未完成打印装配或实物三球连发验收。后续补充用户提供的实际照片并按照片内容修改图注。CAD 有效实体与封闭网格检查通过，初始装配干涉检查通过，不等于已经证明打印公差、强度和整机耐久性。软件工具链为 uv + Ruff + ty，任务入口在模块 Taskfile。
+建议 30 秒。task mechanical:print 在本地导出八类 STL、分件 STEP 和检查报告，整机 STEP 由 model 入口生成。小球打印三个，其余各一个；先用轴孔试片核对 TT 电机 D 形轴，再打印整套。
+左侧照片位待实物打印后补充。实体、封闭网格和初始装配干涉检查已通过，但不能证明打印公差、强度和耐久性。
 来源：mechanical/cadquery-launcher/print_parts.py、build.py、Taskfile.yaml、README.md；pyproject.toml、uv.lock。
 -->
