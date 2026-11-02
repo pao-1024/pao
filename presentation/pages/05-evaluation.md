@@ -6,7 +6,7 @@ class: slide-light slide-loop
 <h1>评估函数，决定 Agent<br><em>能否自己完成闭环。</em></h1>
 <div class="loop-graphic"><img src="/diagrams/agent-loop.svg" alt="Agent 生成候选工程，经工具执行和评估后，成功保留产物，失败携带证据返回修复" /></div>
 <div class="loop-rules"><div><b>知道何时完成</b><span>需求变成可执行的通过条件</span></div><div><b>知道哪里要改</b><span>返回具体偏差</span></div><div><b>知道修复是否有效</b><span>修改后重跑同一验收</span></div></div>
-<div class="page-number">05 / 16</div>
+<div class="page-number">05 / 18</div>
 
 <!--
 建议 45 秒。代码生成之后，谁来判断它是否做对？评估函数把需求变成可执行条件，读取工程和运行结果，给出通过结论或具体偏差。Agent 才能知道什么时候停止、哪里需要修改，以及修改是否有效。

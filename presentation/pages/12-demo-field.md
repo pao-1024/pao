@@ -8,7 +8,7 @@ class: slide-light slide-demo slide-demo-field
   <figure><DemoVideo id="video-03" title="室内语音行驶" /><figcaption><h2>室内语音行驶</h2></figcaption></figure>
   <figure><DemoVideo id="video-04" title="桌面发射测试" /><figcaption><h2>桌面发射测试</h2></figcaption></figure>
 </div>
-<div class="page-number">12 / 16</div>
+<div class="page-number">14 / 18</div>
 
 <!--
 建议 20 秒。按需播放室内语音行驶和桌面发射测试，不要求全部播完。

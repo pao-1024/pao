@@ -10,7 +10,7 @@ class: slide-light slide-close slide-skill
   <div><span>留下什么</span><h2>各阶段产物与证据</h2><p>每一步做了什么，结果如何</p></div>
   <div><span>何时停止</span><h2>做不了就报告原因</h2><p>模块不支持、约束冲突、修复次数用完</p></div>
 </div>
-<div class="page-number">15 / 16</div>
+<div class="page-number">17 / 18</div>
 
 <!--
 建议 40 秒。Skill 把电路、固件和结构生成，以及构建、仿真、评估、错误反馈与修复，编排成 Agent 可复用的流程。先打磨工作流，固定工具的输入输出、工程产物、验收步骤和失败信息；再封装，让 Agent 面向新的硬件任务沿用同一套方法。

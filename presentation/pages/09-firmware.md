@@ -8,7 +8,7 @@ class: slide-light slide-runtime-detail
   <figure class="runtime-model"><DemoVideo id="video-05" title="模拟器语音交互演示" /><figcaption><b>esp32sim · PAO 参考模拟器</b></figcaption></figure>
   <div class="runtime-checks"><span class="detail-label">自由组合应用 · 运行评估函数</span><div><b>UART 日志</b><p>读取告警、音量、音调、电机与状态标签。</p></div><div><b>I²S / MCPWM 实际输出</b><p>PCM 峰值、提示音频率与桥臂占空比。</p></div><div><b>显示与暂停行为</b><p>OLED 显存到达；暂停后音频和电机归零。</p></div><div class="runtime-example"><b>失败如何反馈</b><p>“实际 PCM 峰值”与“期望值”一并返回 Agent。</p></div></div>
 </div>
-<div class="page-number">09 / 16</div>
+<div class="page-number">09 / 18</div>
 
 <!--
 建议 70 秒。正式固件由 ESP-IDF 构建后输入模拟器，从 ROM 启动，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路，屏幕和运动不是预置效果。模拟器实时输出 UART0 固件日志，可按关键字过滤，并从中解析设备状态。

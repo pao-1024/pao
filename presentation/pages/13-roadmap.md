@@ -10,7 +10,7 @@ class: slide-light slide-close
   <div><span>规划 · Skill</span><h2>给 Agent 用的流程</h2><p>工具、步骤和评估规则跨项目复用</p></div>
 </div>
 <div class="takeaway">Studio 和 Skill 都是后续规划，以 PAO 验证过的路径为基础。</div>
-<div class="page-number">13 / 16</div>
+<div class="page-number">15 / 18</div>
 
 <!--
 建议 20 秒。PAO 是当前的实验载体。后续规划有两件事：PAO Studio 把工程路径整合成人使用的工作台，Skill 把同一套流程封装给 Agent 复用。这两项都是规划，下面分别介绍。来源：docs/platform-roadmap.md。

@@ -8,7 +8,7 @@ class: slide-light slide-studio
 <div class="studio-gallery"><figure><img src="/reference/agent-hardware-preview.jpg" alt="Studio 的 Agent 选型与模块接线界面" /><figcaption>真实模块与接线约束</figcaption></figure><figure><img src="/reference/agent-pcb-preview.jpg" alt="Studio 生成的模块载板 PCB 界面" /><figcaption>原理图、模块载板与 DRC</figcaption></figure><figure><img src="/reference/manufacturing-preview.jpg" alt="Studio 制造文件预览界面" /><figcaption>可导出的工程与制造资料</figcaption></figure></div>
 <div class="studio-output"><code>hardware.tsx / pcb.json</code><span>同一接线</span><code>wiring.h / board.json</code><span>编译 + 仿真</span><b>执行验收</b></div>
 <div class="bottom-note">目标：同一设计能恢复对应的代码、结构、构建产物与评估记录。</div>
-<div class="page-number">14 / 16</div>
+<div class="page-number">16 / 18</div>
 
 <!--
 建议 40 秒。把前面验证过的方法整合成 PAO Studio，让需求、设计、构建与评估集中在一个工作台。统一工程身份、工具输入输出和结果记录，让电路、固件、仿真和机械各环节围绕同一设计交接。

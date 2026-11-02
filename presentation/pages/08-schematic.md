@@ -18,7 +18,7 @@ class: slide-light slide-schematic
     <div><code>dist/index/circuit.json</code><h2>电路网络交给工具检查</h2><p>读出实际连接，跑上一页的接线测试。</p></div>
   </div>
 </div>
-<div class="page-number">08 / 16</div>
+<div class="page-number">08 / 18</div>
 
 <!--
 建议 25 秒。从 OLED 局部展开到整机：左侧是 tscircuit 从 hardware/index.tsx 生成的完整 schematic.svg。右侧是同一份设计的三种形态：TSX 组织模块，SVG 供人审阅，Circuit JSON 供工具检查。

@@ -91,13 +91,41 @@
 .runtime-checks p { margin-top: 8px; color: #475063; font-size: 18px; line-height: 1.6; }
 .runtime-checks .runtime-example { margin-top: 15px; padding: 16px 20px; border: 0; border-radius: 8px; background: #f5f6fa; }
 .runtime-example b { color: #8c492e; font-size: 18px; }
-.mechanical-graphic { display: flex; align-items: center; height: 235px; margin-top: 10px; }
-.mechanical-graphic img { width: 100%; max-height: 100%; }
-.mechanical-checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }
-.mechanical-checks > div { padding: 22px; border: 1px solid var(--line); border-radius: 8px; }
-.mechanical-checks span { color: var(--violet); font-size: 16px; font-weight: 650; }
-.mechanical-checks h2 { margin-top: 13px; font-size: 23px; line-height: 1.4; }
-.mechanical-checks p { margin-top: 12px; color: #475063; font-size: 18px; line-height: 1.65; }
+.mechanical-design-body { display: grid; grid-template-columns: 650px 1fr; gap: 36px; margin-top: 26px; }
+.mechanical-assembly, .mechanical-motion, .mechanical-photo { margin: 0; }
+.mechanical-cad-crop { position: relative; height: 350px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.mechanical-cad-crop img { position: absolute; width: 880px; max-width: none; left: -250px; top: -250px; }
+.mechanical-assembly figcaption, .mechanical-motion figcaption, .mechanical-photo figcaption { margin-top: 12px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.mechanical-details { display: grid; gap: 17px; }
+.mechanical-details > div { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.mechanical-details span { color: var(--violet); font-size: 16px; font-weight: 700; }
+.mechanical-details h2 { margin-top: 9px; font-size: 24px; }
+.mechanical-details p { margin-top: 9px; color: #475063; font-size: 18px; line-height: 1.6; }
+.mechanical-validation-body { display: grid; grid-template-columns: 590px 1fr; gap: 40px; margin-top: 22px; }
+.mechanical-motion .demo-video { height: 382px; background: #f7f9fc; }
+.mechanical-results { padding-top: 4px; }
+.mechanical-result-hero { display: flex; align-items: baseline; gap: 22px; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.mechanical-result-hero strong { color: var(--violet); font: 700 54px "DejaVu Sans Mono", monospace; }
+.mechanical-result-hero span { font-size: 23px; font-weight: 650; }
+.mechanical-results dl { margin: 14px 0; }
+.mechanical-results dl div { display: flex; justify-content: space-between; padding: 7px 0; font-size: 19px; }
+.mechanical-results dt { color: var(--muted); }
+.mechanical-results dd { margin: 0; font-family: "DejaVu Sans Mono", monospace; }
+.mechanical-results p { color: #475063; font-size: 17px; line-height: 1.7; }
+.mechanical-validation-limit { margin-top: 18px; padding: 14px 18px; border-radius: 8px; background: #f5f6fa; color: #475063; font-size: 17px; line-height: 1.65; }
+.mechanical-print-body { display: grid; grid-template-columns: 560px 1fr; gap: 38px; margin-top: 26px; }
+.mechanical-photo-placeholder { display: flex; height: 350px; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed #bbb8d4; border-radius: 9px; background: #f8f8fc; }
+.mechanical-photo-tag { margin-bottom: 35px; padding: 6px 13px; border-radius: 4px; background: #eae8f4; color: var(--violet); font-size: 14px; }
+.mechanical-photo-placeholder strong { font-size: 30px; font-weight: 700; }
+.mechanical-photo-placeholder p { margin-top: 15px; color: var(--muted); font-size: 20px; }
+.mechanical-photo-hint { margin-top: 36px; color: var(--muted); font-size: 15px; }
+.mechanical-delivery .detail-label { margin-bottom: 12px; font-size: 21px; }
+.mechanical-delivery .mechanical-parts { color: #475063; font-size: 19px; line-height: 1.8; }
+.mechanical-print-command { margin-top: 18px; padding: 15px 19px; border-radius: 8px; background: #f5f6fa; }
+.mechanical-print-command code { display: block; color: var(--violet); font-size: 20px; }
+.mechanical-print-command span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; }
+.mechanical-loop { display: block; width: 100%; height: 108px; margin: 12px 0 5px; }
+.mechanical-delivery .mechanical-print-status { color: #475063; font-size: 16px; line-height: 1.8; }
 
 .schematic-body { display: grid; grid-template-columns: 670px 1fr; gap: 35px; margin-top: 20px; }
 .schematic-overview { margin: 0; }
