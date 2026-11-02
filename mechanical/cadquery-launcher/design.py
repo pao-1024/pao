@@ -1,4 +1,4 @@
-"""Shared millimetre dimensions for the CAD model and rigid-body scene."""
+"""Dimensions shared by the printable rotary launcher and Bullet scene (mm)."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,22 +11,22 @@ OUTPUT = ROOT / "tmp" / "cadquery-launcher"
 class Dimensions:
     base_length: float = 170.0
     base_width: float = 80.0
+    shaft_x: float = 95.0
+    pocket_radius: float = 12.0
     ball_radius: float = 5.5
-    ball_mass_kg: float = 0.0009  # approximate solid PETG sphere
-    floor_top: float = 7.0
-    rail_inner_y: float = 6.5
-    rail_thickness: float = 2.4
-    ball_x: float = 110.0
+    ball_mass_kg: float = 0.0009
     ball_z: float = 12.5
     muzzle_x: float = 170.0
-    striker_length: float = 50.0
-    striker_width: float = 7.0
-    striker_height: float = 5.0
-    striker_rest_x: float = 90.0
-    striker_cocked_x: float = 64.0
-    spring_stiffness: float = 130.0  # N/m; assumed, not a measured spring
-    spring_damping: float = 0.55  # N·s/m
-    striker_mass_kg: float = 0.035
+    rotor_z: float = 28.0
+    rotor_speed_deg_s: float = 240.0
+    striker_cocked_x: float = 78.0
+    striker_rest_x: float = 89.0
+    striker_mass_kg: float = 0.003
+    spring_stiffness: float = 100.0
+    spring_damping: float = 0.02
+    shaft_diameter: float = 5.4
+    shaft_flat: float = 4.3
+    shaft_clearance: float = 0.2
 
 
 D = Dimensions()
