@@ -23,6 +23,11 @@ tasks:
     deps: [simulate]
     cmds:
       - uv run --project ../.. python render.py
+  animate:
+    desc: 生成三球发射过程的双视角动画
+    deps: [simulate]
+    cmds:
+      - uv run --project ../.. python animate.py
   check:
     desc: 检查 Python 代码并运行仿真验收
     cmds:

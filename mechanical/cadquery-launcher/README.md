@@ -6,6 +6,10 @@
 
 ![三球轨迹和弹性储能](images/trajectory.png)
 
+## 观察运行
+
+在仓库根目录运行 `task mechanical:animate`，然后打开 `tmp/cadquery-launcher/launcher_motion.mp4`。动画同时显示俯视料盘与侧面剖视击针，按仿真轨迹约 2.5 倍慢放，可以看到三颗球逐个落下和发射。画面隐藏了电机与顶盖，并简化了固定件的轮廓；球、料盘和击针的位置来自 PyBullet 刚体仿真，不是真机录像。生成视频需要系统安装 `ffmpeg`。静态装配图可运行 `task mechanical:preview`；`tmp/cadquery-launcher/launcher.step` 可用支持 STEP 的 CAD 查看器旋转检查。
+
 ## 打印文件
 
 在仓库根目录运行 `task mechanical:check`，可同时完成 Ruff、ty、STEP 建模、PyBullet 仿真、STL 实体验证及装配干涉检查。`task mechanical:preview` 生成预览图。生成文件位于本 worktree 的 `tmp/cadquery-launcher/`；下表提供可直接导入切片软件的 STL。STEP 装配为 `tmp/cadquery-launcher/launcher.step`，参数在 `design.py`，分件几何在 `rotary_parts.py`。
