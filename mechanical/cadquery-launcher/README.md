@@ -12,18 +12,18 @@
 
 ## 打印文件
 
-在仓库根目录运行 `task mechanical:check`，可同时完成 Ruff、ty、STEP 建模、PyBullet 仿真、STL 实体验证及装配干涉检查。`task mechanical:preview` 生成预览图。生成文件位于本 worktree 的 `tmp/cadquery-launcher/`；下表提供可直接导入切片软件的 STL。STEP 装配为 `tmp/cadquery-launcher/launcher.step`，参数在 `design.py`，分件几何在 `rotary_parts.py`。
+在仓库根目录运行 `task mechanical:print`，会在本 worktree 的 `tmp/cadquery-launcher/print/` 生成下表的分件 STL 和 STEP；装配 STEP 位于 `tmp/cadquery-launcher/launcher.step`，由 `task mechanical:model` 生成。`task mechanical:check` 还会执行 Ruff、ty、PyBullet 仿真、STL 实体验证及装配干涉检查。`task mechanical:preview` 生成预览图。参数在 `design.py`，分件几何在 `rotary_parts.py`。
 
 | STL | 数量 | 用途 |
 |---|---:|---|
-| [chassis.stl](stl/chassis.stl) | 1 | 170 × 80 mm 底座、炮管、导轨、止挡、弹性件挂点及插接柱 |
-| [feed_plate.stl](stl/feed_plate.stl) | 1 | 带椭圆落球口和前导向唇的固定托盘 |
-| [rotor_cam.stl](stl/rotor_cam.stl) | 1 | 三球料盘与三凸轮环一体件，带 D 形轴孔 |
-| [striker.stl](stl/striker.stl) | 1 | 弹簧挡肩、皮筋挂耳、凸轮随动头一体的击针 |
-| [motor_bridge.stl](stl/motor_bridge.stl) | 1 | 电机支架及顶盖 |
-| [motor_clip.stl](stl/motor_clip.stl) | 1 | 名义 23 mm 宽、18 mm 高 TT 电机的插接压夹 |
-| [ball.stl](stl/ball.stl) | 3 | 直径 11 mm 的打印球 |
-| [shaft_fit.stl](stl/shaft_fit.stl) | 1（先打） | 0.1、0.2、0.3 mm 三种 D 轴孔间隙试配件 |
+| `chassis.stl` | 1 | 170 × 80 mm 底座、炮管、导轨、止挡、弹性件挂点及插接柱 |
+| `feed_plate.stl` | 1 | 带椭圆落球口和前导向唇的固定托盘 |
+| `rotor_cam.stl` | 1 | 三球料盘与三凸轮环一体件，带 D 形轴孔 |
+| `striker.stl` | 1 | 弹簧挡肩、皮筋挂耳、凸轮随动头一体的击针 |
+| `motor_bridge.stl` | 1 | 电机支架及顶盖 |
+| `motor_clip.stl` | 1 | 名义 23 mm 宽、18 mm 高 TT 电机的插接压夹 |
+| `ball.stl` | 3 | 直径 11 mm 的打印球 |
+| `shaft_fit.stl` | 1（先打） | 0.1、0.2、0.3 mm 三种 D 轴孔间隙试配件 |
 
 以 PETG、0.4 mm 喷嘴、0.2 mm 层高作为试装起点。底座平放，料盘凸轮环平放；固定托盘、电机支架和电机压夹均倒置打印，使大平面贴在热床上。击针的横向皮筋挂耳需要切片支撑，凸轮随动头和轴孔尽量用小层高并检查切片预览。打印空间至少为 170 × 80 × 37 mm。球建议高填充打印并清理表面毛刺；先打印轴孔试配件和一颗球，确认实际轴尺寸及球在料盘孔内能自由移动。`task mechanical:print` 会验证每个 CAD 零件为单一有效实体、每个 STL 是封闭体积网格，并检查装配位置没有实体穿插；这不等于切片质量或实物配合已合格。
 

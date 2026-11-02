@@ -3,6 +3,7 @@
 /tmp/
 /.venv/
 /mechanical/tmp/
+/mechanical/cadquery-launcher/stl/
 __pycache__/
 !/.vscode/
 /.vscode/*
