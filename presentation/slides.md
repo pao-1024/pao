@@ -48,6 +48,14 @@ src: ./pages/10-mechanical.md
 ---
 
 ---
+src: ./pages/10-mechanical-validation.md
+---
+
+---
+src: ./pages/10-mechanical-print.md
+---
+
+---
 src: ./pages/11-demo-control.md
 ---
 

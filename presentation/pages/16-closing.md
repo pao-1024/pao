@@ -12,7 +12,7 @@ class: slide-light slide-close slide-end
 <div class="takeaway">PAO 用一台能语音控制、能发射的小车，验证了这条路径。</div>
 <div class="closing-thanks">谢谢</div>
 <div class="repo-address">github.com/pao-1024/pao</div>
-<div class="page-number">16 / 16</div>
+<div class="page-number">18 / 18</div>
 
 <!--
 建议 15 秒。回到开头的问题：Agent 时代的硬件怎么开发。我们的答案是，用代码让 Agent 能动手，用评估让它知道对不对，用仿真让评估自动跑起来。PAO 这台小车验证了这条路径。谢谢大家。

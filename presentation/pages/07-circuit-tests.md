@@ -23,7 +23,7 @@ assertNetwork(["ESP32_S3.GPIO42",
 </div>
 <div class="evaluation-feedback"><b>反馈给 Agent</b><p>告诉它哪根线错了、错在哪，改完再测一遍。</p></div>
 <div class="bottom-note">左右两边是不同的电路，分开检查；这里只看线怎么连，不算实际电流。</div>
-<div class="page-number">07 / 16</div>
+<div class="page-number">07 / 18</div>
 
 <!--
 建议 45 秒。电路设计也能写单元测试。左侧把现有 OLED 测试循环中的两组参数展开：GPIO41 只能与 OLED.SDA 同网，GPIO42 只能与 OLED.SCL 同网。assertNetwork 读取构建后的 Circuit JSON，查找网络全部成员，再与独立记录的接线要求严格比较。少接、多接或短到其他信号都会失败；测试预期不从设计源码导入，避免跟着错误设计一起变化。

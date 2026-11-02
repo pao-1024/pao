@@ -8,7 +8,7 @@ class: slide-light slide-demo
   <figure><DemoVideo id="video-02" title="语音行驶与转向" /><figcaption><h2>语音行驶与转向</h2></figcaption></figure>
   <figure><DemoVideo id="video-01" title="手机遥控与发射" /><figcaption><h2>手机遥控与发射</h2></figcaption></figure>
 </div>
-<div class="page-number">11 / 16</div>
+<div class="page-number">13 / 18</div>
 
 <!--
 建议 35 秒。左侧通过语音控制小车行驶和转向；右侧通过手机遥控页控制底盘和发射。按现场节奏选择内容。

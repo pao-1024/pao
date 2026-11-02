@@ -26,7 +26,7 @@ class: slide-light slide-circuit-source
     <figcaption><p>OLED_SDA ↔ GPIO41<br>OLED_SCL ↔ GPIO42</p><span>Controller.tsx 将主控引脚接入同名网络。</span></figcaption>
   </figure>
 </div>
-<div class="page-number">06 / 16</div>
+<div class="page-number">06 / 18</div>
 
 <!--
 建议 30 秒。左边是 Display.tsx 中真实的 OLED 模块定义，只省略绘图分区与坐标；右边是 tscircuit 生成的原始 SVG 局部。代码定义器件、引脚和四条网络连接，图纸由这些设计输入生成。
