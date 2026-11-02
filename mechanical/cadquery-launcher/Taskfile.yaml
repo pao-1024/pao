@@ -1,0 +1,38 @@
+version: '3'
+
+tasks:
+  setup:
+    desc: 安装机械设计与仿真依赖
+    cmds:
+      - uv sync --project ../..
+  model:
+    desc: 生成 CadQuery 装配与 STEP 文件
+    cmds:
+      - uv run --project ../.. python build.py
+  print:
+    desc: 导出分件 STEP/STL 并检查实体与网格
+    cmds:
+      - uv run --project ../.. python print_parts.py
+  simulate:
+    desc: 运行三球刚体动力学仿真
+    deps: [model]
+    cmds:
+      - uv run --project ../.. python simulate.py
+  preview:
+    desc: 生成装配预览和刚体轨迹图
+    deps: [simulate]
+    cmds:
+      - uv run --project ../.. python render.py
+  animate:
+    desc: 生成三球发射过程的双视角动画
+    deps: [simulate]
+    cmds:
+      - uv run --project ../.. python animate.py
+  check:
+    desc: 检查 Python 代码并运行仿真验收
+    cmds:
+      - uv run --project ../.. ruff check .
+      - uv run --project ../.. ruff format --check .
+      - uv run --project ../.. ty check .
+      - task simulate
+      - task print

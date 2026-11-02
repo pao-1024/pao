@@ -1,0 +1,24 @@
+[project]
+name = "pao-mechanical"
+version = "0.1.0"
+description = "PAO mechanical design and rigid-body simulation"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "cadquery>=2.5,<3",
+    "matplotlib>=3.10,<4",
+    "pybullet>=3.2.7,<4",
+    "trimesh>=4,<6",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.14,<1", "ty>=0.0.1a25,<1"]
+
+[tool.ruff]
+target-version = "py311"
+include = ["pyproject.toml", "mechanical/**/*.py"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["mechanical"]
