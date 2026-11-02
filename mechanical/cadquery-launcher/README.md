@@ -12,7 +12,7 @@
 
 ## 打印文件
 
-在仓库根目录运行 `task mechanical:print`，会在本 worktree 的 `tmp/cadquery-launcher/print/` 生成下表的分件 STL 和 STEP；装配 STEP 位于 `tmp/cadquery-launcher/launcher.step`，由 `task mechanical:model` 生成。`task mechanical:check` 还会执行 Ruff、ty、PyBullet 仿真、STL 实体验证及装配干涉检查。`task mechanical:preview` 生成预览图。参数在 `design.py`，分件几何在 `rotary_parts.py`。
+在仓库根目录运行 `task mechanical:print`，会在本 worktree 的 `tmp/cadquery-launcher/stl/` 生成下表全部待打印 STL；对应的分件 STEP 位于 `tmp/cadquery-launcher/step/`，检查报告为 `tmp/cadquery-launcher/print_report.json`。装配 STEP 位于 `tmp/cadquery-launcher/launcher.step`，由 `task mechanical:model` 生成。`task mechanical:check` 还会执行 Ruff、ty、PyBullet 仿真、STL 实体验证及装配干涉检查。`task mechanical:preview` 生成预览图。参数在 `design.py`，分件几何在 `rotary_parts.py`。
 
 | STL | 数量 | 用途 |
 |---|---:|---|

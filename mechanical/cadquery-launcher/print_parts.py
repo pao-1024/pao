@@ -8,11 +8,13 @@ import trimesh
 from design import OUTPUT, D
 from rotary_parts import parts
 
-PRINT = OUTPUT / "print"
+STL_DIR = OUTPUT / "stl"
+STEP_DIR = OUTPUT / "step"
 
 
 def main() -> None:
-    PRINT.mkdir(parents=True, exist_ok=True)
+    STL_DIR.mkdir(parents=True, exist_ok=True)
+    STEP_DIR.mkdir(parents=True, exist_ok=True)
     geometry = parts()
     assembled = {
         name: shape
@@ -34,8 +36,8 @@ def main() -> None:
         assert solid.isValid() and len(solid.Solids()) == 1, (
             f"{name} is not one valid solid"
         )
-        part.export(str(PRINT / f"{name}.step"))
-        stl = PRINT / f"{name}.stl"
+        part.export(str(STEP_DIR / f"{name}.step"))
+        stl = STL_DIR / f"{name}.stl"
         if name == "ball":
             mesh = trimesh.creation.icosphere(subdivisions=4, radius=D.ball_radius)
             mesh.apply_translation(-mesh.bounds[0])
@@ -55,7 +57,7 @@ def main() -> None:
             "volume_mm3": round(solid.Volume(), 2),
             "bounds_mm": [round(v, 2) for v in mesh.extents],
         }
-    (PRINT / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+    (OUTPUT / "print_report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
 
 
