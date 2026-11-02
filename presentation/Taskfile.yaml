@@ -1,9 +1,14 @@
 version: "3"
 
+env:
+  TMPDIR: "{{.TASKFILE_DIR}}/../tmp/temp"
+  PLAYWRIGHT_BROWSERS_PATH: "{{.TASKFILE_DIR}}/../tmp/playwright-browsers"
+
 tasks:
   setup:
     desc: 按锁文件安装演示稿依赖
     cmds:
+      - mkdir -p "$TMPDIR"
       - pnpm install --frozen-lockfile
 
   dev:
@@ -17,3 +22,9 @@ tasks:
     deps: [setup]
     cmds:
       - pnpm build
+
+  pptx:
+    desc: 准备素材并导出 PowerPoint 到 slides.pptx
+    deps: [setup]
+    cmds:
+      - pnpm export --format pptx --output slides.pptx
