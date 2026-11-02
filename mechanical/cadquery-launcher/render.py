@@ -20,6 +20,7 @@ def model_preview() -> None:
     colors = {
         "chassis": ("#31676a", 0.25),
         "cover": ("#467f84", 0.35),
+        "motor_clamp": ("#64748b", 0.35),
         "magazine": ("#4e84ad", 0.45),
         "gate": ("#eab308", 0.9),
         "striker": ("#ea580c", 1.0),

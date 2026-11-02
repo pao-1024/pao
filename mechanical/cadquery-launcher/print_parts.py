@@ -34,15 +34,18 @@ def chassis() -> cq.Workplane:
         result = result.union(block((75, 2.4, 13), (132.5, side * 7.7, 13)))
         result = result.union(block((80, 2.4, 9), (60, side * 7.7, 12.5)))
     result = result.cut(block((5, 3, 2), (D.ball_x, 7.7, 19)))
-    # Compression-spring stop and a zip-tie cradle for a nominal 70 x 19 mm TT motor.
+    # Compression-spring stop and a printed clamp seat for a nominal TT motor.
     result = result.union(block((4, 15, 15), (26, 0, 13)))
+    for side in (-1, 1):
+        result = result.union(block((3, 3, 18), (92, side * 12, 14.9)))
+        result = result.union(block((5, 5, 2), (92, side * 12, 24.8)))
     for y in (-36, -11):
         result = result.union(block((70, 2, 5), (45, y, 8.5)))
-    for x in (25, 65):
-        for y in (-36, -11):
-            result = result.cut(block((3, 4, 8), (x, y, 3)))
     for x, y in ((100, -13.5), (120, 13.5)):
-        result = result.cut(vertical_hole(x, y, 1.7, -1, 8))
+        result = result.cut(block((3.3, 3.3, 4.2), (x, y, 4)))
+    for x in (5, 85):
+        for y in (-37.5, -13.5):
+            result = result.cut(block((2.4, 2.4, 4.2), (x, y, 4)))
     for x in (125, 162):
         for y in (-7.7, 7.7):
             result = result.cut(vertical_hole(x, y, 1.35, 15.5, 6))
@@ -61,7 +64,7 @@ def magazine() -> cq.Workplane:
         result = result.union(block((10, 8.8, 15.8), (x, y, 14.1)))
         bridge_y = -9.1 if y < 0 else 9.1
         result = result.union(block((6, 2, 3), (x, bridge_y, 21)))
-        result = result.cut(vertical_hole(x, y, 1.7, 5, 19))
+        result = result.union(block((3.2, 3.2, 3.5), (x, y, 4.6)))
     return result
 
 
@@ -79,7 +82,10 @@ def striker() -> cq.Workplane:
     )
     collar = cq.Workplane("YZ").circle(5.8).extrude(3).translate((56.5, 0, D.ball_z))
     follower = block((2, 7, 15), (57.5, 0, 22.5))
-    return rod.union(collar).union(follower)
+    result = rod.union(collar).union(follower).union(block((3, 24, 6), (58, 0, 20)))
+    for side in (-1, 1):
+        result = result.union(block((5, 5, 2), (58, side * 11, 23.8)))
+    return result
 
 
 def cam() -> cq.Workplane:
@@ -107,7 +113,15 @@ def cover() -> cq.Workplane:
     result = block((51, 20, 2), (144.5, 0, 20.5))
     for x in (125, 162):
         for y in (-7.7, 7.7):
-            result = result.cut(vertical_hole(x, y, 1.7, 18.5, 4))
+            result = result.union(vertical_hole(x, y, 1.25, 16.5, 3.2))
+    return result
+
+
+def motor_clamp() -> cq.Workplane:
+    result = block((90, 26.2, 2), (45, -25.5, 32))
+    for x in (5, 85):
+        for y in (-37.5, -13.5):
+            result = result.union(block((2.2, 2.2, 27), (x, y, 17.5)))
     return result
 
 
@@ -134,6 +148,7 @@ def parts() -> dict[str, cq.Workplane]:
         "striker": striker(),
         "cam": cam(),
         "cover": cover(),
+        "motor_clamp": motor_clamp(),
         "ball": ball(),
         "shaft_fit": shaft_fit(),
     }
@@ -149,6 +164,7 @@ def main() -> None:
         ("chassis", "striker"),
         ("striker", "cam"),
         ("chassis", "cover"),
+        ("chassis", "motor_clamp"),
     ):
         left_shape = geometry[left].val()
         right_shape = geometry[right].val()
