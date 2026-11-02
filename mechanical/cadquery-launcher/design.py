@@ -23,7 +23,7 @@ class Dimensions:
     rotor_speed_deg_s: float = 240.0
     striker_cocked_x: float = 78.0
     striker_rest_x: float = 89.0
-    striker_width: float = 12.0
+    striker_width: float = 11.0
     striker_height: float = 9.0
     striker_floor_z: float = 7.0
     follower_diameter: float = 8.0

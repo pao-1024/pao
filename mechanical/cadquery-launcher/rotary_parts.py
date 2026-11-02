@@ -160,7 +160,10 @@ def striker_components() -> list[cq.Workplane]:
     for side in (-1, 1):
         components.extend(
             [
-                block((D.band_arm_width, 6, 8), (75, side * 3, 17)),
+                block(
+                    (D.band_arm_width, D.striker_width / 2, 8),
+                    (75, side * D.striker_width / 4, 17),
+                ),
                 block(
                     (D.band_arm_width, 23, D.band_arm_thickness), (75, side * 12.5, 20)
                 ),
