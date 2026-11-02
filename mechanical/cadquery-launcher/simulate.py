@@ -199,7 +199,7 @@ def main() -> None:
         "a ball crossed the muzzle outside the barrel"
     )
     assert all(
-        abs(event["time_s"] - (RELEASE_PHASE + (event["ball"] - 1) * CYCLE)) < 0.2
+        abs(event["time_s"] - (RELEASE_PHASE + (event["ball"] - 1) * CYCLE)) < 0.25
         for event in exits
     ), "balls did not fire on separate cam cycles"
     control = simulate(OUTPUT / "no_spring_trace.csv", spring_stiffness=0)

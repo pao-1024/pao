@@ -8,23 +8,31 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-from build import parts
+from build import parts as display_parts
 from design import OUTPUT
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from print_parts import parts as printable_parts
 
 
 def model_preview() -> None:
     fig = plt.figure(figsize=(12, 7), dpi=160, facecolor="#f8fafc")
     ax = fig.add_subplot(111, projection="3d")
     colors = {
-        "body": ("#31676a", 0.20),
+        "chassis": ("#31676a", 0.25),
+        "cover": ("#467f84", 0.35),
         "magazine": ("#4e84ad", 0.45),
         "gate": ("#eab308", 0.9),
         "striker": ("#ea580c", 1.0),
         "cam": ("#f59e0b", 0.95),
         "spring": ("#64748b", 1.0),
+        "ball": ("#dc2626", 0.95),
     }
-    for name, shape in parts().items():
+    geometry = printable_parts()
+    geometry["ball"] = geometry["ball"].translate((110, 0, 12.5))
+    geometry["spring"] = display_parts()["spring"]
+    for name, shape in geometry.items():
+        if name == "shaft_fit":
+            continue
         solid = shape.val()
         assert isinstance(solid, cq.Shape)
         points, faces = solid.tessellate(1.5)

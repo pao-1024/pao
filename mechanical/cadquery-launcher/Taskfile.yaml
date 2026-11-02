@@ -9,6 +9,10 @@ tasks:
     desc: 生成 CadQuery 装配与 STEP 文件
     cmds:
       - uv run --project ../.. python build.py
+  print:
+    desc: 导出分件 STEP/STL 并检查实体与网格
+    cmds:
+      - uv run --project ../.. python print_parts.py
   simulate:
     desc: 运行三球刚体动力学仿真
     deps: [model]
@@ -26,3 +30,4 @@ tasks:
       - uv run --project ../.. ruff format --check .
       - uv run --project ../.. ty check .
       - task simulate
+      - task print
