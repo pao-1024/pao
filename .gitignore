@@ -1,6 +1,9 @@
 /.worktrees/
 /.agents/skills/
 /tmp/
+/.venv/
+/mechanical/tmp/
+__pycache__/
 !/.vscode/
 /.vscode/*
 !/.vscode/settings.json

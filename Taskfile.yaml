@@ -16,6 +16,9 @@ includes:
   simulator:
     taskfile: ./simulator/Taskfile.yaml
     dir: ./simulator
+  mechanical:
+    taskfile: ./mechanical/cadquery-launcher/Taskfile.yaml
+    dir: ./mechanical/cadquery-launcher
   presentation:
     taskfile: ./presentation/Taskfile.yaml
     dir: ./presentation
