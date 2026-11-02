@@ -13,7 +13,7 @@ def assembled_parts() -> dict[str, cq.Workplane]:
         theta = math.radians(degrees)
         x = D.shaft_x + D.pocket_radius * math.cos(theta)
         y = D.pocket_radius * math.sin(theta)
-        z = D.ball_z if index == 1 else 29
+        z = D.ball_z if index == 1 else D.loaded_ball_z
         geometry[f"ball_{index}"] = geometry["ball"].translate((x, y, z))
     del geometry["ball"]
     return geometry

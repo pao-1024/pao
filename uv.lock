@@ -668,6 +668,8 @@ dependencies = [
     { name = "cadquery" },
     { name = "matplotlib" },
     { name = "pybullet" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "trimesh" },
 ]
 
@@ -682,6 +684,7 @@ requires-dist = [
     { name = "cadquery", specifier = ">=2.5,<3" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "pybullet", specifier = ">=3.2.7,<4" },
+    { name = "scipy", specifier = ">=1.16,<2" },
     { name = "trimesh", specifier = ">=4,<6" },
 ]
 
