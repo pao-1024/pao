@@ -1,6 +1,7 @@
 """Render the assembled rotary launcher and measured Bullet trajectories."""
 
 import csv
+import json
 
 import cadquery as cq
 import matplotlib
@@ -9,8 +10,9 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 from build import assembled_parts
-from design import OUTPUT
+from design import OUTPUT, D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from rotary_parts import striker
 
 
 def model_preview() -> None:
@@ -36,7 +38,7 @@ def model_preview() -> None:
     ax.set_xlim(0, 175)
     ax.set_ylim(-43, 43)
     ax.set_zlim(0, 62)
-    ax.set_box_aspect((175, 86, 62), zoom=1.08)
+    ax.set_box_aspect((175, 86, 62), zoom=0.85)
     ax.set_position((0.02, 0.02, 0.96, 0.85))
     ax.view_init(elev=33, azim=-62)
     ax.set_axis_off()
@@ -62,6 +64,38 @@ def model_preview() -> None:
     plt.close(fig)
 
 
+def striker_preview() -> None:
+    solid = striker().val()
+    assert isinstance(solid, cq.Shape)
+    points, faces = solid.tessellate(0.1)
+    triangles = [[points[index].toTuple() for index in face] for face in faces]
+    bounds = solid.BoundingBox()
+    fig = plt.figure(figsize=(9, 7), dpi=160, facecolor="#f8fafc")
+    ax = fig.add_subplot(111, projection="3d")
+    ax.add_collection3d(
+        Poly3DCollection(triangles, facecolors="#ea580c", edgecolor="none", shade=True)
+    )
+    ax.set_xlim(bounds.xmin - 2, bounds.xmax + 2)
+    ax.set_ylim(bounds.ymin - 2, bounds.ymax + 2)
+    ax.set_zlim(bounds.zmin - 2, bounds.zmax + 2)
+    ax.set_box_aspect((bounds.xlen + 4, bounds.ylen + 4, bounds.zlen + 4))
+    ax.view_init(elev=28, azim=-125)
+    ax.set_xlabel("X (mm)")
+    ax.set_ylabel("Y (mm)")
+    ax.set_zlabel("Z (mm)")
+    fig.suptitle("Striker close-up | CadQuery solid", fontsize=16)
+    fig.text(
+        0.5,
+        0.91,
+        f"Slider {D.striker_width:g} × {D.striker_height:g} mm  •  "
+        f"Follower Ø{D.follower_diameter:g} mm  •  flat base",
+        ha="center",
+        color="#475569",
+    )
+    fig.savefig(OUTPUT / "striker_preview.png", bbox_inches="tight")
+    plt.close(fig)
+
+
 def trajectory_preview() -> None:
     with (OUTPUT / "trace.csv").open(newline="") as handle:
         rows = list(csv.DictReader(handle))
@@ -82,8 +116,9 @@ def trajectory_preview() -> None:
             color=color,
         )
     position_ax.axhline(170, color="#475569", linestyle="--", label="Muzzle")
-    for release in (0.15, 0.65, 1.15):
-        position_ax.axvline(release, color="#cbd5e1", linestyle=":")
+    result = json.loads((OUTPUT / "result.json").read_text())
+    for event in result["exits"]:
+        position_ax.axvline(event["time_s"], color="#cbd5e1", linestyle=":")
     position_ax.set_ylabel("Ball X (mm)")
     position_ax.set_ylim(85, 350)
     position_ax.legend(loc="upper left", ncol=4)
@@ -102,5 +137,9 @@ def trajectory_preview() -> None:
 
 if __name__ == "__main__":
     model_preview()
+    striker_preview()
     trajectory_preview()
-    print(f"Previews: {OUTPUT / 'launcher_preview.png'}, {OUTPUT / 'trajectory.png'}")
+    print(
+        f"Previews: {OUTPUT / 'launcher_preview.png'}, "
+        f"{OUTPUT / 'striker_preview.png'}, {OUTPUT / 'trajectory.png'}"
+    )

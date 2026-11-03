@@ -25,25 +25,44 @@ def cylinder(
 
 
 def cam_radius(degrees: float) -> float:
+    high = D.shaft_x - (D.striker_cocked_x - 18)
+    stroke = D.striker_rest_x - D.striker_cocked_x
+    low = high - stroke
     phase = degrees % 120
     if phase < 10:
-        return 25
+        return low
     if phase < 60:
-        return 25 + 10 * (phase - 10) / 50
+        return low + stroke * (phase - 10) / 50
     if phase < 94:
-        return 35
-    if phase < 95:
-        return 35 - 10 * (phase - 94)
-    return 25
+        return high
+    return low
+
+
+def cam_outline() -> list[tuple[float, float]]:
+    """A relieved drop edge lets the wide circular follower leave the cam."""
+    high = D.shaft_x - (D.striker_cocked_x - 18)
+    outline = []
+    for degrees in range(360):
+        radii_angles = []
+        if degrees % 120 == 94:
+            radii_angles.extend([(high, degrees), (cam_radius(degrees), degrees - 6)])
+        radii_angles.append((cam_radius(degrees), degrees))
+        for radius, angle in radii_angles:
+            theta = math.radians(angle)
+            outline.append(
+                (D.shaft_x + radius * math.cos(theta), radius * math.sin(theta))
+            )
+    return outline
 
 
 def cam_ring() -> cq.Workplane:
-    outline = []
-    for degrees in range(360):
-        radius = cam_radius(degrees)
-        theta = math.radians(degrees)
-        outline.append((D.shaft_x + radius * math.cos(theta), radius * math.sin(theta)))
-    ring = cq.Workplane("XY").polyline(outline).close().extrude(5).translate((0, 0, 25))
+    ring = (
+        cq.Workplane("XY")
+        .polyline(cam_outline())
+        .close()
+        .extrude(5)
+        .translate((0, 0, 25))
+    )
     return ring.cut(cylinder(D.shaft_x, 0, 21.2, 24, 7))
 
 
@@ -85,10 +104,16 @@ def feed_plate() -> cq.Workplane:
 def chassis() -> cq.Workplane:
     body = block((D.base_length, D.base_width, 6), (85, 0, 3)).edges("|Z").fillet(2)
     body = body.union(block((75, 16.4, 1), (132.5, 0, 6.5)))
+    # The rear guide and bore share one Z=7 sliding plane.
+    body = body.union(block((49, 13 + 2 * D.guide_wall, 1), (70.5, 0, 6.5)))
     for side in (-1, 1):
-        body = body.union(block((75, 2.4, 13), (132.5, side * 7.7, 13)))
-        body = body.union(block((70, 2.4, 9), (60, side * 7.7, 12.5)))
-    body = body.union(block((51, 17.8, 2), (144.5, 0, 19.5)))
+        wall_y = side * (6.5 + D.guide_wall / 2)
+        body = body.union(block((75, D.guide_wall, 13.5), (132.5, wall_y, 12.75)))
+        body = body.union(block((70, D.guide_wall, 11), (60, wall_y, 11.5)))
+        # Low corner stops retain the unloaded slider without blocking the spring.
+        rear_stop_x = D.striker_cocked_x - 18 - 1.5
+        body = body.union(block((3, 2, 3), (rear_stop_x, side * 5.5, 7.5)))
+    body = body.union(block((51, 13 + 2 * D.guide_wall, 2), (144.5, 0, 19.5)))
     body = body.union(block((3, 12, 14), (44.5, 0, 13)))
     for x, y in ((95, -18), (95, 18), (107, -14), (107, 14)):
         post = cylinder(x, y, 2.8, 6, 16.5)
@@ -100,22 +125,66 @@ def chassis() -> cq.Workplane:
     for y in (-24, 24):
         body = body.union(block((4, 4, 13), (112, y, 12.5)))
         body = body.union(block((4, 6, 2), (112, y, 20)))
-        body = body.union(block((3, 4, 16), (89, y, 14)))
+        # Hook front reaches this plane at the specified end of the stroke.
+        stop_x = 75 + D.band_arm_width / 2 + D.striker_rest_x - D.striker_cocked_x
+        body = body.union(block((3, 4, 16), (stop_x + 1.5, y, 14)))
     return body
 
 
-def striker() -> cq.Workplane:
-    result = block((36, 7, 5), (D.striker_cocked_x, 0, D.ball_z))
-    result = result.union(block((2, 2, 15), (59, 0, 22)))
-    # A shallow rear collar centers a roughly 10 mm OD compression spring.
-    collar = cq.Workplane("YZ").circle(5.4).extrude(2).translate((59, 0, D.ball_z))
-    result = result.union(collar)
-    # Two printed ears also accept a rubber band, which pulls toward the muzzle.
+def striker_components() -> list[cq.Workplane]:
+    """Convex pieces shared by the fused print and compound collision body."""
+    components = [
+        block(
+            (36, D.striker_width, D.striker_height),
+            (D.striker_cocked_x, 0, D.striker_floor_z + D.striker_height / 2),
+        ),
+        cylinder(
+            60 - D.follower_diameter / 2,
+            0,
+            D.follower_diameter / 2,
+            D.follower_bottom,
+            D.follower_top - D.follower_bottom,
+        ),
+        # A broad L-shaped heel supports the post while leaving the spring space clear.
+        block(
+            (7, D.follower_diameter, 22 - D.striker_floor_z),
+            (62.5, 0, (22 + D.striker_floor_z) / 2),
+        ),
+        block((14, D.follower_diameter, 4), (59, 0, 20)),
+        cq.Workplane("XZ")
+        .polyline([(60, 16), (68, 16), (60, 22)])
+        .close()
+        .extrude(D.follower_diameter / 2, both=True),
+        cq.Workplane("YZ").circle(5.4).extrude(3).translate((59, 0, D.ball_z)),
+    ]
     for side in (-1, 1):
-        result = result.union(block((4, 4, 4), (75, side * 2, 16)))
-        result = result.union(block((4, 23, 2), (75, side * 12.5, 18.5)))
-        result = result.union(block((4, 2, 4), (75, side * 24, 20.5)))
+        components.extend(
+            [
+                block(
+                    (D.band_arm_width, D.striker_width / 2, 8),
+                    (75, side * D.striker_width / 4, 17),
+                ),
+                block(
+                    (D.band_arm_width, 23, D.band_arm_thickness), (75, side * 12.5, 20)
+                ),
+                block((D.band_arm_width, 4, 6), (75, side * 23, 21)),
+            ]
+        )
+    return components
+
+
+def striker() -> cq.Workplane:
+    components = striker_components()
+    result = components[0]
+    for component in components[1:]:
+        result = result.union(component)
     return result
+
+
+def striker_mass_kg() -> float:
+    solid = striker().val()
+    assert isinstance(solid, cq.Shape)
+    return solid.Volume() * 1e-9 * D.printed_density_kg_m3
 
 
 def motor_bridge() -> cq.Workplane:
