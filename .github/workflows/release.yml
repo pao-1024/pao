@@ -157,6 +157,15 @@ jobs:
           task presentation:setup
           PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/tmp/playwright-browsers" \
             pnpm --dir presentation exec playwright install --with-deps chromium
+      - name: Render diagrams for CI
+        working-directory: presentation
+        run: |
+          mkdir -p public/diagrams ../tmp
+          printf '%s\n' '{"args":["--no-sandbox"]}' > ../tmp/puppeteer-ci.json
+          for source in diagrams/*.mmd; do
+            pnpm exec mmdc -q -i "$source" -o "public/diagrams/$(basename "$source" .mmd).svg" \
+              -c diagrams/mermaid-config.json -b transparent -p ../tmp/puppeteer-ci.json
+          done
       - name: Export presentation
         run: |
           task presentation:pptx

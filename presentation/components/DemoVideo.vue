@@ -7,6 +7,7 @@ const failed = ref(false)
 const started = ref(false)
 const container = ref<HTMLDivElement>()
 const { isPrintMode } = useNav()
+const base = import.meta.env.BASE_URL
 
 onMounted(() => {
   const video = container.value?.querySelector('video')
@@ -35,8 +36,8 @@ function pauseOtherVideos(event: Event) {
 <template>
   <div ref="container" class="demo-video" @click.stop @keydown.stop>
     <SlidevVideo
-      :src="`/videos/${id}.mp4`"
-      :poster="`/videos/${id}.png`"
+      :src="`${base}videos/${id}.mp4`"
+      :poster="`${base}videos/${id}.png`"
       :aria-label="title"
       :data-video-id="id"
       :controls="true"

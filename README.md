@@ -43,6 +43,8 @@ PAO 使用 ESP32-S3，通过语音或网页控制行驶、测距和电磁发射�
 
 观看[实车演示视频](docs/making-of.md#演示视频)，包含语音控制、遥控控制和发射测试。装配照片和过程说明见[PAO 制作过程](docs/making-of.md)。
 
+[在线浏览决赛演示稿](https://pao-1024.github.io/pao/)。
+
 ## 快速开始
 
 <a name="online-demo"></a>
@@ -177,10 +179,6 @@ Agent 可根据自然语言需求选择模块、自动接线，生成原理图�
 实物模块到手前，可以检查供电、公共地、复位、负载、引脚和总线地址，并运行编译后的固件。打板前，可以检查模块封装、布局、铜线连接和制造规则。
 
 当前 PCB 输出是指定模块的安装板。仿真覆盖已建模的数字接口与业务行为，温升、射频、声学、机械负载和实际测量精度仍需实物验证。使用方法和支持范围见 [PAO Studio](experimental/platform/README.md)。
-
-## 版本发布
-
-在 GitHub Releases 创建 Draft，选择指向已合入 `main` 的版本标签，手工发布后由 [Release assets](.github/workflows/release.yml) 构建并补齐附件：固件包、两个 Docker 镜像压缩包、演示稿 PPTX、静态 HTML 站点压缩包、机械 STEP/STL/仿真视频与校验报告，以及 SHA-256 清单。所有构建任务成功后才上传附件；若工作流失败，可在 Actions 页面手动运行 `Release assets`，填写已发布版本的标签重试。同名附件内容不一致时需人工处理。
 
 ## 未来方向与商业化规划
 

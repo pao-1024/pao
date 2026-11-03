@@ -22,7 +22,7 @@ class: slide-light slide-circuit-source
   </div>
   <figure class="circuit-generated">
     <span class="detail-label">生成图纸 · 同一个 OLED 模块</span>
-    <a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer"><svg viewBox="267 358 130 52" role="img" aria-label="由左侧 OLED 代码生成的真实原理图局部，含 V3V3、GND、OLED_SDA 和 OLED_SCL"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg></a>
+    <AssetLink path="reference/pao-schematic.svg"><svg viewBox="267 358 130 52" role="img" aria-label="由左侧 OLED 代码生成的真实原理图局部，含 V3V3、GND、OLED_SDA 和 OLED_SCL"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg></AssetLink>
     <figcaption><p>OLED_SDA ↔ GPIO41<br>OLED_SCL ↔ GPIO42</p><span>Controller.tsx 将主控引脚接入同名网络。</span></figcaption>
   </figure>
 </div>
