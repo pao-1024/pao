@@ -13,7 +13,6 @@ class: slide-light slide-mechanical-validation
     <div class="mechanical-result-hero"><strong>3 / 3</strong><span>小球依次发射通过</span></div>
     <dl><div><dt>电机设定转速</dt><dd>40 rpm</dd></div><div><dt>相邻出膛间隔</dt><dd>约 0.50 s</dd></div><div><dt>出膛速度</dt><dd>1.36–1.44 m/s</dd></div></dl>
     <p>25 / 60 rpm 两个工况也通过三球验收；关闭弹性力后，没有小球达到发射速度阈值。</p>
-    <div class="mechanical-validation-limit">仿真使用给定转速与线性弹性力，<br>实物电机负载与弹性件特性待测。</div>
   </div>
 </div>
 <div class="page-number">11 / 18</div>
