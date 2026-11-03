@@ -6,12 +6,8 @@ class: slide-light slide-mechanical-print
 <h1>模型、仿真与打印文件，<br><em>由同一份设计源码生成。</em></h1>
 <div class="mechanical-print-body">
   <figure class="mechanical-photo">
-    <div class="mechanical-photo-placeholder" role="img" aria-label="3D 打印实物照片待补充，预留组装完成后的整机照片位置">
-      <span class="mechanical-photo-tag">实物照片预留</span>
-      <strong>3D 打印实物照片</strong>
-      <p>待打印完成后补充</p>
-      <span class="mechanical-photo-hint">整机装配 · 转盘供弹与弹性件安装细节</span>
-    </div>
+    <DemoVideo id="mechanical-physical" title="3D 打印发射机构实物展示" />
+    <figcaption>3D 打印机构实物展示 · 装配与接线</figcaption>
   </figure>
   <div class="mechanical-delivery">
     <span class="detail-label">8 类 STL + 分件 STEP / 整机 STEP</span>
@@ -25,6 +21,6 @@ class: slide-light slide-mechanical-print
 
 <!--
 建议 30 秒。task mechanical:print 在本地导出八类 STL、分件 STEP 和检查报告，整机 STEP 由 model 入口生成。小球打印三个，其余各一个；先用轴孔试片核对 TT 电机 D 形轴，再打印整套。
-左侧照片位待实物打印后补充。实体、封闭网格和初始装配干涉检查已通过，但不能证明打印公差、强度和耐久性。
-来源：mechanical/cadquery-launcher/print_parts.py、build.py、Taskfile.yaml、README.md；pyproject.toml、uv.lock。
+左侧视频展示 3D 打印机构与接线，不能据此认定电机负载、实物连发、打印公差、强度或耐久性已通过验收。实体、封闭网格和初始装配干涉检查已通过。
+来源：mechanical/cadquery-launcher/print_parts.py、build.py、Taskfile.yaml、README.md；pyproject.toml、uv.lock；https://github.com/pao-1024/pao/issues/55#issuecomment-6597724232。
 -->

@@ -3,7 +3,7 @@ class: slide-light slide-mechanical
 ---
 
 <div class="eyebrow">机械结构 / CadQuery 参数化建模</div>
-<h1>一个电机，<br><em>完成供弹、储能与三球连发。</em></h1>
+<h1>机械设计：一个电机，<br><em>完成供弹、储能与三球连发。</em></h1>
 <div class="mechanical-design-body">
   <figure class="mechanical-assembly">
     <div class="mechanical-cad-crop"><img src="/reference/launcher_preview.png" alt="CadQuery 透明装配预览：底座、固定供弹板、三球转盘凸轮和直线撞针" /></div>
