@@ -18,14 +18,16 @@ for image in agent-hardware agent-pcb manufacturing; do
   cp "../experimental/platform/$image-preview.jpg" public/reference/
 done
 
-for id in 01 02 03 04 05; do
-  name=video-$id
+for name in video-01 video-02 video-03 video-04 video-05 mechanical-physical; do
   video=public/videos/$name.mp4
   [ -s "$video" ] && [ -s "public/videos/$name.png" ] && continue
 
   source=$cache/$name.mp4
   if [ ! -s "$source" ]; then
-    url=$(sed -n "s/^\[$name\]: //p" ../docs/making-of.md)
+    case "$name" in
+      mechanical-physical) url=https://github.com/user-attachments/assets/7d94a714-f6d9-4709-aa03-1e0700898228 ;;
+      *) url=$(sed -n "s/^\[$name\]: //p" ../docs/making-of.md) ;;
+    esac
     gh auth token | sed 's/^/Authorization: Bearer /' | curl -fsSL -H @- -o "$source.part" "$url"
     mv "$source.part" "$source"
   fi
