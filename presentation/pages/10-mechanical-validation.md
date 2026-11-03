@@ -3,7 +3,7 @@ class: slide-light slide-mechanical-validation
 ---
 
 <div class="eyebrow">机械评估 / PyBullet 刚体动力学</div>
-<h1>从模型到运动，<br><em>用三球出膛结果验收设计。</em></h1>
+<h1>机械设计评估，<br><em>用三球出膛结果验收运动。</em></h1>
 <div class="mechanical-validation-body">
   <figure class="mechanical-motion">
     <DemoVideo id="mechanical-launcher" title="三球旋转供弹刚体仿真" />
