@@ -14,7 +14,6 @@ class: slide-light slide-mechanical-print
     <p class="mechanical-parts">底座 · 供弹板 · 转盘凸轮 · 撞针<br>电机桥 · 卡扣 · 小球 × 3 · 轴孔试片</p>
     <div class="mechanical-print-command"><code>task mechanical:print</code><span>本地输出：tmp/cadquery-launcher/stl/</span></div>
     <img class="mechanical-loop" src="/diagrams/mechanical-loop.svg" alt="Agent 调整 CadQuery 参数模型，经 PyBullet 刚体仿真和验收反馈继续迭代" />
-    <p class="mechanical-print-status">已通过：实体有效性、网格封闭性与三球仿真。<br>待验证：打印配合、电机负载与实物连发。</p>
   </div>
 </div>
 <div class="page-number">12 / 18</div>

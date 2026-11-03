@@ -2,6 +2,8 @@
 
 基于 [Slidev](https://sli.dev/guide/) 的十八页演示稿。`slides.md` 是全局配置和页面目录，每页的正文和讲者备注在 `pages/`，排版在 `style.css`。
 
+演示页面自动开始 10 分钟倒计时，右上角可暂停、继续或重置；导出时隐藏倒计时控件。演示视频默认以 2 倍速播放。
+
 需要 Node.js 22.12+、pnpm、ffmpeg、uv、Task，以及已登录的 GitHub CLI。在仓库根目录运行：
 
 ```sh
