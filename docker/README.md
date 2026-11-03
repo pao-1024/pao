@@ -40,12 +40,12 @@ docker compose -f docker/compose.yaml up -d --build
 
 ## 使用 GHCR 镜像
 
-推送 Git tag 时，`Simulator image` GitHub Actions 工作流自动发布两个镜像：
+手工发布 Draft Release 后，`Release assets` 工作流会调用 `Simulator image` 工作流发布两个镜像：
 
 - `ghcr.io/pao-1024/pao-simulator:<tag>`
 - `ghcr.io/pao-1024/pao-simulator-caddy:<tag>`
 
-同时生成 `sha-<短提交号>` 标签；也支持在 Actions 页面手动运行。首次发布后，将两个 GHCR 包设为公开，或在部署服务器上使用有读取包权限的凭据执行 `docker login ghcr.io`。
+同时生成 `sha-<短提交号>` 标签，并将镜像压缩包上传到同一个 Release；`Simulator image` 也支持在 Actions 页面手动运行，此时只发布提交号标签。首次发布后，将两个 GHCR 包设为公开，或在部署服务器上使用有读取包权限的凭据执行 `docker login ghcr.io`。
 
 服务器只需下载 [`compose.yaml`](compose.yaml)，在同目录创建 `.env`，例如使用 `sha-106b35f`：
 

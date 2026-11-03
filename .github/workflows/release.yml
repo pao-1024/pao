@@ -1,0 +1,194 @@
+name: Release assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PAO_IDF_VERSION: v6.0.1
+      PAO_EIM_VERSION: v0.20.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: espressif/install-esp-idf-action@8fc05d1470d5591417e7a3707a1f2bec178db4ae # v1
+        with:
+          version: ${{ env.PAO_IDF_VERSION }}
+          eim-version: ${{ env.PAO_EIM_VERSION }}
+          path: /tmp/esp/idf
+          tools-path: /tmp/esp
+      - name: Build firmware
+        run: |
+          # EIM checks the shell's $0; GitHub's temporary script name fails that check.
+          bash -e -c '
+            source "$HOME/.espressif/tools/activate_idf_${PAO_IDF_VERSION}.sh"
+            exec bash firmware/scripts/build.sh
+          '
+      - name: Pack firmware
+        run: |
+          set -o pipefail
+          mkdir -p tmp/release/firmware
+          revision=$(python3 -c 'import json; print(json.load(open("tmp/base-revision.json"))["commit"])')
+          build_dir="tmp/build/$revision"
+          find "$build_dir" -type f \( -name '*.bin' -o -name '*.elf' -o -name flash_args -o -name flasher_args.json -o -name sdkconfig \) -print0 |
+            while IFS= read -r -d '' file; do
+              relative=${file#"$build_dir"/}
+              install -D "$file" "tmp/release/firmware/$relative"
+            done
+          cp tmp/base-revision.json tmp/release/firmware/
+          mkdir -p tmp/release/firmware/licenses
+          cp tmp/xiaozhi/LICENSE tmp/release/firmware/licenses/xiaozhi-LICENSE
+          cp /tmp/esp/idf/LICENSE tmp/release/firmware/licenses/esp-idf-LICENSE
+          cd tmp/release/firmware
+          zip -qr ../pao-firmware.zip .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-firmware
+          path: tmp/release/pao-firmware.zip
+          if-no-files-found: error
+
+  images:
+    uses: ./.github/workflows/simulator-image.yml
+    permissions:
+      contents: read
+      packages: write
+
+  mechanical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      UV_CACHE_DIR: ${{ github.workspace }}/tmp/uv-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.43.3
+      - name: Check and export mechanical parts
+        run: task mechanical:check
+      - name: Render simulation video
+        working-directory: mechanical/cadquery-launcher
+        run: uv run --project ../.. python animate.py
+      - name: Pack mechanical resources
+        run: |
+          mkdir -p tmp/release tmp/cadquery-launcher/images
+          cp mechanical/cadquery-launcher/images/*.png tmp/cadquery-launcher/images/
+          cd tmp/cadquery-launcher
+          zip -qr ../release/pao-mechanical.zip \
+            stl step images launcher.step launcher_motion.mp4 \
+            print_report.json clearance_report.json *result.json *trace.csv
+          cp launcher.step ../release/pao-mechanical-assembly.step
+          cp launcher_motion.mp4 ../release/pao-mechanical-simulation.mp4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-mechanical
+          path: |
+            tmp/release/pao-mechanical.zip
+            tmp/release/pao-mechanical-assembly.step
+            tmp/release/pao-mechanical-simulation.mp4
+          if-no-files-found: error
+
+  presentation:
+    needs: mechanical
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UV_CACHE_DIR: ${{ github.workspace }}/tmp/uv-cache
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/tmp/puppeteer-cache
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-mechanical
+          path: tmp/release
+      - name: Reuse simulation video
+        run: |
+          mkdir -p tmp/cadquery-launcher
+          unzip -p tmp/release/pao-mechanical.zip launcher_motion.mp4 > tmp/cadquery-launcher/launcher_motion.mp4
+      - uses: astral-sh/setup-uv@v10
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.43.3
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: presentation/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: presentation/pnpm-lock.yaml
+      - name: Install media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+      - name: Install presentation dependencies and browser
+        run: |
+          task presentation:setup
+          PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/tmp/playwright-browsers" \
+            pnpm --dir presentation exec playwright install --with-deps chromium
+      - name: Export presentation
+        run: |
+          task presentation:pptx
+          task presentation:build
+      - name: Pack presentation
+        run: |
+          mkdir -p tmp/release
+          cp presentation/slides.pptx tmp/release/pao-presentation.pptx
+          cd presentation/dist
+          zip -qr "$GITHUB_WORKSPACE/tmp/release/pao-presentation-html.zip" .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-presentation
+          path: |
+            tmp/release/pao-presentation.pptx
+            tmp/release/pao-presentation-html.zip
+          if-no-files-found: error
+
+  upload:
+    needs: [firmware, images, mechanical, presentation]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: tmp/release
+      - name: Attach assets to the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          cd tmp/release
+          sha256sum pao-* > pao-release-SHA256SUMS.txt
+          existing_assets=$(gh release view "$RELEASE_TAG" --json assets --repo "$GITHUB_REPOSITORY")
+          for file in pao-*; do
+            existing_digest=$(jq -r --arg name "$file" '.assets[] | select(.name == $name) | .digest' <<< "$existing_assets")
+            if [ -n "$existing_digest" ]; then
+              digest="sha256:$(sha256sum "$file" | cut -d ' ' -f 1)"
+              if [ "$existing_digest" != "$digest" ]; then
+                echo "Release asset $file already exists with different content" >&2
+                exit 1
+              fi
+              echo "Already attached: $file"
+            else
+              gh release upload "$RELEASE_TAG" "$file" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
