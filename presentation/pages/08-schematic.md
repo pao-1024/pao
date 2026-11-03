@@ -6,9 +6,9 @@ class: slide-light slide-schematic
 <h1>电路图纸，<em>由 tscircuit 生成。</em></h1>
 <div class="schematic-body">
   <figure class="schematic-overview">
-    <a href="/reference/pao-schematic.svg" target="_blank" rel="noopener noreferrer" aria-label="打开 PAO 模块接线原理图原始 SVG">
+    <AssetLink path="reference/pao-schematic.svg" aria-label="打开 PAO 模块接线原理图原始 SVG">
       <svg viewBox="190 0 820 600" role="img" aria-label="由 hardware/index.tsx 生成的 PAO 模块接线原理图整图"><image href="/reference/pao-schematic.svg" width="1200" height="600" /></svg>
-    </a>
+    </AssetLink>
     <figcaption>tscircuit · PAO 模块接线原理图（参考）</figcaption>
   </figure>
   <div class="schematic-outputs">

@@ -1,0 +1,76 @@
+name: Presentation Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: presentation-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UV_CACHE_DIR: ${{ github.workspace }}/tmp/uv-cache
+      PUPPETEER_CACHE_DIR: ${{ github.workspace }}/tmp/puppeteer-cache
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: presentation/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: presentation/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: go-task/setup-task@v2
+        with:
+          version: 3.43.3
+      - name: Install video tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+      - name: Install presentation dependencies
+        run: task presentation:setup
+      - name: Render diagrams for CI
+        working-directory: presentation
+        run: |
+          mkdir -p public/diagrams ../tmp
+          printf '%s\n' '{"args":["--no-sandbox"]}' > ../tmp/puppeteer-ci.json
+          for source in diagrams/*.mmd; do
+            pnpm exec mmdc -q -i "$source" -o "public/diagrams/$(basename "$source" .mmd).svg" \
+              -c diagrams/mermaid-config.json -b transparent -p ../tmp/puppeteer-ci.json
+          done
+      - name: Build slides for Pages
+        run: |
+          pnpm --dir presentation run build --base /pao/
+          cp presentation/dist/index.html presentation/dist/404.html
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: presentation/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+        id: deployment
