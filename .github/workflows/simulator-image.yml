@@ -1,8 +1,7 @@
 name: Simulator image
 
 on:
-  push:
-    tags: ['**']
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -42,15 +41,40 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
-            type=ref,event=tag
+            type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'release' }}
             type=sha
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          push: true
+          load: true
           platforms: linux/amd64
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Push image tags
+        env:
+          IMAGE_TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              docker push "$tag"
+            fi
+          done <<< "$IMAGE_TAGS"
+      - name: Pack release image
+        if: github.event_name == 'release'
+        env:
+          IMAGE_REF: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.metadata.outputs.version }}
+        run: |
+          set -o pipefail
+          mkdir -p tmp/release
+          docker save "$IMAGE_REF" | gzip -1 > "tmp/release/${{ matrix.image }}.tar.gz"
+      - name: Upload release image
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.image }}
+          path: tmp/release/*.tar.gz
+          compression-level: 0
+          if-no-files-found: error
