@@ -180,7 +180,7 @@ Agent 可根据自然语言需求选择模块、自动接线，生成原理图�
 
 ## 版本发布
 
-在 GitHub Releases 创建 Draft，选择指向已合入 `main` 的版本标签，手工发布后由 [Release assets](.github/workflows/release.yml) 构建并补齐附件：固件包、两个 Docker 镜像压缩包、演示稿 PPTX、静态 HTML 站点压缩包、机械 STEP/STL/仿真视频与校验报告，以及 SHA-256 清单。所有构建任务成功后才上传附件；若工作流失败，检查日志后重试。同名附件内容不一致时需人工处理。
+在 GitHub Releases 创建 Draft，选择指向已合入 `main` 的版本标签，手工发布后由 [Release assets](.github/workflows/release.yml) 构建并补齐附件：固件包、两个 Docker 镜像压缩包、演示稿 PPTX、静态 HTML 站点压缩包、机械 STEP/STL/仿真视频与校验报告，以及 SHA-256 清单。所有构建任务成功后才上传附件；若工作流失败，可在 Actions 页面手动运行 `Release assets`，填写已发布版本的标签重试。同名附件内容不一致时需人工处理。
 
 ## 未来方向与商业化规划
 
