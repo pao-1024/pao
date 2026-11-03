@@ -89,6 +89,10 @@ jobs:
           version: 3.43.3
       - name: Check and export mechanical parts
         run: task mechanical:check
+      - name: Install video encoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
       - name: Render simulation video
         working-directory: mechanical/cadquery-launcher
         run: uv run --project ../.. python animate.py
