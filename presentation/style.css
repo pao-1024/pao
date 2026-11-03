@@ -130,7 +130,6 @@
 .mechanical-print-command code { display: block; color: var(--violet); font-size: 20px; }
 .mechanical-print-command span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; }
 .mechanical-loop { display: block; width: 100%; height: 108px; margin: 12px 0 5px; }
-.mechanical-delivery .mechanical-print-status { color: #475063; font-size: 16px; line-height: 1.8; }
 
 .schematic-body { display: grid; grid-template-columns: 670px 1fr; gap: 35px; margin-top: 20px; }
 .schematic-overview { margin: 0; }
