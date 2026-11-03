@@ -43,8 +43,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ffmpeg
-      - name: Install presentation dependencies
-        run: task presentation:setup
+      - name: Install presentation dependencies and Mermaid browser
+        run: |
+          task presentation:setup
+          pnpm --dir presentation rebuild puppeteer
       - name: Render diagrams for CI
         working-directory: presentation
         run: |

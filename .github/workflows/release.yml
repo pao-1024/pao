@@ -155,6 +155,7 @@ jobs:
       - name: Install presentation dependencies and browser
         run: |
           task presentation:setup
+          pnpm --dir presentation rebuild puppeteer
           PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/tmp/playwright-browsers" \
             pnpm --dir presentation exec playwright install --with-deps chromium
       - name: Render diagrams for CI
