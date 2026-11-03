@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useNav } from '@slidev/client'
 
 defineProps<{ id: string; title: string }>()
@@ -7,6 +7,12 @@ const failed = ref(false)
 const started = ref(false)
 const container = ref<HTMLDivElement>()
 const { isPrintMode } = useNav()
+
+onMounted(() => {
+  const video = container.value?.querySelector('video')
+  if (video)
+    video.playbackRate = 2
+})
 
 async function play() {
   try {

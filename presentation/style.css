@@ -15,6 +15,16 @@
   background: #fff;
   font-family: "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
 }
+.global-countdown { position: fixed; top: 8px; right: 24px; z-index: 50; display: flex; gap: 10px; align-items: center; padding: 6px 8px 6px 12px; border-radius: 8px; background: rgb(255 255 255 / 90%); box-shadow: 0 2px 10px rgb(31 35 48 / 10%); }
+.global-countdown-icon { color: #5146b6; font-size: 24px; }
+.global-countdown-time { min-width: 72px; color: #286348; font: 600 24px "DejaVu Sans Mono", monospace; font-variant-numeric: tabular-nums; line-height: 1; }
+.global-countdown.is-warning .global-countdown-time { color: #9a6700; }
+.global-countdown.is-paused .global-countdown-time { color: #2563b0; }
+.global-countdown.is-done .global-countdown-time { color: #d33a32; }
+.global-countdown.is-stopped { opacity: 0.55; }
+.global-countdown-button { padding: 4px 8px; border: 1px solid #dce0e9; border-radius: 6px; background: #fff; color: #475063; font: 600 13px "Noto Sans CJK SC", "Noto Sans SC", sans-serif; cursor: pointer; }
+.global-countdown-button:hover { background: #f5f6fa; }
+.global-countdown-button:focus-visible { outline: 3px solid #a99aff; outline-offset: 2px; }
 .slidev-layout *, .slidev-layout *::before, .slidev-layout *::after { box-sizing: border-box; }
 .slidev-layout.cover { display: block; }
 .slidev-layout.cover > .my-auto { margin: 0; }

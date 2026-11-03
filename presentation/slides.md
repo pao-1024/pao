@@ -4,6 +4,8 @@ title: PAO · 探索 Agent 时代的硬件开发新范式
 info: 2026 1024 Hackathon · 万物皆代码，评估驱动硬件开发闭环
 aspectRatio: 16/9
 canvasWidth: 1280
+duration: 10min
+timer: countdown
 fonts:
   sans: Noto Sans CJK SC
   mono: DejaVu Sans Mono
