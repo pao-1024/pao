@@ -2,16 +2,32 @@
 class: slide-light slide-runtime-detail
 ---
 
-<div class="eyebrow">固件运行 / esp32sim</div>
-<h1>固件运行，<em>用芯片仿真验证行为。</em></h1>
+<div class="eyebrow">固件开发的评估函数 / 仿真运行 + 场景断言</div>
+<h1>硬件还没到，<em>软件已开发并完成仿真测试。</em></h1>
 <div class="runtime-detail-body">
-  <figure class="runtime-model"><DemoVideo id="video-05" title="模拟器语音交互演示" /><figcaption><b>esp32sim · PAO 参考模拟器</b></figcaption></figure>
-  <div class="runtime-checks"><span class="detail-label">自由组合应用 · 运行评估函数</span><div><b>UART 日志</b><p>读取告警、音量、音调、电机与状态标签。</p></div><div><b>I²S / MCPWM 实际输出</b><p>PCM 峰值、提示音频率与桥臂占空比。</p></div><div><b>显示与暂停行为</b><p>OLED 显存到达；暂停后音频和电机归零。</p></div><div class="runtime-example"><b>失败如何反馈</b><p>“实际 PCM 峰值”与“期望值”一并返回 Agent。</p></div></div>
+  <figure class="runtime-model"><DemoVideo id="video-05" title="模拟器语音交互演示" /><figcaption><b>esp32sim · PAO 模拟器</b></figcaption></figure>
+  <div class="runtime-checks"><span class="detail-label">芯片仿真 · 让开发与测试提前发生</span><div><b>硬件到货前完成开发与测试</b><p>我们已在硬件到货前开发好软件，并在模拟器中测试。</p></div><div><b>多个 Agent 并行开发</b><p>不争用实物设备，各自运行固件、调试与验证。</p></div><div><b>Agent 自主迭代</b><p>模拟按键与语音输入，检查日志、GPIO 和总线输出，失败后修改重测。</p></div><div class="runtime-example"><b>为 CI 提供 E2E 测试环境</b><p>在无实物硬件的环境中运行固件，自动检查端到端行为。</p></div></div>
 </div>
 <div class="page-number">09 / 18</div>
 
 <!--
-建议 70 秒。正式固件由 ESP-IDF 构建后输入模拟器，从 ROM 启动，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路，屏幕和运动不是预置效果。模拟器实时输出 UART0 固件日志，可按关键字过滤，并从中解析设备状态。
+建议 75 秒（3:55–5:10，含切页与视频展示）。
+
+传统硬件开发流程，需要反复经历 改代码→编译→烧录→重启→人工验证 的方式完成一轮迭代，
+
+我们基于 esp32sim 实现芯片级模拟器，在模拟器中运行正式固件。我们在硬件到货前就开发好了软件，并在模拟器中做了测试。这种方式有四个好处：
+
+1. 硬件到货前完成开发与测试：不必等实物准备好，就能运行固件并检查软件行为。
+2. 多个 Agent 并行开发：不争用实物设备，各自运行固件、调试与验证。
+3. Agent 自主迭代：运行固件，模拟按键与语音输入，检查日志、GPIO、总线及外设行为；不符合预期就修改，再运行同一场景验证。
+4. 为 CI 提供 E2E 测试环境：在无实物硬件的环境中运行固件，自动检查端到端行为；批量软件在环回归仍是后续规划。
+
+模拟器提供运行环境，场景负责输入音频或传感器数据，断言检查实际日志与外设输出。这三者一起构成固件开发的评估函数，失败证据反馈给 Agent，修改后重跑同一验收。
+
+### 备查
+
+我们在硬件到货前就开发好了软件，并在模拟器中做了测试。模拟器让开发和验证不再依赖实物是否准备好，也让多个 Agent 可以各自运行固件、并行调试。Agent 可以运行固件、模拟按键和语音输入，检查日志、GPIO、总线及外设行为，把失败证据用于修改，再运行同一场景验证。模拟器也为 CI 中的固件 E2E 测试提供运行环境；批量软件在环回归仍是后续规划。
+正式固件由 ESP-IDF 构建后输入模拟器，从 ROM 启动，不需要另写仿真业务分支。OLED 来自 I²C 写入，运动来自 MCPWM，测距经过 GPIO / RMT，音频经过真实固件的 I²S 链路，屏幕和运动不是预置效果。模拟器实时输出 UART0 固件日志，可按关键字过滤，并从中解析设备状态。
 运行评估按场景输入音频或传感器数据，读取实际输出。verifyApplication 检查 UART 业务状态，核对 PCM 峰值、音调频率和电机桥臂占空比；显示目前只确认显存到达，最后检查暂停归零。当前容差为 PCM 峰值差不超过 50、提示音频率差不超过 25Hz、桥臂占空比差不超过 1，这些是软件验收容差，不是实物精度。
-无硬件运行让每轮修改都能获得执行反馈；温升、射频、声学与机械性能不由这些断言证明。左侧是 PAO 参考模拟器，右侧验收机制来自自由组合实验应用，两者使用各自板型。来源：simulator/README.md；experimental/platform/agent.ts:217–236。
+模拟器提供运行环境，场景输入与输出断言组成固件开发的评估函数。无硬件运行让每轮修改都能获得执行反馈；温升、射频、声学与机械性能不由这些断言证明。左侧是 PAO 模拟器；上述 verifyApplication 验收示例来自自由组合实验应用，使用其对应板型。来源：simulator/README.md；experimental/platform/agent.ts 的 verifyApplication。
 -->

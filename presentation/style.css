@@ -210,3 +210,13 @@
 .demo-videos figcaption { margin-top: 18px; }
 .demo-videos h2 { color: var(--violet); font-size: 25px; line-height: 1.5; }
 .slide-demo-field .demo-videos { grid-template-columns: 300px 1fr; }
+
+/* 独立工作流演示稿保留纯 Markdown 正文。 */
+.slidev-layout.workflow { padding: 72px 72px 100px; }
+.workflow h1 { margin-bottom: 52px; font-size: 52px; }
+.workflow h2 { margin: 32px 0; color: var(--violet); font-size: 34px; line-height: 1.5; }
+.workflow p { margin: 30px 0; font-size: 27px; line-height: 1.8; }
+.workflow ul { margin: 26px 0; padding-left: 30px; font-size: 28px; line-height: 2; }
+.workflow blockquote { margin: 32px 0; padding: 12px 24px; border-left: 4px solid var(--violet); }
+.workflow blockquote p { margin: 0; color: var(--violet); font-size: 36px; }
+.workflow .bottom-note { left: 72px; bottom: 32px; max-width: 1136px; font-size: 15px; }

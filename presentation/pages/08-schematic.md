@@ -21,6 +21,12 @@ class: slide-light slide-schematic
 <div class="page-number">08 / 18</div>
 
 <!--
-建议 25 秒。从 OLED 局部展开到整机：左侧是 tscircuit 从 hardware/index.tsx 生成的完整 schematic.svg。右侧是同一份设计的三种形态：TSX 组织模块，SVG 供人审阅，Circuit JSON 供工具检查。
+建议 20 秒（3:35–3:55，含切页与视频展示）。
+
+左图就是我们PAO这个项目的完整原理图，全程使用TypeScript代码描述，最后渲染生成最终的原理图供人审核。
+
+### 备查
+
+从 OLED 局部展开到整机：左侧是 tscircuit 从 hardware/index.tsx 生成的完整 schematic.svg。右侧是同一份设计的三种形态：TSX 组织模块，SVG 供人审阅，Circuit JSON 供工具检查。
 图纸与网络来自同一次构建，避免图纸和验收各说各话。这里是模块间接线参考，不是 PCB 制造文件；模块内部电路、封装和机械尺寸不在本图中验证。生成入口：hardware/Taskfile.yaml 的 build 与 export。
 -->

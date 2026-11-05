@@ -15,7 +15,25 @@ class: slide-light slide-source
 <div class="page-number">02 / 18</div>
 
 <!--
-建议 35 秒。硬件研发围绕三类核心设计：电路、嵌入式软件与机械结构。仿真、测试和评估是贯穿三者的反馈机制，不是额外的一类设计。
+建议 30 秒（0:20–0:50，含切页与视频展示）。
+
+我们的核心思想是万物皆代码，驱动全流程Agent自动化。
+
+虽然从右上角我们项目的语言分布来看，看起来不像是一个硬件的项目，
+
+但是实际上，我们的电路设计使用TypeScript语言，用tscircuit框架来定义元器件，引脚和网络连接。
+
+嵌入式软件使用的C++在ESP-IDF框架上进行固件开发。
+
+我们项目使用Rust专门开发了一套基于esp32sim的模拟器，这样就可以让Agent在整个固件开发过程中可以进行频繁的快速验证迭代，而不需要真实的硬件烧录。
+
+机械结构方面的设计，使用了CadQuery+PyBullet进行的参数化建模和刚体动力学仿真。
+
+PS: 甚至连这份PPT也是使用slidev框架使用markdown+vue来开发的。
+
+### 备查
+
+硬件研发围绕三类核心设计：电路、嵌入式软件与机械结构。仿真、测试和评估是贯穿三者的反馈机制，不是额外的一类设计。
 电路用 tscircuit 表达器件和网络，以连通性和电气规则检查；软件由 ESP-IDF 构建，在 esp32sim 中执行正式固件，以业务状态和外设输出评估；机械结构由 Agent 编写 CadQuery 参数化模型，以几何检查与 PyBullet 刚体动力学评估。全代码化也让电路与机械结构沿用版本控制、PR 审查与自动检查，下一页展开。
 右上角为 GitHub 仓库 Languages 截图，数字是截图时的语言占比；卡片只标出对应设计的主要语言。
 来源：hardware/index.tsx；experimental/platform/README.md；simulator/README.md；mechanical/cadquery-launcher/README.md。
