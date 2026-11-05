@@ -3,7 +3,7 @@ class: slide-light slide-mechanical
 ---
 
 <div class="eyebrow">机械结构 / CadQuery 参数化建模</div>
-<h1>机械设计：一个电机，<br><em>完成供弹、储能与三球连发。</em></h1>
+<h1>Agent 用代码，<br><em>设计了三球发射机构。</em></h1>
 <div class="mechanical-design-body">
   <figure class="mechanical-assembly">
     <div class="mechanical-cad-crop"><img src="/reference/launcher_preview.png" alt="CadQuery 透明装配预览：底座、固定供弹板、三球转盘凸轮和直线撞针" /></div>
@@ -19,7 +19,13 @@ class: slide-light slide-mechanical
 <div class="page-number">10 / 18</div>
 
 <!--
-建议 40 秒。这是独立的三球发射机构示例：CadQuery 建模，PyBullet 验收。TT 减速电机经 D 形轴驱动三槽转盘和三瓣凸轮，每转 120° 完成一次供弹与发射；固定供弹板决定出球位置，撞针沿底座滑槽运动。
+建议 40 秒（5:10–5:50，含切页与视频展示）。
+
+这是我们让 Agent 基于 CadQuery 设计了一个 可以进行三连发小球的机械装置。
+
+### 备查
+
+这是 Agent 用 CadQuery 代码设计的独立三球发射机构，下一页展示 PyBullet 中的运动验收。设计用一个 TT 减速电机，经 D 形轴驱动三槽转盘和三瓣凸轮，每转 120° 完成一次供弹与发射；固定供弹板决定出球位置，撞针沿底座滑槽运动。
 弹簧和皮筋都可作储能件，安装位已集成在打印件上；弹簧尺寸、皮筋力曲线和电机轴配合待实测。图为 CAD 预览。后面实车视频用的仍是电磁铁发射机构。
 来源：mechanical/cadquery-launcher/design.py、rotary_parts.py、README.md、images/launcher_preview.png。
 -->

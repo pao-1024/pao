@@ -12,7 +12,15 @@ class: slide-light slide-review
 <div class="page-number">04 / 18</div>
 
 <!--
-建议 40 秒。这里的价值是把 Git、PR 和持续集成延伸到硬件工程：接线、图纸、驱动和验收规则在同一个 PR 中审查。Agent 提交变更，工具执行已有检查，人审设计意图、约束与证据，再决定是否合并。发生问题时可回溯工程版本。
+建议 35 秒（1:10–1:45，含切页与视频展示）。
+
+它也可以使用PR的形式管理，被CI进行检查，被人工进行Review合并。使用整套Git的工作方式，实现硬件资产的可diff，可审查。
+
+比如以我们的一个真实的PR为例，这个PR为PAO增加了超声波模块，其中HcSr04.tsx定义了超声波模块，nets.ts定义了线路，Ultrasonic.tsx定义了超声波模块如何连接到定义的走线上，Controller.tsx定义了ESP32 S3如何连接到定义的走线上。
+
+### 备查
+
+这里的价值是把 Git、PR 和持续集成延伸到硬件工程：接线、图纸、驱动和验收规则在同一个 PR 中审查。Agent 提交变更，工具执行已有检查，人审设计意图、约束与证据，再决定是否合并。发生问题时可回溯工程版本。
 左侧来自 PR #36 的提交 99664793053145a98f8d7cd5adfa66f77db139f9：Controller.tsx 新增 GPIO8 的 Trig 与 GPIO9 的 Echo，并同步硬件、固件、图纸与说明。右侧命令来自 hardware/Taskfile.yaml，Hardware workflow 在 pull_request 上按路径触发 task test。这里展示的是检查配置，不代表所有 CI 已通过，也不代表已设置强制合并门禁。
 来源：.github/workflows/{hardware,firmware,simulator,platform}.yml；hardware/Taskfile.yaml；PR #36。
 -->

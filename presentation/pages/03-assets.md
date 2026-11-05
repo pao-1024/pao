@@ -21,7 +21,13 @@ class: slide-light slide-assets
 <div class="page-number">03 / 18</div>
 
 <!--
-建议 35 秒。把软件工程的版本管理延伸到硬件工程：电路设计、固件配置、仿真模型与验收规则一起版本化，每次迭代都留下差异和原因，模块与测试也能在后续项目中复用。页面列出当前仓库已跟踪的真实文件，依赖通过 firmware/base.json、Cargo.lock、pnpm-lock.yaml、uv.lock 和 esp32sim gitlink 固定。
+建议 20 秒（0:50–1:10，含切页与视频展示）。
+
+当硬件的资产代码化了之后，它就变成了和软件一样成为了一种可追溯可复用可重建的一种资产了。
+
+### 备查
+
+把软件工程的版本管理延伸到硬件工程：电路设计、固件配置、仿真模型与验收规则一起版本化，每次迭代都留下差异和原因，模块与测试也能在后续项目中复用。页面列出当前仓库已跟踪的真实文件，依赖通过 firmware/base.json、Cargo.lock、pnpm-lock.yaml、uv.lock 和 esp32sim gitlink 固定。
 可重建指保留重建依据与入口，不承诺逐字节可复现。机械模型、动力学验收与打印件导出脚本也已纳入版本管理；STEP、STL 和动画由源码生成，保存在本地 tmp/。
 来源：hardware/、firmware/base.json、simulator/pao-sim/、experimental/platform/、mechanical/cadquery-launcher/、uv.lock、.gitignore。
 -->

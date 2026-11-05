@@ -11,6 +11,14 @@ class: slide-light slide-demo slide-demo-field
 <div class="page-number">14 / 18</div>
 
 <!--
-建议 20 秒。按需播放室内语音行驶和桌面发射测试，不要求全部播完。
+建议 35 秒（7:50–8:25，含切页与视频展示）。
+
+左边展示室内语音行驶，右边展示桌面发射测试。
+
+以上就是我们实机展示的所有内容
+
+### 备查
+
+按需播放室内语音行驶和桌面发射测试，不要求全部播完。
 来源：docs/making-of.md 的 video-03 与 video-04。
 -->
